@@ -20,8 +20,21 @@ android {
         vectorDrawables.useSupportLibrary = true
     }
 
+    signingConfigs {
+        create("playUpload") {
+            val keyPath = providers.environmentVariable("FITLOG_UPLOAD_KEYSTORE").orNull
+            if (keyPath != null) {
+                storeFile = file(keyPath)
+                storePassword = providers.environmentVariable("FITLOG_UPLOAD_PASSWORD").get()
+                keyAlias = "fitlog-upload"
+                keyPassword = storePassword
+            }
+        }
+    }
+
     buildTypes {
         release {
+            signingConfig = signingConfigs.getByName("playUpload")
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
