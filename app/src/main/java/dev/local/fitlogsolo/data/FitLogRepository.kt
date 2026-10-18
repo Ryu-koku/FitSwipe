@@ -1,0 +1,109 @@
+package dev.local.fitlogsolo.data
+
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
+import java.time.Instant
+
+class FitLogRepository(private val database: AppDatabase) {
+    private val exercises = database.exerciseDao()
+    private val sessions = database.sessionDao()
+    private val sets = database.workoutSetDao()
+
+    fun observeExercises(): Flow<List<ExerciseEntity>> = exercises.observeActive()
+    fun observeAllExercises(): Flow<List<ExerciseEntity>> = exercises.observeAll()
+    fun observeInProgressSession(): Flow<WorkoutSessionEntity?> = sessions.observeInProgress()
+    fun observeCompletedSessions(): Flow<List<WorkoutSessionEntity>> = sessions.observeCompleted()
+    fun observeSession(id: Long): Flow<WorkoutSessionEntity?> = sessions.observeById(id)
+    fun observeSets(sessionId: Long): Flow<List<WorkoutSetEntity>> = sets.observeForSession(sessionId)
+    fun observeExerciseSets(sessionId: Long, exerciseId: Long): Flow<List<WorkoutSetEntity>> =
+        sets.observeForExercise(sessionId, exerciseId)
+
+    suspend fun addExercise(name: String, mode: ExerciseMode) {
+        val cleaned = name.trim()
+        require(cleaned.isNotEmpty()) { "種目名を入力してください" }
+        val order = exercises.observeAll().first().maxOfOrNull { it.sortOrder }?.plus(1) ?: 0
+        exercises.insert(ExerciseEntity(name = cleaned, mode = mode, sortOrder = order))
+    }
+
+    suspend fun renameExercise(exercise: ExerciseEntity, name: String) {
+        val cleaned = name.trim()
+        require(cleaned.isNotEmpty()) { "種目名を入力してください" }
+        exercises.update(exercise.copy(name = cleaned))
+    }
+
+    suspend fun archiveExercise(exercise: ExerciseEntity) {
+        exercises.update(exercise.copy(archived = true))
+    }
+
+    suspend fun startOrResumeSession(): Long {
+        val current = sessions.observeInProgress().first()
+        return current?.id ?: sessions.insert(WorkoutSessionEntity(startedAt = Instant.now()))
+    }
+
+    suspend fun addSet(sessionId: Long, exercise: ExerciseEntity): Long {
+        val previous = sets.findCompletedForExercise(exercise.id).firstOrNull()
+        val count = sets.findForSession(sessionId).count { it.exerciseId == exercise.id }
+        val now = Instant.now()
+        val candidate = if (previous == null) {
+            WorkoutSetEntity(sessionId = sessionId, exerciseId = exercise.id, setOrder = count, createdAt = now, updatedAt = now)
+        } else {
+            WorkoutSetEntity(
+                sessionId = sessionId,
+                exerciseId = exercise.id,
+                setOrder = count,
+                normalWeightKg = previous.normalWeightKg,
+                normalReps = previous.normalReps,
+                leftWeightKg = previous.leftWeightKg,
+                leftReps = previous.leftReps,
+                rightWeightKg = previous.rightWeightKg,
+                rightReps = previous.rightReps,
+                createdAt = now,
+                updatedAt = now,
+            )
+        }
+        return sets.insert(candidate)
+    }
+
+    suspend fun duplicateSet(sessionId: Long, exerciseId: Long): Long {
+        val previous = sets.findForSession(sessionId).filter { it.exerciseId == exerciseId }.maxByOrNull { it.setOrder }
+            ?: return addSet(sessionId, exercises.findById(exerciseId) ?: error("種目が見つかりません"))
+        val now = Instant.now()
+        return sets.insert(previous.copy(id = 0, setOrder = previous.setOrder + 1, isCompleted = false, createdAt = now, updatedAt = now))
+    }
+
+    suspend fun updateSet(set: WorkoutSetEntity) = sets.update(set.copy(updatedAt = Instant.now()))
+
+    suspend fun finishSession(sessionId: Long) {
+        sessions.findById(sessionId)?.let {
+            sessions.update(it.copy(status = SessionStatus.COMPLETED, endedAt = Instant.now()))
+        }
+    }
+
+    suspend fun reopenSession(sessionId: Long): Long {
+        sessions.observeInProgress().first()?.let { current ->
+            if (current.id != sessionId) error("別の下書きセッションが記録中です")
+        }
+        sessions.findById(sessionId)?.let {
+            sessions.update(it.copy(status = SessionStatus.IN_PROGRESS, endedAt = null))
+        }
+        return sessionId
+    }
+
+    suspend fun deleteSession(sessionId: Long) {
+        sessions.findById(sessionId)?.let { session -> sessions.delete(session) }
+    }
+
+    suspend fun allSetsForExercise(exerciseId: Long): List<WorkoutSetEntity> = sets.findCompletedForExercise(exerciseId)
+
+    suspend fun snapshot(): ExportSnapshot = ExportSnapshot(
+        exercises = exercises.observeAll().first(),
+        sessions = sessions.observeCompleted().first(),
+        sets = sessions.observeCompleted().first().flatMap { sets.findForSession(it.id) },
+    )
+}
+
+data class ExportSnapshot(
+    val exercises: List<ExerciseEntity>,
+    val sessions: List<WorkoutSessionEntity>,
+    val sets: List<WorkoutSetEntity>,
+)
