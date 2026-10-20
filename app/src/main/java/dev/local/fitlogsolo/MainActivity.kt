@@ -16,7 +16,7 @@ class MainActivity : ComponentActivity() {
         val application = application as FitLogApplication
         viewModel = ViewModelProvider(
             this,
-            FitLogViewModel.Factory(application.repository),
+            FitLogViewModel.Factory(application.repository, application.workoutPreferences),
         )[FitLogViewModel::class.java]
 
         val createDocumentLauncher = registerForActivityResult(

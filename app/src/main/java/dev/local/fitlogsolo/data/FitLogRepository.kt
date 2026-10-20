@@ -40,6 +40,50 @@ class FitLogRepository(private val database: AppDatabase) {
         return current?.id ?: sessions.insert(WorkoutSessionEntity(startedAt = Instant.now()))
     }
 
+    suspend fun startPresetSession(exerciseNames: List<String>): Pair<Long, List<Long>> {
+        val sessionId = startOrResumeSession()
+        val activeExercises = exercises.observeActive().first().toMutableList()
+        val existingSetExerciseIds = sets.findForSession(sessionId).mapTo(mutableSetOf()) { it.exerciseId }
+        val presetExercises = exerciseNames.map { name ->
+            activeExercises.firstOrNull { it.name.equals(name, ignoreCase = true) }
+                ?: run {
+                    val order = activeExercises.maxOfOrNull { it.sortOrder }?.plus(1) ?: 0
+                    val exercise = ExerciseEntity(name = name, sortOrder = order)
+                    val id = exercises.insert(exercise)
+                    exercise.copy(id = id).also(activeExercises::add)
+                }
+        }
+        presetExercises.forEach { exercise ->
+            if (exercise.id !in existingSetExerciseIds) addSet(sessionId, exercise)
+        }
+        return sessionId to presetExercises.map { it.id }
+    }
+
+    suspend fun ensurePresetExercises(exerciseNames: List<String>): List<Long> {
+        val activeExercises = exercises.observeActive().first().toMutableList()
+        return exerciseNames.map { name ->
+            activeExercises.firstOrNull { it.name.equals(name, ignoreCase = true) }
+                ?: run {
+                    val order = activeExercises.maxOfOrNull { it.sortOrder }?.plus(1) ?: 0
+                    val exercise = ExerciseEntity(name = name, sortOrder = order)
+                    val id = exercises.insert(exercise)
+                    exercise.copy(id = id).also(activeExercises::add)
+                }
+        }.map { it.id }
+    }
+
+    suspend fun startPresetSessionByIds(exerciseIds: List<Long>): Pair<Long, List<Long>> {
+        val activeExercises = exercises.observeActive().first().associateBy { it.id }
+        val presetExercises = exerciseIds.mapNotNull(activeExercises::get)
+        require(presetExercises.isNotEmpty()) { "プリセットに種目を設定してください" }
+        val sessionId = startOrResumeSession()
+        val existingSetExerciseIds = sets.findForSession(sessionId).mapTo(mutableSetOf()) { it.exerciseId }
+        presetExercises.forEach { exercise ->
+            if (exercise.id !in existingSetExerciseIds) addSet(sessionId, exercise)
+        }
+        return sessionId to presetExercises.map { it.id }
+    }
+
     suspend fun addSet(sessionId: Long, exercise: ExerciseEntity): Long {
         val previous = sets.findCompletedForExercise(exercise.id).firstOrNull()
         val count = sets.findForSession(sessionId).count { it.exerciseId == exercise.id }
@@ -63,6 +107,10 @@ class FitLogRepository(private val database: AppDatabase) {
         }
         return sets.insert(candidate)
     }
+
+    suspend fun ensureSet(sessionId: Long, exercise: ExerciseEntity): Long =
+        sets.findForSession(sessionId).firstOrNull { it.exerciseId == exercise.id }?.id
+            ?: addSet(sessionId, exercise)
 
     suspend fun duplicateSet(sessionId: Long, exerciseId: Long): Long {
         val previous = sets.findForSession(sessionId).filter { it.exerciseId == exerciseId }.maxByOrNull { it.setOrder }

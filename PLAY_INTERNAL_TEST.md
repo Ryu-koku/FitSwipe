@@ -7,7 +7,7 @@
 1. Play Consoleでアプリを作成する。表示名: FitLog Solo、言語: 日本語、種類: アプリ、無料。
 2. 「テストとリリース → テスト → 内部テスト」でリリースを作成する。
 3. Play App Signingを設定し、Googleがアプリ署名鍵を生成する方式を選ぶ。ローカルの鍵はアップロード鍵として使用する。
-4. `app/build/outputs/bundle/release/app-release.aab` をアップロードする。パッケージ名は `dev.local.fitlogsolo`、初回versionCodeは1。
+4. `app/build/outputs/bundle/release/app-release.aab` をアップロードする。パッケージ名は `dev.local.fitlogsolo`。Play Console上ではversionCode 1が先行アップロードで使用済み扱いになったため、最初の配信版はversionCode 2。
 5. 「テスター」でメールリストを作成し、スマホのPlayストアで使用している本人のGoogleアカウントだけを追加する。他のメールリストやGoogleグループを選択しない。
 6. Consoleに表示される必須項目を完了し、内部テストへの公開を実行する。製品版や公開テストは選ばない。
 7. Consoleの「テストに参加」リンクをスマホで開き、登録したGoogleアカウントで参加してPlayストアからインストールする。
@@ -29,7 +29,7 @@ export FITLOG_UPLOAD_PASSWORD="$(tr -d '\n' < /home/mame/.local/share/Google/fit
 unset FITLOG_UPLOAD_PASSWORD
 ```
 
-次回のアップロード前にversionCodeを増やす。既存のConsoleアプリにすでに別のアップロード鍵が登録済みの場合は、この新規鍵をそのまま使用できない。既存登録の有無はConsoleで確認する。
+次回のアップロード前にversionCodeを3以上へ増やす。Play ConsoleのAPI要件に合わせ、現在はcompileSdk/targetSdk 36、Android Gradle Plugin 8.10.0を使用する。既存のConsoleアプリにすでに別のアップロード鍵が登録済みの場合は、この新規鍵をそのまま使用できない。既存登録の有無はConsoleで確認する。
 
 ## 検証範囲
 
