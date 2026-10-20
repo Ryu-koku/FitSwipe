@@ -94,6 +94,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.input.pointer.pointerInput
@@ -632,27 +633,61 @@ private fun SetEditorCard(
         }
     }
     val animationScope = rememberCoroutineScope()
+    val swipeHintColor = MaterialTheme.colorScheme.primary
     Card(
         Modifier.fillMaxSize()
             .graphicsLayer {
                 translationX = swipeOffsetX
-                translationY = swipeOffsetY
                 rotationZ = if (size.width > 0f) (swipeOffsetX / size.width * 8f).coerceIn(-8f, 8f) else 0f
+            }
+            .drawWithContent {
+                drawContent()
+                val drag = swipeOffsetY
+                val progress = (abs(drag) / (size.height * 0.14f)).coerceIn(0f, 1f)
+                if (progress > 0.12f) {
+                    val centerX = size.width / 2f
+                    val edge = 30.dp.toPx()
+                    val stem = 48.dp.toPx()
+                    val head = 15.dp.toPx()
+                    val stroke = 5.dp.toPx()
+                    val color = swipeHintColor.copy(alpha = progress * 0.9f)
+                    if (drag < 0f) {
+                        val tipY = edge
+                        val stemY = tipY + stem
+                        drawLine(color, androidx.compose.ui.geometry.Offset(centerX, stemY), androidx.compose.ui.geometry.Offset(centerX, tipY), stroke)
+                        drawLine(color, androidx.compose.ui.geometry.Offset(centerX, tipY), androidx.compose.ui.geometry.Offset(centerX - head, tipY + head), stroke, cap = StrokeCap.Round)
+                        drawLine(color, androidx.compose.ui.geometry.Offset(centerX, tipY), androidx.compose.ui.geometry.Offset(centerX + head, tipY + head), stroke, cap = StrokeCap.Round)
+                    } else {
+                        val tipY = size.height - edge
+                        val stemY = tipY - stem
+                        drawLine(color, androidx.compose.ui.geometry.Offset(centerX, stemY), androidx.compose.ui.geometry.Offset(centerX, tipY), stroke)
+                        drawLine(color, androidx.compose.ui.geometry.Offset(centerX, tipY), androidx.compose.ui.geometry.Offset(centerX - head, tipY - head), stroke, cap = StrokeCap.Round)
+                        drawLine(color, androidx.compose.ui.geometry.Offset(centerX, tipY), androidx.compose.ui.geometry.Offset(centerX + head, tipY - head), stroke, cap = StrokeCap.Round)
+                    }
+                }
             }
             .pointerInput(set.id, enabled) {
                 var dragX = 0f
                 var dragY = 0f
+                var horizontalGesture: Boolean? = null
                 detectDragGestures(
                     onDragStart = {
                         dragX = 0f
                         dragY = 0f
+                        horizontalGesture = null
                     },
                     onDrag = { change, dragAmount ->
                         change.consume()
                         dragX += dragAmount.x
                         dragY += dragAmount.y
-                        swipeOffsetX = (swipeOffsetX + dragAmount.x).coerceIn(-size.width.toFloat(), size.width.toFloat())
-                        swipeOffsetY = (swipeOffsetY + dragAmount.y).coerceIn(-size.height * 0.3f, size.height * 0.3f)
+                        if (horizontalGesture == null) horizontalGesture = abs(dragX) >= abs(dragY)
+                        if (horizontalGesture == true) {
+                            swipeOffsetX = (swipeOffsetX + dragAmount.x).coerceIn(-size.width.toFloat(), size.width.toFloat())
+                            swipeOffsetY = 0f
+                        } else {
+                            swipeOffsetX = 0f
+                            swipeOffsetY = dragY.coerceIn(-size.height * 0.3f, size.height * 0.3f)
+                        }
                     },
                     onDragEnd = {
                         if (!enabled) {
@@ -660,23 +695,23 @@ private fun SetEditorCard(
                                 Animatable(swipeOffsetX).animateTo(0f, spring()) { swipeOffsetX = value }
                                 Animatable(swipeOffsetY).animateTo(0f, spring()) { swipeOffsetY = value }
                             }
-                        } else if (abs(dragX) >= abs(dragY) && dragX > size.width * 0.25f) {
+                        } else if (horizontalGesture == true && dragX > size.width * 0.25f) {
                             animationScope.launch {
                                 Animatable(swipeOffsetX).animateTo(size.width * 0.35f, tween(100)) { swipeOffsetX = value }
                                 onAdvance()
                             }
-                        } else if (abs(dragX) >= abs(dragY) && dragX < -size.width * 0.25f) {
+                        } else if (horizontalGesture == true && dragX < -size.width * 0.25f) {
                             animationScope.launch {
                                 Animatable(swipeOffsetX).animateTo(-size.width * 0.35f, tween(100)) { swipeOffsetX = value }
                                 onSkip()
                             }
-                        } else if (abs(dragY) > abs(dragX) && dragY < -size.height * 0.14f) {
+                        } else if (horizontalGesture == false && dragY < -size.height * 0.14f) {
                             animationScope.launch {
                                 Animatable(swipeOffsetY).animateTo(-size.height * 0.12f, tween(80)) { swipeOffsetY = value }
                                 onAdjustWeight(1)
                                 Animatable(swipeOffsetY).animateTo(0f, spring()) { swipeOffsetY = value }
                             }
-                        } else if (abs(dragY) > abs(dragX) && dragY > size.height * 0.14f) {
+                        } else if (horizontalGesture == false && dragY > size.height * 0.14f) {
                             animationScope.launch {
                                 Animatable(swipeOffsetY).animateTo(size.height * 0.12f, tween(80)) { swipeOffsetY = value }
                                 onAdjustWeight(-1)
