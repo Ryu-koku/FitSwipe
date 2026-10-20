@@ -591,6 +591,8 @@ private fun ExerciseEditor(
                     SetEditorCard(
                         exercise = displayedExercise,
                         set = displayedSet,
+                        totalSets = allSessionSets.count { it.exerciseId == displayedExercise.id }
+                            .coerceAtLeast(displayedSet.setOrder + 1),
                         enabled = currentSet != null,
                         onUpdate = viewModel::updateSet,
                         onAdjustWeight = { step ->
@@ -620,6 +622,7 @@ private fun ExerciseEditor(
 private fun SetEditorCard(
     exercise: ExerciseEntity,
     set: WorkoutSetEntity,
+    totalSets: Int,
     enabled: Boolean,
     onUpdate: (WorkoutSetEntity) -> Unit,
     onAdjustWeight: (Int) -> Unit,
@@ -749,12 +752,16 @@ private fun SetEditorCard(
                     maxLines = 2,
                     modifier = Modifier.weight(1f),
                 )
-                Surface(color = Color.White, shape = CircleShape, modifier = Modifier.size(44.dp)) {
-                    Box(contentAlignment = Alignment.Center) {
+                Surface(color = Color.White, shape = CircleShape) {
+                    Box(
+                        modifier = Modifier.height(44.dp).padding(horizontal = 12.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
                         Text(
-                            "${set.setOrder + 1}",
-                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.ExtraBold),
+                            "${set.setOrder + 1}/$totalSets",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold),
                             color = Color(0xFFE12F2B),
+                            maxLines = 1,
                         )
                     }
                 }
