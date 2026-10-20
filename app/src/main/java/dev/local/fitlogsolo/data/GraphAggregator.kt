@@ -31,12 +31,4 @@ object GraphAggregator {
         return BilateralWorkoutPoints(left, right)
     }
 
-    fun lastMeasurementPerDay(
-        measurements: Iterable<WeightMeasurement>,
-        zone: ZoneId = ZoneId.systemDefault(),
-    ): List<WeightMeasurement> = measurements.asSequence()
-        .filter { it.kilograms.isFinite() && it.kilograms >= 0 }
-        .groupBy { it.measuredAt.atZone(zone).toLocalDate() }
-        .map { (_, values) -> values.maxBy { it.measuredAt } }
-        .sortedBy { it.measuredAt }
 }

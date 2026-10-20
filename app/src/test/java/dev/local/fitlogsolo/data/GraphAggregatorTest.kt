@@ -30,13 +30,4 @@ class GraphAggregatorTest {
         assertEquals(listOf(WorkoutPoint("2026-10-18", 10.0)), result.right)
     }
 
-    @Test
-    fun lastWeightMeasurementPerDayUsesLatestTimestamp() {
-        val measurements = listOf(
-            WeightMeasurement("a", Instant.parse("2026-10-18T07:00:00Z"), 70.0),
-            WeightMeasurement("b", Instant.parse("2026-10-18T20:00:00Z"), 69.5),
-            WeightMeasurement("c", Instant.parse("2026-10-19T08:00:00Z"), 69.0),
-        )
-        assertEquals(listOf(measurements[1], measurements[2]), GraphAggregator.lastMeasurementPerDay(measurements, zone))
-    }
 }

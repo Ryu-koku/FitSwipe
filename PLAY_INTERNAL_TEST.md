@@ -14,11 +14,9 @@
 
 内部テストはストア検索には表示されない。参加リンクだけではテスターリスト外のアカウントは参加できない。初回の反映には時間がかかる場合がある。アカウント本人確認・規約同意・Consoleの必須申告は所有者が行う。
 
-## Health Connect申告
+## Health Connect
 
-Consoleで求められる健康アプリ・Health Connectの申告では、筋力トレーニングの記録と体重推移表示という実際の用途を記載する。要求するデータは体重の読み取りだけで、書き込み、バックグラウンド取得、30日より前の履歴権限は要求しない。申告・審査が求められた場合は完了まで連携の利用を保証しない。
-
-体重は端末内で表示し、開発者へ送信しない。プライバシーポリシーURLを求められた場合は、実際のデータ処理に合った公開URLが必要。非公開GitHubのREADMEは公開URLとして使わない。現在のAndroid設定はallowBackup=trueのため、端末のOSバックアップが働く可能性がある点を申告時に確認する。
+このアプリは筋トレ記録専用です。Health Connectへのアクセス権限は要求しません。健康データの読み取り・グラフ化は別アプリで行います。
 
 ## 署名と次回更新
 
@@ -38,5 +36,3 @@ unset FITLOG_UPLOAD_PASSWORD
 ローカルでのAAB生成・署名検証と、Play Consoleへのアップロード・Google側検証・実機インストールは別の工程。ローカルビルド成功を配信完了として扱わない。現行のSDK要件等はアップロード時にConsoleの検証結果も確認する。
 
 公式手順: https://support.google.com/googleplay/android-developer/answer/9845334?hl=ja
-
-Health Connect: https://developer.android.com/health-and-fitness/health-connect/publish

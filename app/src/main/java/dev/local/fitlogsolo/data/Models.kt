@@ -61,13 +61,6 @@ data class WorkoutSetEntity(
     val updatedAt: Instant = Instant.now(),
 )
 
-data class WeightMeasurement(
-    val id: String,
-    val measuredAt: Instant,
-    val kilograms: Double,
-    val sourcePackage: String? = null,
-)
-
 data class WorkoutPoint(val date: String, val value: Double)
 data class BilateralWorkoutPoints(
     val left: List<WorkoutPoint>,

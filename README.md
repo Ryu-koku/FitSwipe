@@ -10,8 +10,6 @@
 - 左右それぞれの重量・回数の保存、編集、再表示
 - セッション履歴の詳細、編集、削除
 - 種目ごとの日別最大重量グラフ（通常1系列、左右別2系列）
-- Health Connectからの体重読み取りと体重グラフ
-- Health Connect未導入、更新要求、権限拒否、データなし、読み取り失敗の案内
 - JSON形式のローカルエクスポート
 - ライト/ダークテーマ、Compose Preview、単体テスト、Room instrumentation test
 
@@ -24,9 +22,6 @@
 - minSdk 28
 - Java 17向けにコンパイル（ビルドホストではJava 21でも検証）
 - Room 2.7.2
-- Health Connect `androidx.health.connect:connect-client:1.1.0-alpha12`
-
-Health Connectの現行版 `1.2.0-alpha06` はAPI 37およびAGP 9.1以上を要求するため、API 35・AGP 8.9.2で再現可能な `1.1.0-alpha12` を採用しています。SDKを更新する場合はcompileSdkとAGPの互換性も同時に確認してください。
 
 ## コマンド
 
@@ -48,24 +43,18 @@ app/build/outputs/apk/debug/app-debug.apk
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-## Health Connect / OMRON設定
+## データ管理アプリとの分離
 
-1. Android 14以上では「設定 > セキュリティとプライバシー > プライバシー管理 > Health Connect」を開きます。
-2. Android 13以下ではHealth Connectアプリをインストール・更新します。
-3. OMRONアプリ側でHealth Connectへの体重同期を有効にします。
-4. FitLog Soloの「設定 > Health Connect」または「グラフ > 体重」から「体重を連携」を押します。
-5. 読み取り権限を許可し、「手動で更新」を押します。
-
-OMRONの専用APIや固定パッケージ名は使用していません。体重が表示されない場合は、OMRON側の同期実行、Health Connect側に実測値が存在すること、読み取り権限が残っていること、対象期間が直近30日以内であることを確認してください。同日複数測定は最後の測定だけを表示します。
+このリポジトリは筋トレ記録専用です。Health Connect上の健康データの閲覧・グラフ化は、別リポジトリのHealth Connect Dashboardで行います。
 
 ## テスト状況
 
 - `./gradlew testDebugUnitTest`: 成功
 - `./gradlew assembleDebug`: 成功
 - `./gradlew assembleDebugAndroidTest`: 成功（Room/UI instrumentation APKのコンパイルまで）
-- 実機/エミュレータ上のinstrumentation testとHealth Connect実データ取得: 未実施
+- 実機/エミュレータ上のinstrumentation test: 未実施
 
-この環境ではADBサーバーが権限制限で起動できないため、実機での権限ダイアログ、OMRON同期、片手操作、画面回転、TalkBackの目視確認は未検証です。
+この環境ではADBサーバーが権限制限で起動できないため、実機での片手操作、画面回転、TalkBackの目視確認は未検証です。
 
 ## 今後の候補（P1）
 

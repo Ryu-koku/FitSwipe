@@ -83,10 +83,8 @@ import dev.local.fitlogsolo.data.ExerciseEntity
 import dev.local.fitlogsolo.data.ExerciseMode
 import dev.local.fitlogsolo.data.GraphAggregator
 import dev.local.fitlogsolo.data.SessionStatus
-import dev.local.fitlogsolo.data.WeightMeasurement
 import dev.local.fitlogsolo.data.WorkoutPoint
 import dev.local.fitlogsolo.data.WorkoutSetEntity
-import dev.local.fitlogsolo.health.HealthAvailability
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -97,8 +95,6 @@ private enum class Tab { RECORD, HISTORY, CHARTS }
 @Composable
 fun FitLogApp(
     viewModel: FitLogViewModel,
-    onRequestHealthPermission: () -> Unit,
-    onRefreshHealth: () -> Unit,
     onExport: () -> Unit,
 ) {
     var tab by rememberSaveable { mutableStateOf(Tab.RECORD) }
@@ -109,7 +105,6 @@ fun FitLogApp(
     val exercises by viewModel.exercises.collectAsStateWithLifecycle()
     val activeSession by viewModel.activeSession.collectAsStateWithLifecycle()
     val sessions by viewModel.completedSessions.collectAsStateWithLifecycle()
-    val health by viewModel.health.collectAsStateWithLifecycle()
     val message by viewModel.message.collectAsStateWithLifecycle()
     val snackbar = SnackbarHostState()
 
@@ -161,10 +156,7 @@ fun FitLogApp(
                 SettingsScreen(
                     viewModel = viewModel,
                     exercises = exercises,
-                    health = health,
                     onAddExercise = { showAddExercise = true },
-                    onRequestHealthPermission = onRequestHealthPermission,
-                    onRefreshHealth = onRefreshHealth,
                     onExport = onExport,
                 )
             } else {
@@ -191,7 +183,7 @@ fun FitLogApp(
                             viewModel.reopenSession(id) { tab = Tab.RECORD; selectedHistoryId = null }
                         },
                     )
-                    Tab.CHARTS -> ChartsScreen(viewModel, exercises, health, onRequestHealthPermission, onRefreshHealth)
+                    Tab.CHARTS -> WorkoutChartScreen(viewModel, exercises)
                 }
             }
         }
@@ -450,56 +442,11 @@ private fun SessionDetailDialog(
 }
 
 @Composable
-private fun ChartsScreen(
+private fun WorkoutChartScreen(
     viewModel: FitLogViewModel,
     exercises: List<ExerciseEntity>,
-    health: dev.local.fitlogsolo.HealthUiState,
-    onRequestHealthPermission: () -> Unit,
-    onRefreshHealth: () -> Unit,
 ) {
-    var weightMode by rememberSaveable { mutableStateOf(true) }
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
-        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-            SegmentedButton(weightMode, { weightMode = true }, SegmentedButtonDefaults.itemShape(0, 2)) { Text("体重") }
-            SegmentedButton(!weightMode, { weightMode = false }, SegmentedButtonDefaults.itemShape(1, 2)) { Text("筋トレ") }
-        }
-        Spacer(Modifier.height(16.dp))
-        if (weightMode) {
-            WeightChart(health, onRequestHealthPermission, onRefreshHealth)
-        } else {
-            WorkoutChart(viewModel, exercises)
-        }
-    }
-}
-
-@Composable
-private fun WeightChart(
-    health: dev.local.fitlogsolo.HealthUiState,
-    onRequestHealthPermission: () -> Unit,
-    onRefreshHealth: () -> Unit,
-) {
-    LaunchedEffect(Unit) { onRefreshHealth() }
-    val points = GraphAggregator.lastMeasurementPerDay(health.measurements).map {
-        WorkoutPoint(it.measuredAt.toLocalDateString(), it.kilograms)
-    }
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        when {
-            health.loading -> Text("Health Connectから読み取り中…")
-            health.message != null -> Text(health.message!!, color = MaterialTheme.colorScheme.error)
-            !health.hasPermission -> {
-                Text("OMRONなどの体重データはHealth Connectから読み取ります。")
-                Button(onClick = onRequestHealthPermission) { Text("体重を連携") }
-            }
-            points.isEmpty() -> EmptyState("体重データがありません", "OMRONアプリからHealth Connectへ同期されているか確認してください。")
-            else -> {
-                val latest = points.last()
-                Text("最新: ${latest.value.toInput()} kg（${latest.date}）", style = MaterialTheme.typography.titleMedium)
-                LineGraph(points, MaterialTheme.colorScheme.primary)
-                Text("同日に複数測定がある場合は、最後の測定を表示しています。", style = MaterialTheme.typography.bodySmall)
-            }
-        }
-        if (health.hasPermission) OutlinedButton(onClick = onRefreshHealth) { Text("手動で更新") }
-    }
+    Column(Modifier.fillMaxSize().padding(16.dp)) { WorkoutChart(viewModel, exercises) }
 }
 
 @Composable
@@ -575,10 +522,7 @@ private fun LineGraph(points: List<WorkoutPoint>, color: Color, label: String? =
 private fun SettingsScreen(
     viewModel: FitLogViewModel,
     exercises: List<ExerciseEntity>,
-    health: dev.local.fitlogsolo.HealthUiState,
     onAddExercise: () -> Unit,
-    onRequestHealthPermission: () -> Unit,
-    onRefreshHealth: () -> Unit,
     onExport: () -> Unit,
 ) {
     LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -601,18 +545,10 @@ private fun SettingsScreen(
             }
         }
         item { Divider() }
-        item { Text("Health Connect", style = MaterialTheme.typography.titleLarge) }
-        item { Text(health.message ?: if (health.hasPermission) "体重の読み取り権限があります" else "体重の読み取り権限は未設定です") }
-        item {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = onRequestHealthPermission) { Text("体重を連携") }
-                OutlinedButton(onClick = onRefreshHealth) { Text("状態を更新") }
-            }
-        }
         item { Divider() }
         item { Text("データ", style = MaterialTheme.typography.titleLarge) }
         item { Button(onClick = onExport, modifier = Modifier.fillMaxWidth()) { Text("データを書き出す（JSON）") } }
-        item { Text("このアプリは記録を端末内に保存します。Health Connectの体重データも外部へ送信しません。", style = MaterialTheme.typography.bodySmall) }
+        item { Text("このアプリは筋トレ記録を端末内に保存し、外部へ送信しません。", style = MaterialTheme.typography.bodySmall) }
     }
 }
 
@@ -648,8 +584,6 @@ private fun EmptyState(title: String, message: String = "", action: (() -> Unit)
 
 private fun formatInstant(instant: java.time.Instant): String = instant.atZone(ZoneId.systemDefault())
     .format(DateTimeFormatter.ofPattern("yyyy年M月d日（E）", Locale.JAPAN))
-
-private fun java.time.Instant.toLocalDateString(): String = atZone(ZoneId.systemDefault()).toLocalDate().toString()
 
 @Preview(showBackground = true)
 @Composable
