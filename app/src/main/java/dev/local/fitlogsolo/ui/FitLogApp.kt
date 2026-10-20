@@ -2,18 +2,19 @@ package dev.local.fitlogsolo.ui
 
 import android.app.Activity
 import android.content.Context
+import android.content.Intent
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
-import android.media.AudioManager
-import android.media.ToneGenerator
-import android.os.VibrationEffect
+import android.net.Uri
+import android.provider.Settings
 import android.os.SystemClock
-import android.os.Vibrator
 import android.view.HapticFeedbackConstants
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
@@ -133,6 +134,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import dev.local.fitlogsolo.FitLogViewModel
+import dev.local.fitlogsolo.RestTimerAlarm
 import dev.local.fitlogsolo.data.PresetExerciseConfig
 import dev.local.fitlogsolo.data.WorkoutPreset
 import dev.local.fitlogsolo.data.ExerciseEntity
@@ -215,6 +217,8 @@ private fun FitLogAppContent(
     var showWorkoutComplete by rememberSaveable { mutableStateOf(false) }
     var workoutCompletionSaved by rememberSaveable { mutableStateOf(false) }
     var restEndsAtMillis by rememberSaveable { mutableLongStateOf(0L) }
+    var pendingWorkoutStart by remember { mutableStateOf<(() -> Unit)?>(null) }
+    var showExactAlarmPermissionDialog by rememberSaveable { mutableStateOf(false) }
     var presetExerciseOrder by rememberSaveable { mutableStateOf("") }
     val exercises by viewModel.exercises.collectAsStateWithLifecycle()
     val activeSession by viewModel.activeSession.collectAsStateWithLifecycle()
@@ -227,27 +231,30 @@ private fun FitLogAppContent(
     val snackbar = SnackbarHostState()
     val flatCandidate = rememberFlatDeviceCandidate(flatModeEnabled, activeSession != null)
     val context = LocalContext.current
+    val permissionScope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) { viewModel.initializeDefaultPresets() }
 
-    LaunchedEffect(restEndsAtMillis) {
-        val scheduledEnd = restEndsAtMillis
-        if (scheduledEnd > 0L) {
-            val remainingMillis = (scheduledEnd - System.currentTimeMillis()).coerceAtLeast(0L)
-            if (remainingMillis > 0L) delay(remainingMillis)
-            if (restEndsAtMillis == scheduledEnd) {
-                val tone = runCatching { ToneGenerator(AudioManager.STREAM_ALARM, 80) }.getOrNull()
-                try {
-                    val toneStarted = tone?.startTone(ToneGenerator.TONE_PROP_PROMPT, 200) == true
-                    val vibrator = context.getSystemService(Vibrator::class.java)
-                    if (vibrator?.hasVibrator() == true) {
-                        vibrator.vibrate(VibrationEffect.createWaveform(longArrayOf(0L, 320L, 140L, 480L), -1))
-                    }
-                    if (toneStarted) delay(200L)
-                } finally {
-                    tone?.release()
-                }
+    val exactAlarmPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) {
+        val action = pendingWorkoutStart
+        pendingWorkoutStart = null
+        if (RestTimerAlarm.canScheduleExactAlarms(context)) {
+            action?.invoke()
+        } else if (action != null) {
+            permissionScope.launch {
+                snackbar.showSnackbar("許可されていないためトレーニングを開始しませんでした")
             }
+        }
+    }
+
+    fun startWorkoutWithBackgroundAlerts(action: () -> Unit) {
+        if (RestTimerAlarm.canScheduleExactAlarms(context)) {
+            action()
+        } else {
+            pendingWorkoutStart = action
+            showExactAlarmPermissionDialog = true
         }
     }
 
@@ -363,22 +370,34 @@ private fun FitLogAppContent(
                         selectedExercise = selectedExercise,
                         restEndsAtMillis = restEndsAtMillis,
                         onStartPreset = { preset ->
-                            viewModel.startPreset(preset) { _, exerciseIds ->
-                                selectedExerciseId = exerciseIds.firstOrNull()
-                                presetExerciseOrder = exerciseIds.joinToString(",")
+                            startWorkoutWithBackgroundAlerts {
+                                viewModel.startPreset(preset) { _, exerciseIds ->
+                                    selectedExerciseId = exerciseIds.firstOrNull()
+                                    presetExerciseOrder = exerciseIds.joinToString(",")
+                                }
                             }
                         },
                         onSelectExercise = { exercise ->
-                            viewModel.startExercise(exercise) {
-                                selectedExerciseId = exercise.id
+                            startWorkoutWithBackgroundAlerts {
+                                viewModel.startExercise(exercise) {
+                                    selectedExerciseId = exercise.id
+                                }
                             }
                         },
                         onToggleRoutineExercise = viewModel::toggleRoutineExercise,
-                        onSetCompleted = { restEndsAtMillis = System.currentTimeMillis() + REST_SECONDS * 1_000L },
-                        onSkipRest = { restEndsAtMillis = 0L },
+                        onSetCompleted = {
+                            val restEndTime = System.currentTimeMillis() + REST_SECONDS * 1_000L
+                            RestTimerAlarm.schedule(context, restEndTime)
+                            restEndsAtMillis = restEndTime
+                        },
+                        onSkipRest = {
+                            RestTimerAlarm.cancel(context)
+                            restEndsAtMillis = 0L
+                        },
                         onFinishSession = {
                             activeSession?.id?.let { viewModel.finishSession(it) }
                             selectedExerciseId = null
+                            RestTimerAlarm.cancel(context)
                             restEndsAtMillis = 0L
                             presetExerciseOrder = ""
                         },
@@ -388,6 +407,7 @@ private fun FitLogAppContent(
                                 viewModel.finishSession(sessionId, announce = false) { workoutCompletionSaved = true }
                             } ?: run { workoutCompletionSaved = true }
                             selectedExerciseId = null
+                            RestTimerAlarm.cancel(context)
                             restEndsAtMillis = 0L
                             presetExerciseOrder = ""
                             showWorkoutComplete = true
@@ -404,6 +424,35 @@ private fun FitLogAppContent(
         AddExerciseDialog(
             onDismiss = { showAddExercise = false },
             onSave = { name, mode -> viewModel.addExercise(name, mode); showAddExercise = false },
+        )
+    }
+
+    if (showExactAlarmPermissionDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showExactAlarmPermissionDialog = false
+                pendingWorkoutStart = null
+            },
+            title = { Text("バックグラウンドの休憩アラーム") },
+            text = {
+                Text("別のアプリを開いている時や画面が消えている時も、休憩終了時に音と振動を出すには「アラームとリマインダー」の許可が必要です。設定後にトレーニングを開始します。")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showExactAlarmPermissionDialog = false
+                    val settingsIntent = Intent(
+                        Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
+                        Uri.parse("package:${context.packageName}"),
+                    )
+                    exactAlarmPermissionLauncher.launch(settingsIntent)
+                }) { Text("設定を開く") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showExactAlarmPermissionDialog = false
+                    pendingWorkoutStart = null
+                }) { Text("キャンセル") }
+            },
         )
     }
 }
