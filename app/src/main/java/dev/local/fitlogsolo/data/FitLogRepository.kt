@@ -84,6 +84,40 @@ class FitLogRepository(private val database: AppDatabase) {
         return sessionId to presetExercises.map { it.id }
     }
 
+    suspend fun startPresetSession(preset: WorkoutPreset): Pair<Long, List<Long>> {
+        val activeExercises = exercises.observeActive().first().associateBy { it.id }
+        val selected = preset.exercises.mapNotNull { config -> activeExercises[config.exerciseId]?.let { config to it } }
+        require(selected.isNotEmpty()) { "プリセットに種目を設定してください" }
+        val sessionId = startOrResumeSession()
+        selected.forEach { (config, exercise) ->
+            val desiredCount = config.sets.toIntOrNull()?.coerceIn(1, 30) ?: 3
+            var currentSets = sets.findForSession(sessionId).filter { it.exerciseId == exercise.id }.sortedBy { it.setOrder }
+            val createdSetIds = mutableSetOf<Long>()
+            while (currentSets.size < desiredCount) {
+                createdSetIds += addSet(sessionId, exercise)
+                currentSets = sets.findForSession(sessionId).filter { it.exerciseId == exercise.id }.sortedBy { it.setOrder }
+            }
+            val weight = config.weightKg.toDoubleOrNull()?.takeIf { it >= 0.0 }
+            val reps = config.reps.toIntOrNull()?.takeIf { it >= 0 }
+            currentSets.forEach { set ->
+                if (set.id in createdSetIds) {
+                    updateSet(
+                        when (exercise.mode) {
+                            ExerciseMode.NORMAL -> set.copy(normalWeightKg = weight, normalReps = reps)
+                            ExerciseMode.BILATERAL -> set.copy(
+                                leftWeightKg = weight,
+                                leftReps = reps,
+                                rightWeightKg = weight,
+                                rightReps = reps,
+                            )
+                        },
+                    )
+                }
+            }
+        }
+        return sessionId to selected.map { (_, exercise) -> exercise.id }
+    }
+
     suspend fun addSet(sessionId: Long, exercise: ExerciseEntity): Long {
         val previous = sets.findCompletedForExercise(exercise.id).firstOrNull()
         val count = sets.findForSession(sessionId).count { it.exerciseId == exercise.id }

@@ -10,6 +10,7 @@ import dev.local.fitlogsolo.data.FitLogRepository
 import dev.local.fitlogsolo.data.GraphAggregator
 import dev.local.fitlogsolo.data.SessionStatus
 import dev.local.fitlogsolo.data.WorkoutPreferences
+import dev.local.fitlogsolo.data.WorkoutPreset
 import dev.local.fitlogsolo.data.WorkoutSetEntity
 import dev.local.fitlogsolo.export.JsonExporter
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -38,6 +39,7 @@ class FitLogViewModel(
     val displayName = workoutPreferences.displayName
     val gymPresetExerciseIds = workoutPreferences.gymPresetExerciseIds
     val homePresetExerciseIds = workoutPreferences.homePresetExerciseIds
+    val presets = workoutPreferences.presets
 
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message.asStateFlow()
@@ -58,25 +60,27 @@ class FitLogViewModel(
         onReady(sessionId)
     }
 
-    fun startPreset(place: WorkoutPlace, onReady: (Long, List<Long>) -> Unit = { _, _ -> }) = viewModelScope.launch {
-        val selectedIds = if (place == WorkoutPlace.GYM) gymPresetExerciseIds.value else homePresetExerciseIds.value
-        val (sessionId, exerciseIds) = if (selectedIds.isEmpty()) {
-            repository.startPresetSession(place.presetExerciseNames)
-        } else {
-            repository.startPresetSessionByIds(selectedIds)
-        }
-        if (selectedIds.isEmpty()) workoutPreferences.setPresetExerciseIds(place == WorkoutPlace.GYM, exerciseIds)
+    fun startPreset(preset: WorkoutPreset, onReady: (Long, List<Long>) -> Unit = { _, _ -> }) = viewModelScope.launch {
+        val (sessionId, exerciseIds) = repository.startPresetSession(preset)
         onReady(sessionId, exerciseIds)
     }
 
     fun initializeDefaultPresets() = viewModelScope.launch {
-        if (workoutPreferences.defaultPresetsInitialized) return@launch
-        val gymIds = repository.ensurePresetExercises(WorkoutPlace.GYM.presetExerciseNames)
-        val homeIds = repository.ensurePresetExercises(WorkoutPlace.HOME.presetExerciseNames)
-        if (gymPresetExerciseIds.value.isEmpty()) workoutPreferences.setPresetExerciseIds(true, gymIds)
-        if (homePresetExerciseIds.value.isEmpty()) workoutPreferences.setPresetExerciseIds(false, homeIds)
-        workoutPreferences.markDefaultPresetsInitialized()
+        var gymIds = gymPresetExerciseIds.value
+        var homeIds = homePresetExerciseIds.value
+        if (!workoutPreferences.defaultPresetsInitialized) {
+            val ensuredGymIds = repository.ensurePresetExercises(WorkoutPlace.GYM.presetExerciseNames)
+            val ensuredHomeIds = repository.ensurePresetExercises(WorkoutPlace.HOME.presetExerciseNames)
+            if (gymIds.isEmpty()) gymIds = ensuredGymIds
+            if (homeIds.isEmpty()) homeIds = ensuredHomeIds
+            workoutPreferences.setPresetExerciseIds(true, gymIds)
+            workoutPreferences.setPresetExerciseIds(false, homeIds)
+            workoutPreferences.markDefaultPresetsInitialized()
+        }
+        workoutPreferences.initializePresetsIfMissing(gymIds, homeIds)
     }
+
+    fun setPresets(presets: List<WorkoutPreset>) = workoutPreferences.setPresets(presets)
 
     fun addExercise(name: String, mode: ExerciseMode) = viewModelScope.launch {
         runCatching { repository.addExercise(name, mode) }.onFailure { _message.value = it.message }

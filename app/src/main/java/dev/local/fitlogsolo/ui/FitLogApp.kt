@@ -10,12 +10,20 @@ import android.os.SystemClock
 import android.view.HapticFeedbackConstants
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -27,10 +35,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.layout.animateContentSize
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -53,7 +65,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Divider
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -77,6 +88,7 @@ import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -113,7 +125,8 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import dev.local.fitlogsolo.FitLogViewModel
-import dev.local.fitlogsolo.WorkoutPlace
+import dev.local.fitlogsolo.data.PresetExerciseConfig
+import dev.local.fitlogsolo.data.WorkoutPreset
 import dev.local.fitlogsolo.data.BilateralWorkoutPoints
 import dev.local.fitlogsolo.data.ExerciseEntity
 import dev.local.fitlogsolo.data.ExerciseMode
@@ -124,6 +137,7 @@ import dev.local.fitlogsolo.data.WorkoutSetEntity
 import java.time.ZoneId
 import java.time.LocalDate
 import java.time.YearMonth
+import kotlin.math.roundToInt
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import java.math.BigDecimal
@@ -133,6 +147,19 @@ import kotlinx.coroutines.launch
 
 private enum class Tab { RECORD, HISTORY, CHARTS }
 private const val REST_SECONDS = 90L
+
+@Composable
+private fun Modifier.pressMotionClickable(onClick: () -> Unit): Modifier {
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) 0.97f else 1f,
+        animationSpec = spring(stiffness = 700f),
+        label = "press motion",
+    )
+    return graphicsLayer { scaleX = scale; scaleY = scale }
+        .clickable(interactionSource = interactionSource, onClick = onClick)
+}
 
 private val FitLogRedColors = lightColorScheme(
     primary = Color(0xFFB3261E),
@@ -181,6 +208,7 @@ private fun FitLogAppContent(
     val routineExerciseIds by viewModel.routineExerciseIds.collectAsStateWithLifecycle()
     val flatModeEnabled by viewModel.flatModeEnabled.collectAsStateWithLifecycle()
     val displayName by viewModel.displayName.collectAsStateWithLifecycle()
+    val presets by viewModel.presets.collectAsStateWithLifecycle()
     val message by viewModel.message.collectAsStateWithLifecycle()
     val snackbar = SnackbarHostState()
     val flatCandidate = rememberFlatDeviceCandidate(flatModeEnabled, activeSession != null)
@@ -251,13 +279,14 @@ private fun FitLogAppContent(
         },
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
-        Surface(Modifier.fillMaxSize().padding(padding)) {
+        Surface(Modifier.fillMaxSize().padding(padding).animateContentSize(spring(stiffness = 500f))) {
             if (!settings && activeSession != null && flatCandidate) {
                 WorkoutDock(displayName = displayName)
             } else if (settings) {
                 SettingsScreen(
                     viewModel = viewModel,
                     exercises = exercises,
+                    presets = presets,
                     onAddExercise = { showAddExercise = true },
                     onExport = onExport,
                     flatModeEnabled = flatModeEnabled,
@@ -272,14 +301,15 @@ private fun FitLogAppContent(
                     Tab.RECORD -> RecordScreen(
                         viewModel = viewModel,
                         exercises = exercises,
+                        presets = presets,
                         routineExerciseIds = routineExerciseIds,
                         activeSessionId = activeSession?.id,
                         completedSessions = sessions,
                         presetExerciseOrder = presetExerciseOrder.split(',').mapNotNull(String::toLongOrNull),
                         selectedExercise = selectedExercise,
                         restEndsAtMillis = restEndsAtMillis,
-                        onStartPreset = { place ->
-                            viewModel.startPreset(place) { _, exerciseIds ->
+                        onStartPreset = { preset ->
+                            viewModel.startPreset(preset) { _, exerciseIds ->
                                 selectedExerciseId = exerciseIds.firstOrNull()
                                 presetExerciseOrder = exerciseIds.joinToString(",")
                             }
@@ -331,13 +361,14 @@ private fun FitLogAppContent(
 private fun RecordScreen(
     viewModel: FitLogViewModel,
     exercises: List<ExerciseEntity>,
+    presets: List<WorkoutPreset>,
     routineExerciseIds: List<Long>,
     activeSessionId: Long?,
     completedSessions: List<dev.local.fitlogsolo.data.WorkoutSessionEntity>,
     presetExerciseOrder: List<Long>,
     selectedExercise: ExerciseEntity?,
     restEndsAtMillis: Long,
-    onStartPreset: (WorkoutPlace) -> Unit,
+    onStartPreset: (WorkoutPreset) -> Unit,
     onSelectExercise: (ExerciseEntity) -> Unit,
     onToggleRoutineExercise: (Long) -> Unit,
     onSetCompleted: () -> Unit,
@@ -372,24 +403,28 @@ private fun RecordScreen(
     ) {
         if (activeSessionId == null) {
             item { WorkoutCalendar(completedSessions) }
-            item {
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-                    PresetChoiceCard(
-                        label = "ジム",
-                        onClick = { onStartPreset(WorkoutPlace.GYM) },
-                        modifier = Modifier.weight(1f),
-                    )
-                    PresetChoiceCard(
-                        label = "家",
-                        onClick = { onStartPreset(WorkoutPlace.HOME) },
-                        modifier = Modifier.weight(1f),
-                    )
+            if (presets.isEmpty()) {
+                item { Text("設定からプリセットを追加してください", style = MaterialTheme.typography.titleMedium) }
+            } else {
+                items(presets.chunked(2), key = { it.first().id }) { rowPresets ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+                        rowPresets.forEach { preset ->
+                            PresetChoiceCard(
+                                label = preset.name,
+                                detail = if (preset.exercises.isEmpty()) "種目を設定" else "${preset.exercises.size}種目",
+                                enabled = preset.exercises.isNotEmpty(),
+                                onClick = { onStartPreset(preset) },
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                        if (rowPresets.size == 1) Spacer(Modifier.weight(1f))
+                    }
                 }
             }
         } else {
             val orderedIds = presetExerciseOrder.ifEmpty { sessionSets.map { it.exerciseId }.distinct() }
             items(orderedIds.mapNotNull { id -> exercises.firstOrNull { it.id == id } }, key = { "active-${it.id}" }) { exercise ->
-                Card(Modifier.fillMaxWidth().clickable { onSelectExercise(exercise) }) {
+                Card(Modifier.fillMaxWidth().pressMotionClickable { onSelectExercise(exercise) }) {
                     Text(exercise.name, Modifier.padding(20.dp), style = MaterialTheme.typography.titleLarge)
                 }
             }
@@ -399,10 +434,11 @@ private fun RecordScreen(
 }
 
 @Composable
-private fun PresetChoiceCard(label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    Card(modifier = modifier.height(116.dp).clickable(onClick = onClick)) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text(label, style = MaterialTheme.typography.headlineLarge)
+private fun PresetChoiceCard(label: String, detail: String, enabled: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Card(modifier = modifier.height(116.dp).clickable(enabled = enabled, onClick = onClick)) {
+        Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+            Text(label, style = MaterialTheme.typography.headlineLarge, maxLines = 2)
+            Text(detail, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -411,11 +447,13 @@ private fun PresetChoiceCard(label: String, onClick: () -> Unit, modifier: Modif
 private fun WorkoutCalendar(sessions: List<dev.local.fitlogsolo.data.WorkoutSessionEntity>) {
     var month by rememberSaveable { mutableStateOf(YearMonth.now().toString()) }
     val yearMonth = YearMonth.parse(month)
-    val workoutDays = sessions.mapNotNull { session ->
+    val sessionDays = sessions.mapNotNull { session ->
         runCatching { session.startedAt.atZone(ZoneId.systemDefault()).toLocalDate() }.getOrNull()
-    }.filter { YearMonth.from(it) == yearMonth }.toSet()
+    }.toSet()
     Card(
-        Modifier.fillMaxWidth().pointerInput(yearMonth) {
+        Modifier.fillMaxWidth()
+            .animateContentSize(spring(stiffness = 500f))
+            .pointerInput(yearMonth) {
             var horizontalDistance = 0f
             detectHorizontalDragGestures(
                 onHorizontalDrag = { change, dragAmount -> change.consume(); horizontalDistance += dragAmount },
@@ -428,27 +466,36 @@ private fun WorkoutCalendar(sessions: List<dev.local.fitlogsolo.data.WorkoutSess
             )
         },
     ) {
-        Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = { month = yearMonth.minusMonths(1).toString() }) { Icon(Icons.Default.ChevronLeft, "前の月") }
-                Text(yearMonth.format(DateTimeFormatter.ofPattern("yyyy年 M月", Locale.JAPAN)), style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                IconButton(onClick = { month = yearMonth.plusMonths(1).toString() }) { Icon(Icons.Default.ChevronRight, "次の月") }
-            }
-            Row(Modifier.fillMaxWidth()) {
-                listOf("月", "火", "水", "木", "金", "土", "日").forEach { day ->
-                    Text(day, modifier = Modifier.weight(1f), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        AnimatedContent(
+            targetState = yearMonth,
+            transitionSpec = {
+                val direction = if (targetState > initialState) 1 else -1
+                (slideInHorizontally(tween(240)) { width -> direction * width / 4 } + fadeIn(tween(180))) togetherWith
+                    (slideOutHorizontally(tween(200)) { width -> -direction * width / 4 } + fadeOut(tween(120)))
+            },
+            label = "calendar month",
+        ) { displayedMonth ->
+            val workoutDays = sessionDays.filter { YearMonth.from(it) == displayedMonth }.toSet()
+            Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { month = displayedMonth.minusMonths(1).toString() }) { Icon(Icons.Default.ChevronLeft, "前の月") }
+                    Text(displayedMonth.format(DateTimeFormatter.ofPattern("yyyy年 M月", Locale.JAPAN)), style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                    IconButton(onClick = { month = displayedMonth.plusMonths(1).toString() }) { Icon(Icons.Default.ChevronRight, "次の月") }
                 }
-            }
-            val leadingBlanks = (yearMonth.atDay(1).dayOfWeek.value - 1)
-            val cells = ((leadingBlanks + yearMonth.lengthOfMonth() + 6) / 7) * 7
-            repeat(cells / 7) { week ->
                 Row(Modifier.fillMaxWidth()) {
-                    repeat(7) { column ->
-                        val dayNumber = week * 7 + column - leadingBlanks + 1
-                        Box(Modifier.weight(1f).height(34.dp), contentAlignment = Alignment.Center) {
-                            if (dayNumber in 1..yearMonth.lengthOfMonth()) {
-                                val day = yearMonth.atDay(dayNumber)
-                                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                    listOf("月", "火", "水", "木", "金", "土", "日").forEach { day ->
+                        Text(day, modifier = Modifier.weight(1f), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+                val leadingBlanks = (displayedMonth.atDay(1).dayOfWeek.value - 1)
+                val cells = ((leadingBlanks + displayedMonth.lengthOfMonth() + 6) / 7) * 7
+                repeat(cells / 7) { week ->
+                    Row(Modifier.fillMaxWidth()) {
+                        repeat(7) { column ->
+                            val dayNumber = week * 7 + column - leadingBlanks + 1
+                            Box(Modifier.weight(1f).height(34.dp), contentAlignment = Alignment.Center) {
+                                if (dayNumber in 1..displayedMonth.lengthOfMonth()) {
+                                    val day = displayedMonth.atDay(dayNumber)
                                     Surface(
                                         modifier = Modifier.size(30.dp),
                                         shape = MaterialTheme.shapes.large,
@@ -475,8 +522,8 @@ private fun WorkoutCalendar(sessions: List<dev.local.fitlogsolo.data.WorkoutSess
                         }
                     }
                 }
+                Text("● 記録あり", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
             }
-            Text("● 記録あり", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
         }
     }
 }
@@ -490,7 +537,7 @@ private fun ExerciseCard(
 ) {
     Card(Modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f).clickable(onClick = onClick)) {
+            Column(Modifier.weight(1f).pressMotionClickable(onClick)) {
                 Text(exercise.name, style = MaterialTheme.typography.titleMedium)
                 Text(if (exercise.mode == ExerciseMode.NORMAL) "通常" else "左右別", style = MaterialTheme.typography.bodySmall)
             }
@@ -1123,7 +1170,7 @@ private fun HistoryScreen(
     LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         items(sessions, key = { it.id }) { session ->
             val sets by viewModel.sessionSets(session.id).collectAsStateWithLifecycle()
-            Card(Modifier.fillMaxWidth().clickable { onSelect(session.id) }) {
+            Card(Modifier.fillMaxWidth().pressMotionClickable { onSelect(session.id) }) {
                 Column(Modifier.padding(16.dp)) {
                     Text(formatInstant(session.startedAt), style = MaterialTheme.typography.titleMedium)
                     Text("${sets.map { it.exerciseId }.distinct().size}種目 / ${sets.size}セット")
@@ -1274,6 +1321,7 @@ private fun LineGraph(points: List<WorkoutPoint>, color: Color, label: String? =
 private fun SettingsScreen(
     viewModel: FitLogViewModel,
     exercises: List<ExerciseEntity>,
+    presets: List<WorkoutPreset>,
     onAddExercise: () -> Unit,
     onExport: () -> Unit,
     flatModeEnabled: Boolean,
@@ -1284,9 +1332,10 @@ private fun SettingsScreen(
     onShowCharts: () -> Unit,
 ) {
     val routineExerciseIds by viewModel.routineExerciseIds.collectAsStateWithLifecycle()
-    val gymPresetIds by viewModel.gymPresetExerciseIds.collectAsStateWithLifecycle()
-    val homePresetIds by viewModel.homePresetExerciseIds.collectAsStateWithLifecycle()
     var displayNameDraft by rememberSaveable { mutableStateOf(displayName) }
+    var editingPresetId by rememberSaveable { mutableStateOf<String?>(null) }
+    var showAddPreset by rememberSaveable { mutableStateOf(false) }
+    var newPresetName by rememberSaveable { mutableStateOf("") }
     LaunchedEffect(displayName) { displayNameDraft = displayName }
     LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Text("表示名", style = MaterialTheme.typography.titleLarge) }
@@ -1309,13 +1358,22 @@ private fun SettingsScreen(
         item { OutlinedButton(onClick = onShowHistory, modifier = Modifier.fillMaxWidth().height(56.dp)) { Icon(Icons.Default.History, null); Text("履歴") } }
         item { OutlinedButton(onClick = onShowCharts, modifier = Modifier.fillMaxWidth().height(56.dp)) { Icon(Icons.Default.BarChart, null); Text("グラフ") } }
         item { Text("プリセット", style = MaterialTheme.typography.titleLarge) }
-        item { Text("ジム", style = MaterialTheme.typography.titleMedium) }
-        items(exercises, key = { "gym-${it.id}" }) { exercise ->
-            PresetExerciseRow(exercise, exercise.id in gymPresetIds) { viewModel.togglePresetExercise(true, exercise.id) }
+        items(presets, key = { "preset-${it.id}" }) { preset ->
+            Card(Modifier.fillMaxWidth().pressMotionClickable { editingPresetId = preset.id }) {
+                Row(Modifier.padding(start = 16.dp, end = 4.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(preset.name, style = MaterialTheme.typography.titleMedium)
+                        Text("${preset.exercises.size}種目", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    IconButton(onClick = { editingPresetId = preset.id }) { Icon(Icons.Default.Edit, "編集") }
+                    IconButton(onClick = { viewModel.setPresets(presets.filterNot { it.id == preset.id }) }) { Icon(Icons.Default.Delete, "削除") }
+                }
+            }
         }
-        item { Text("家", style = MaterialTheme.typography.titleMedium) }
-        items(exercises, key = { "home-${it.id}" }) { exercise ->
-            PresetExerciseRow(exercise, exercise.id in homePresetIds) { viewModel.togglePresetExercise(false, exercise.id) }
+        item {
+            OutlinedButton(onClick = { newPresetName = ""; showAddPreset = true }, modifier = Modifier.fillMaxWidth().height(56.dp)) {
+                Icon(Icons.Default.Add, null); Text("プリセットを追加")
+            }
         }
         item { Text("種目を管理", style = MaterialTheme.typography.titleLarge) }
         item { Button(onClick = onAddExercise, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Add, null); Text("種目を追加") } }
@@ -1353,17 +1411,164 @@ private fun SettingsScreen(
         item { Button(onClick = onExport, modifier = Modifier.fillMaxWidth()) { Text("データを書き出す（JSON）") } }
         item { Text("このアプリは筋トレ記録を端末内に保存し、外部へ送信しません。", style = MaterialTheme.typography.bodySmall) }
     }
+    if (showAddPreset) {
+        AlertDialog(
+            onDismissRequest = { showAddPreset = false },
+            title = { Text("プリセットを追加") },
+            text = {
+                OutlinedTextField(
+                    value = newPresetName,
+                    onValueChange = { newPresetName = it.take(24) },
+                    label = { Text("名前") },
+                    singleLine = true,
+                )
+            },
+            confirmButton = {
+                TextButton(enabled = newPresetName.trim().isNotEmpty(), onClick = {
+                    val preset = WorkoutPreset(name = newPresetName.trim())
+                    viewModel.setPresets(presets + preset)
+                    editingPresetId = preset.id
+                    showAddPreset = false
+                }) { Text("追加") }
+            },
+            dismissButton = { TextButton(onClick = { showAddPreset = false }) { Text("キャンセル") } },
+        )
+    }
+    presets.firstOrNull { it.id == editingPresetId }?.let { preset ->
+        PresetEditorDialog(
+            preset = preset,
+            exercises = exercises,
+            onChange = { updated -> viewModel.setPresets(presets.map { if (it.id == preset.id) updated else it }) },
+            onDismiss = { editingPresetId = null },
+        )
+    }
 }
 
 @Composable
-private fun PresetExerciseRow(exercise: ExerciseEntity, selected: Boolean, onToggle: () -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(exercise.name, Modifier.weight(1f).clickable(onClick = onToggle), style = MaterialTheme.typography.bodyLarge)
-        Checkbox(checked = selected, onCheckedChange = { onToggle() })
-    }
+private fun PresetEditorDialog(
+    preset: WorkoutPreset,
+    exercises: List<ExerciseEntity>,
+    onChange: (WorkoutPreset) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val latestPreset by androidx.compose.runtime.rememberUpdatedState(preset)
+    var expanded by rememberSaveable(preset.id) { mutableStateOf(false) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("プリセットを編集") },
+        text = {
+            Column(
+                Modifier.fillMaxWidth().heightIn(max = 620.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                OutlinedTextField(
+                    value = preset.name,
+                    onValueChange = { onChange(preset.copy(name = it.take(24))) },
+                    label = { Text("プリセット名") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Text("種目の順番と、開始時の値を設定", style = MaterialTheme.typography.bodySmall)
+                preset.exercises.forEach { config ->
+                    val exercise = exercises.firstOrNull { it.id == config.exerciseId } ?: return@forEach
+                    Card(Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(exercise.name, Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
+                                Text(
+                                    "☷",
+                                    Modifier.pointerInput(config.exerciseId) {
+                                        var startIndex = 0
+                                        var draggedDistance = 0f
+                                        val rowHeight = with(density) { 156.dp.toPx() }
+                                        detectDragGesturesAfterLongPress(
+                                            onDragStart = {
+                                                startIndex = latestPreset.exercises.indexOfFirst { it.exerciseId == config.exerciseId }
+                                                draggedDistance = 0f
+                                            },
+                                            onDrag = { change, amount ->
+                                                change.consume()
+                                                draggedDistance += amount.y
+                                                val target = (startIndex + (draggedDistance / rowHeight).roundToInt())
+                                                    .coerceIn(0, latestPreset.exercises.lastIndex)
+                                                val current = latestPreset.exercises.indexOfFirst { it.exerciseId == config.exerciseId }
+                                                if (current >= 0 && target != current) {
+                                                    val reordered = latestPreset.exercises.toMutableList().apply {
+                                                        add(target, removeAt(current))
+                                                    }
+                                                    onChange(latestPreset.copy(exercises = reordered))
+                                                }
+                                            },
+                                        )
+                                    }.padding(horizontal = 12.dp, vertical = 4.dp),
+                                    color = MaterialTheme.colorScheme.primary,
+                                    style = MaterialTheme.typography.headlineSmall,
+                                )
+                                IconButton(onClick = {
+                                    onChange(preset.copy(exercises = preset.exercises.filterNot { it.exerciseId == config.exerciseId }))
+                                }) { Icon(Icons.Default.Delete, "種目を削除") }
+                            }
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                OutlinedTextField(
+                                    value = config.weightKg,
+                                    onValueChange = { value ->
+                                        onChange(preset.copy(exercises = preset.exercises.map {
+                                            if (it.exerciseId == config.exerciseId) it.copy(weightKg = value.filter { char -> char.isDigit() || char == '.' }) else it
+                                        }))
+                                    },
+                                    label = { Text("kg") },
+                                    singleLine = true,
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                    modifier = Modifier.weight(1f),
+                                )
+                                OutlinedTextField(
+                                    value = config.reps,
+                                    onValueChange = { value ->
+                                        onChange(preset.copy(exercises = preset.exercises.map {
+                                            if (it.exerciseId == config.exerciseId) it.copy(reps = value.filter(Char::isDigit)) else it
+                                        }))
+                                    },
+                                    label = { Text("回") },
+                                    singleLine = true,
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    modifier = Modifier.weight(1f),
+                                )
+                                OutlinedTextField(
+                                    value = config.sets,
+                                    onValueChange = { value ->
+                                        onChange(preset.copy(exercises = preset.exercises.map {
+                                            if (it.exerciseId == config.exerciseId) it.copy(sets = value.filter(Char::isDigit)) else it
+                                        }))
+                                    },
+                                    label = { Text("セット") },
+                                    singleLine = true,
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    modifier = Modifier.weight(1f),
+                                )
+                            }
+                        }
+                    }
+                }
+                Box {
+                    OutlinedButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()) {
+                        Icon(Icons.Default.Add, null); Text("種目を追加")
+                    }
+                    DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                        exercises.filter { candidate -> preset.exercises.none { it.exerciseId == candidate.id } }.forEach { exercise ->
+                            DropdownMenuItem(
+                                text = { Text(exercise.name) },
+                                onClick = {
+                                    onChange(preset.copy(exercises = preset.exercises + PresetExerciseConfig(exerciseId = exercise.id)))
+                                    expanded = false
+                                },
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("完了") } },
+    )
 }
 
 @Composable
