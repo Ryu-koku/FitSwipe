@@ -6,18 +6,27 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.media.AudioManager
+import android.media.ToneGenerator
+import android.os.VibrationEffect
 import android.os.SystemClock
+import android.os.Vibrator
 import android.view.HapticFeedbackConstants
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
@@ -142,6 +151,18 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private const val REST_SECONDS = 90L
+private const val WORKOUT_CARD_HEIGHT_FRACTION = 0.78f
+
+private enum class MainScreen { HOME, SETTINGS, WORKOUT_DOCK, WORKOUT_COMPLETE }
+
+private data class EditorCardScene(
+    val key: String,
+    val exercise: ExerciseEntity? = null,
+    val set: WorkoutSetEntity? = null,
+    val totalSets: Int = 0,
+    val enabled: Boolean = true,
+    val restEndsAtMillis: Long = 0L,
+)
 
 @Composable
 private fun Modifier.pressMotionClickable(enabled: Boolean = true, onClick: () -> Unit): Modifier {
@@ -205,18 +226,31 @@ private fun FitLogAppContent(
     val message by viewModel.message.collectAsStateWithLifecycle()
     val snackbar = SnackbarHostState()
     val flatCandidate = rememberFlatDeviceCandidate(flatModeEnabled, activeSession != null)
+    val context = LocalContext.current
 
     LaunchedEffect(Unit) { viewModel.initializeDefaultPresets() }
 
     LaunchedEffect(restEndsAtMillis) {
-        if (restEndsAtMillis > 0L) {
-            val remainingMillis = restEndsAtMillis - System.currentTimeMillis()
+        val scheduledEnd = restEndsAtMillis
+        if (scheduledEnd > 0L) {
+            val remainingMillis = (scheduledEnd - System.currentTimeMillis()).coerceAtLeast(0L)
             if (remainingMillis > 0L) delay(remainingMillis)
-            if (System.currentTimeMillis() >= restEndsAtMillis) restEndsAtMillis = 0L
+            if (restEndsAtMillis == scheduledEnd) {
+                val tone = runCatching { ToneGenerator(AudioManager.STREAM_ALARM, 80) }.getOrNull()
+                try {
+                    val toneStarted = tone?.startTone(ToneGenerator.TONE_PROP_ACK, 700) == true
+                    val vibrator = context.getSystemService(Vibrator::class.java)
+                    if (vibrator?.hasVibrator() == true) {
+                        vibrator.vibrate(VibrationEffect.createWaveform(longArrayOf(0L, 320L, 140L, 480L), -1))
+                    }
+                    if (toneStarted) delay(700L)
+                } finally {
+                    tone?.release()
+                }
+            }
         }
     }
 
-    val context = LocalContext.current
     DisposableEffect(activeSession != null) {
         val window = (context as? Activity)?.window
         val keepAwake = activeSession != null
@@ -242,6 +276,12 @@ private fun FitLogAppContent(
 
     val selectedExercise = exercises.firstOrNull { it.id == selectedExerciseId }
     val workoutFullscreen = activeSession != null
+    val mainScreen = when {
+        showWorkoutComplete -> MainScreen.WORKOUT_COMPLETE
+        !settings && activeSession != null && flatCandidate -> MainScreen.WORKOUT_DOCK
+        settings -> MainScreen.SETTINGS
+        else -> MainScreen.HOME
+    }
     BackHandler(
         enabled = showAddExercise || settings || (activeSession != null && selectedExerciseId != null),
     ) {
@@ -254,7 +294,13 @@ private fun FitLogAppContent(
     Scaffold(
         modifier = Modifier.safeDrawingPadding(),
         topBar = {
-            if (!workoutFullscreen && settings) {
+            AnimatedVisibility(
+                visible = !workoutFullscreen && settings && !showWorkoutComplete,
+                enter = expandVertically(tween(260), expandFrom = Alignment.Top) +
+                    slideInVertically(tween(260)) { -it } + fadeIn(tween(220)),
+                exit = shrinkVertically(tween(180), shrinkTowards = Alignment.Top) +
+                    slideOutVertically(tween(180)) { -it } + fadeOut(tween(140)),
+            ) {
                 TopAppBar(
                     title = { Text("設定") },
                     navigationIcon = {
@@ -264,7 +310,11 @@ private fun FitLogAppContent(
             }
         },
         floatingActionButton = {
-            if (!workoutFullscreen && !settings && !flatCandidate) {
+            AnimatedVisibility(
+                visible = !workoutFullscreen && !settings && !flatCandidate && !showWorkoutComplete,
+                enter = fadeIn(tween(220)) + scaleIn(tween(220), initialScale = 0.82f),
+                exit = fadeOut(tween(150)) + scaleOut(tween(150), targetScale = 0.82f),
+            ) {
                 FloatingActionButton(onClick = { settings = true }, shape = CircleShape) {
                     Icon(Icons.Default.Settings, contentDescription = "設定")
                 }
@@ -276,66 +326,76 @@ private fun FitLogAppContent(
             Modifier.fillMaxSize().padding(padding).animateContentSize(spring(stiffness = 500f)),
             color = MaterialTheme.colorScheme.background,
         ) {
-            if (showWorkoutComplete) {
-                WorkoutCompleteScreen()
-            } else if (!settings && activeSession != null && flatCandidate) {
-                WorkoutDock(displayName = displayName)
-            } else if (settings) {
-                SettingsScreen(
-                    viewModel = viewModel,
-                    exercises = exercises,
-                    presets = presets,
-                    onAddExercise = { showAddExercise = true },
-                    flatModeEnabled = flatModeEnabled,
-                    displayName = displayName,
-                    onDisplayNameChange = viewModel::setDisplayName,
-                    onFlatModeEnabledChange = viewModel::setFlatModeEnabled,
-                )
-            } else {
-                RecordScreen(
-                    viewModel = viewModel,
-                    exercises = exercises,
-                    presets = presets,
-                    routineExerciseIds = routineExerciseIds,
-                    activeSessionId = activeSession?.id,
-                    completedSessions = sessions,
-                    presetExerciseOrder = presetExerciseOrder.split(',').mapNotNull(String::toLongOrNull),
-                    selectedExercise = selectedExercise,
-                    restEndsAtMillis = restEndsAtMillis,
-                    onStartPreset = { preset ->
-                        viewModel.startPreset(preset) { _, exerciseIds ->
-                            selectedExerciseId = exerciseIds.firstOrNull()
-                            presetExerciseOrder = exerciseIds.joinToString(",")
-                        }
-                    },
-                    onSelectExercise = { exercise ->
-                        viewModel.startExercise(exercise) {
-                            selectedExerciseId = exercise.id
-                        }
-                    },
-                    onToggleRoutineExercise = viewModel::toggleRoutineExercise,
-                    onSetCompleted = { restEndsAtMillis = System.currentTimeMillis() + REST_SECONDS * 1_000L },
-                    onAddRestSeconds = { restEndsAtMillis = maxOf(restEndsAtMillis, System.currentTimeMillis()) + 15_000L },
-                    onSkipRest = { restEndsAtMillis = 0L },
-                    onFinishSession = {
-                        activeSession?.id?.let { viewModel.finishSession(it) }
-                        selectedExerciseId = null
-                        restEndsAtMillis = 0L
-                        presetExerciseOrder = ""
-                    },
-                    onWorkoutComplete = {
-                        workoutCompletionSaved = false
-                        activeSession?.id?.let { sessionId ->
-                            viewModel.finishSession(sessionId, announce = false) { workoutCompletionSaved = true }
-                        } ?: run { workoutCompletionSaved = true }
-                        selectedExerciseId = null
-                        restEndsAtMillis = 0L
-                        presetExerciseOrder = ""
-                        showWorkoutComplete = true
-                    },
-                    onBack = { selectedExerciseId = null },
-                    onAddExercise = { showAddExercise = true },
-                )
+            AnimatedContent(
+                targetState = mainScreen,
+                transitionSpec = {
+                    if (targetState == MainScreen.WORKOUT_COMPLETE) {
+                        (fadeIn(tween(280)) + scaleIn(tween(320), initialScale = 0.94f)) togetherWith
+                            (fadeOut(tween(180)) + scaleOut(tween(220), targetScale = 1.03f))
+                    } else {
+                        (slideInHorizontally(tween(320)) { width -> width / 5 } + fadeIn(tween(240))) togetherWith
+                            (slideOutHorizontally(tween(280)) { width -> -width / 5 } + fadeOut(tween(180)))
+                    }
+                },
+                label = "main screen transition",
+            ) { screen ->
+                when (screen) {
+                    MainScreen.WORKOUT_COMPLETE -> WorkoutCompleteScreen()
+                    MainScreen.WORKOUT_DOCK -> WorkoutDock(displayName = displayName)
+                    MainScreen.SETTINGS -> SettingsScreen(
+                        viewModel = viewModel,
+                        exercises = exercises,
+                        presets = presets,
+                        onAddExercise = { showAddExercise = true },
+                        flatModeEnabled = flatModeEnabled,
+                        displayName = displayName,
+                        onDisplayNameChange = viewModel::setDisplayName,
+                        onFlatModeEnabledChange = viewModel::setFlatModeEnabled,
+                    )
+                    MainScreen.HOME -> RecordScreen(
+                        viewModel = viewModel,
+                        exercises = exercises,
+                        presets = presets,
+                        routineExerciseIds = routineExerciseIds,
+                        activeSessionId = activeSession?.id,
+                        completedSessions = sessions,
+                        presetExerciseOrder = presetExerciseOrder.split(',').mapNotNull(String::toLongOrNull),
+                        selectedExercise = selectedExercise,
+                        restEndsAtMillis = restEndsAtMillis,
+                        onStartPreset = { preset ->
+                            viewModel.startPreset(preset) { _, exerciseIds ->
+                                selectedExerciseId = exerciseIds.firstOrNull()
+                                presetExerciseOrder = exerciseIds.joinToString(",")
+                            }
+                        },
+                        onSelectExercise = { exercise ->
+                            viewModel.startExercise(exercise) {
+                                selectedExerciseId = exercise.id
+                            }
+                        },
+                        onToggleRoutineExercise = viewModel::toggleRoutineExercise,
+                        onSetCompleted = { restEndsAtMillis = System.currentTimeMillis() + REST_SECONDS * 1_000L },
+                        onSkipRest = { restEndsAtMillis = 0L },
+                        onFinishSession = {
+                            activeSession?.id?.let { viewModel.finishSession(it) }
+                            selectedExerciseId = null
+                            restEndsAtMillis = 0L
+                            presetExerciseOrder = ""
+                        },
+                        onWorkoutComplete = {
+                            workoutCompletionSaved = false
+                            activeSession?.id?.let { sessionId ->
+                                viewModel.finishSession(sessionId, announce = false) { workoutCompletionSaved = true }
+                            } ?: run { workoutCompletionSaved = true }
+                            selectedExerciseId = null
+                            restEndsAtMillis = 0L
+                            presetExerciseOrder = ""
+                            showWorkoutComplete = true
+                        },
+                        onBack = { selectedExerciseId = null },
+                        onAddExercise = { showAddExercise = true },
+                    )
+                }
             }
         }
     }
@@ -363,7 +423,6 @@ private fun RecordScreen(
     onSelectExercise: (ExerciseEntity) -> Unit,
     onToggleRoutineExercise: (Long) -> Unit,
     onSetCompleted: () -> Unit,
-    onAddRestSeconds: () -> Unit,
     onSkipRest: () -> Unit,
     onFinishSession: () -> Unit,
     onWorkoutComplete: () -> Unit,
@@ -400,7 +459,6 @@ private fun RecordScreen(
                 exerciseOrderIds = presetExerciseOrder,
                 restEndsAtMillis = restEndsAtMillis,
                 onSetCompleted = onSetCompleted,
-                onAddRestSeconds = onAddRestSeconds,
                 onSkipRest = onSkipRest,
                 onBack = onBack,
                 onNextExercise = { nextId -> exercises.firstOrNull { it.id == nextId }?.let(onSelectExercise) },
@@ -607,7 +665,6 @@ private fun ExerciseEditor(
     exerciseOrderIds: List<Long>,
     restEndsAtMillis: Long,
     onSetCompleted: () -> Unit,
-    onAddRestSeconds: () -> Unit,
     onSkipRest: () -> Unit,
     onBack: () -> Unit,
     onNextExercise: (Long) -> Unit,
@@ -654,6 +711,24 @@ private fun ExerciseEditor(
         }
         else -> null
     }
+    val cardScene = when {
+        restEndsAtMillis > 0L && currentSet != null -> EditorCardScene(
+            key = "rest:$restEndsAtMillis",
+            restEndsAtMillis = restEndsAtMillis,
+        )
+        displayedCard != null -> {
+            val (displayedExercise, displayedSet) = displayedCard
+            EditorCardScene(
+                key = "set:${displayedExercise.id}:${displayedSet.id}",
+                exercise = displayedExercise,
+                set = displayedSet,
+                totalSets = allSessionSets.count { it.exerciseId == displayedExercise.id }
+                    .coerceAtLeast(displayedSet.setOrder + 1),
+                enabled = currentSet?.id == displayedSet.id,
+            )
+        }
+        else -> null
+    }
 
     fun proceedFrom(set: WorkoutSetEntity) {
         val nextSet = exerciseSets.firstOrNull { it.setOrder > set.setOrder && !it.isCompleted }
@@ -690,46 +765,41 @@ private fun ExerciseEditor(
 
     Column(Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 4.dp)) {
         Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-            if (displayedCard != null) {
-                val (displayedExercise, displayedSet) = displayedCard
-                Box(Modifier.fillMaxSize().padding(horizontal = 4.dp), contentAlignment = Alignment.Center) {
-                    if (restEndsAtMillis > 0L && currentSet != null) {
-                        SetEditorCard(
-                            exercise = exercise,
-                            set = currentSet,
-                            totalSets = allSessionSets.count { it.exerciseId == exercise.id }
-                                .coerceAtLeast(currentSet.setOrder + 1),
-                            enabled = false,
-                            onUpdate = {},
-                            onAdvance = {},
-                            onSkip = {},
-                        )
-                        RestTimerCard(
-                            restEndsAtMillis = restEndsAtMillis,
-                            onAddRestSeconds = onAddRestSeconds,
-                            onSkipRest = onSkipRest,
-                        )
-                    } else if (currentSet != null && upcomingCard != null) {
-                        val (nextExercise, nextSet) = upcomingCard
-                        UpcomingSetPreviewCard(
-                            exercise = nextExercise,
-                            set = nextSet,
-                            totalSets = allSessionSets.count { it.exerciseId == nextExercise.id }
-                                .coerceAtLeast(nextSet.setOrder + 1),
-                        )
-                    }
-                    if (restEndsAtMillis <= 0L || currentSet == null) {
-                        SetEditorCard(
-                            exercise = displayedExercise,
-                            set = displayedSet,
-                            totalSets = allSessionSets.count { it.exerciseId == displayedExercise.id }
-                                .coerceAtLeast(displayedSet.setOrder + 1),
-                            enabled = currentSet != null,
-                            onUpdate = viewModel::updateSet,
-                            onAdvance = { if (currentSet?.id == displayedSet.id) advance(displayedSet) },
-                            onSkip = { if (currentSet?.id == displayedSet.id) skip(displayedSet) },
-                        )
-                    }
+            if (currentSet != null && upcomingCard != null) {
+                val (nextExercise, nextSet) = upcomingCard
+                UpcomingSetPreviewCard(
+                    exercise = nextExercise,
+                    set = nextSet,
+                    totalSets = allSessionSets.count { it.exerciseId == nextExercise.id }
+                        .coerceAtLeast(nextSet.setOrder + 1),
+                )
+            }
+            AnimatedContent(
+                targetState = cardScene,
+                contentKey = { it?.key },
+                transitionSpec = {
+                    (slideInHorizontally(tween(320)) { width -> width / 4 } + fadeIn(tween(240))) togetherWith
+                        fadeOut(tween(180))
+                },
+                modifier = Modifier.fillMaxSize().padding(horizontal = 4.dp),
+                contentAlignment = Alignment.Center,
+                label = "workout card transition",
+            ) { scene ->
+                when {
+                    scene == null -> Unit
+                    scene.restEndsAtMillis > 0L -> RestTimerCard(
+                        restEndsAtMillis = scene.restEndsAtMillis,
+                        onSkipRest = onSkipRest,
+                    )
+                    scene.exercise != null && scene.set != null -> SetEditorCard(
+                        exercise = scene.exercise,
+                        set = scene.set,
+                        totalSets = scene.totalSets,
+                        enabled = scene.enabled,
+                        onUpdate = viewModel::updateSet,
+                        onAdvance = { if (currentSet?.id == scene.set.id) advance(scene.set) },
+                        onSkip = { if (currentSet?.id == scene.set.id) skip(scene.set) },
+                    )
                 }
             }
         }
@@ -743,7 +813,7 @@ private fun UpcomingSetPreviewCard(
     totalSets: Int,
 ) {
     Card(
-        Modifier.fillMaxWidth().fillMaxHeight(0.78f).offset(y = 14.dp)
+        Modifier.fillMaxWidth().fillMaxHeight(WORKOUT_CARD_HEIGHT_FRACTION).offset(y = 14.dp)
             .graphicsLayer { scaleX = 0.94f; scaleY = 0.95f; rotationZ = 1.2f },
         colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF0EB)),
     ) {
@@ -837,14 +907,14 @@ private fun SetEditorCard(
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val horizontalSwipe = abs(swipeOffsetX) >= abs(swipeOffsetY)
         val cardWidthPx = with(density) { maxWidth.toPx() }
-        val cardHeightPx = with(density) { (maxHeight * 0.78f).toPx() }
+        val cardHeightPx = with(density) { (maxHeight * WORKOUT_CARD_HEIGHT_FRACTION).toPx() }
         val swipeEdgePx = if (horizontalSwipe) cardWidthPx else cardHeightPx
         val swipeDistance = if (horizontalSwipe) abs(swipeOffsetX) else abs(swipeOffsetY)
         val swipeProgress = if (swipeEdgePx > 0f) (swipeDistance / (swipeEdgePx * 0.45f)).coerceIn(0f, 1f) else 0f
         val advancing = if (horizontalSwipe) swipeOffsetX > 0f else swipeOffsetY < 0f
         val swipeColor = if (!advancing) Color(0xFF201A19) else Color(0xFFF0442E)
         Card(
-        Modifier.fillMaxWidth().fillMaxHeight(0.78f)
+        Modifier.align(Alignment.Center).fillMaxWidth().fillMaxHeight(WORKOUT_CARD_HEIGHT_FRACTION)
             .graphicsLayer {
                 translationX = swipeOffsetX
                 translationY = swipeOffsetY
@@ -902,8 +972,8 @@ private fun SetEditorCard(
                     onDragEnd = {
                         if (!enabled) {
                             animationScope.launch {
-                                Animatable(swipeOffsetX).animateTo(0f, spring()) { swipeOffsetX = value }
-                                Animatable(swipeOffsetY).animateTo(0f, spring()) { swipeOffsetY = value }
+                                Animatable(swipeOffsetX).animateTo(0f, spring(dampingRatio = 0.68f, stiffness = 250f)) { swipeOffsetX = value }
+                                Animatable(swipeOffsetY).animateTo(0f, spring(dampingRatio = 0.68f, stiffness = 250f)) { swipeOffsetY = value }
                             }
                         } else {
                             val horizontal = abs(dragX) >= abs(dragY)
@@ -911,22 +981,28 @@ private fun SetEditorCard(
                             val threshold = minOf(size.width, size.height) * 0.12f
                             if (distance >= threshold) {
                                 val advance = if (horizontal) dragX > 0f else dragY < 0f
-                                // Promote the real card behind this one immediately on release.
-                                // The drag itself already provides the swipe motion, so waiting for
-                                // an extra off-screen animation only made skip feel delayed.
-                                if (advance) onAdvance() else onSkip()
+                                animationScope.launch {
+                                    if (horizontal) {
+                                        val targetX = if (dragX > 0f) size.width * 1.25f else -size.width * 1.25f
+                                        Animatable(swipeOffsetX).animateTo(targetX, tween(220)) { swipeOffsetX = value }
+                                    } else {
+                                        val targetY = if (dragY > 0f) size.height * 1.25f else -size.height * 1.25f
+                                        Animatable(swipeOffsetY).animateTo(targetY, tween(220)) { swipeOffsetY = value }
+                                    }
+                                    if (advance) onAdvance() else onSkip()
+                                }
                             } else {
                                 animationScope.launch {
-                                    Animatable(swipeOffsetX).animateTo(0f, spring()) { swipeOffsetX = value }
-                                    Animatable(swipeOffsetY).animateTo(0f, spring()) { swipeOffsetY = value }
+                                    Animatable(swipeOffsetX).animateTo(0f, spring(dampingRatio = 0.62f, stiffness = 220f)) { swipeOffsetX = value }
+                                    Animatable(swipeOffsetY).animateTo(0f, spring(dampingRatio = 0.62f, stiffness = 220f)) { swipeOffsetY = value }
                                 }
                             }
                         }
                     },
                     onDragCancel = {
                         animationScope.launch {
-                            Animatable(swipeOffsetX).animateTo(0f, spring()) { swipeOffsetX = value }
-                            Animatable(swipeOffsetY).animateTo(0f, spring()) { swipeOffsetY = value }
+                            Animatable(swipeOffsetX).animateTo(0f, spring(dampingRatio = 0.62f, stiffness = 220f)) { swipeOffsetX = value }
+                            Animatable(swipeOffsetY).animateTo(0f, spring(dampingRatio = 0.62f, stiffness = 220f)) { swipeOffsetY = value }
                         }
                     },
                 )
@@ -1164,10 +1240,8 @@ private fun formatWeight(weightKg: Double): String =
 @Composable
 private fun RestTimerCard(
     restEndsAtMillis: Long,
-    onAddRestSeconds: () -> Unit,
     onSkipRest: () -> Unit,
 ) {
-    if (restEndsAtMillis <= 0L) return
     val remainingSeconds by produceState(
         initialValue = ((restEndsAtMillis - System.currentTimeMillis()).coerceAtLeast(0L) + 999L) / 1_000L,
         key1 = restEndsAtMillis,
@@ -1178,12 +1252,88 @@ private fun RestTimerCard(
         }
         value = 0L
     }
-    Card(
-        Modifier.fillMaxWidth().fillMaxHeight(0.78f),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF1976D2)),
-    ) {
-        Column(Modifier.fillMaxSize()) {
+    var dragOffsetX by androidx.compose.runtime.remember(restEndsAtMillis) {
+        androidx.compose.runtime.mutableFloatStateOf(0f)
+    }
+    var isDismissing by androidx.compose.runtime.remember(restEndsAtMillis) {
+        androidx.compose.runtime.mutableStateOf(false)
+    }
+    val animationScope = rememberCoroutineScope()
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val cardWidthPx = with(LocalDensity.current) { maxWidth.toPx() }
+        LaunchedEffect(restEndsAtMillis, remainingSeconds) {
+            if (remainingSeconds == 0L && !isDismissing) {
+                delay(3_000L)
+                if (!isDismissing) {
+                    isDismissing = true
+                    Animatable(dragOffsetX).animateTo(cardWidthPx * 1.25f, tween(360)) { dragOffsetX = value }
+                    onSkipRest()
+                }
+            }
+        }
+        Card(
+            Modifier.align(Alignment.Center).fillMaxWidth().fillMaxHeight(WORKOUT_CARD_HEIGHT_FRACTION)
+                .graphicsLayer {
+                    translationX = dragOffsetX
+                    rotationZ = if (size.width > 0f) (dragOffsetX / size.width * 8f).coerceIn(-8f, 8f) else 0f
+                }
+                .drawWithContent {
+                    drawContent()
+                    val progress = if (size.width > 0f) (dragOffsetX / (size.width * 0.45f)).coerceIn(0f, 1f) else 0f
+                    if (progress > 0f) {
+                        val tint = Color(0xFF0D47A1).copy(alpha = progress * 0.24f)
+                        val softTint = tint.copy(alpha = tint.alpha * 0.58f)
+                        val spread = 0.12f + progress * 0.62f
+                        drawRect(
+                            Brush.horizontalGradient(
+                                colorStops = arrayOf(
+                                    0f to tint,
+                                    spread * 0.55f to softTint,
+                                    spread to Color.Transparent,
+                                    1f to Color.Transparent,
+                                ),
+                                endX = size.width,
+                            ),
+                        )
+                    }
+                }
+                .pointerInput(restEndsAtMillis) {
+                    var dragX = 0f
+                    detectDragGestures(
+                        onDragStart = { dragX = 0f },
+                        onDrag = { change, dragAmount ->
+                            change.consume()
+                            dragX = (dragX + dragAmount.x).coerceAtLeast(0f)
+                            dragOffsetX = dragX
+                        },
+                        onDragEnd = {
+                            if (dragX >= size.width * 0.12f) {
+                                isDismissing = true
+                                animationScope.launch {
+                                    Animatable(dragOffsetX).animateTo(size.width * 1.25f, tween(220)) { dragOffsetX = value }
+                                    onSkipRest()
+                                }
+                            } else {
+                                animationScope.launch {
+                                    Animatable(dragOffsetX).animateTo(0f, spring(dampingRatio = 0.62f, stiffness = 220f)) {
+                                        dragOffsetX = value
+                                    }
+                                }
+                            }
+                        },
+                        onDragCancel = {
+                            animationScope.launch {
+                                Animatable(dragOffsetX).animateTo(0f, spring(dampingRatio = 0.62f, stiffness = 220f)) {
+                                    dragOffsetX = value
+                                }
+                            }
+                        },
+                    )
+                },
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF1976D2)),
+        ) {
+          Column(Modifier.fillMaxSize()) {
             Row(
                 Modifier.fillMaxWidth().background(Color(0xFF0D47A1)).padding(horizontal = 20.dp, vertical = 16.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -1207,28 +1357,14 @@ private fun RestTimerCard(
                     maxLines = 1,
                 )
             }
-            Row(
-                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                if (remainingSeconds > 0L) {
-                    OutlinedButton(
-                        onClick = onAddRestSeconds,
-                        modifier = Modifier.weight(1f).height(56.dp),
-                        colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
-                    ) { Text("+15秒", style = MaterialTheme.typography.titleMedium) }
-                }
-                Button(
-                    onClick = onSkipRest,
-                    modifier = Modifier.weight(1f).height(56.dp),
-                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(
-                        containerColor = Color.White,
-                        contentColor = Color(0xFF0D47A1),
-                    ),
-                ) {
-                    Text(if (remainingSeconds > 0L) "休憩終了" else "次へ", style = MaterialTheme.typography.titleMedium)
-                }
-            }
+            Text(
+                "右へスライドして休憩を終了",
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 18.dp),
+                style = MaterialTheme.typography.titleMedium,
+                color = Color.White.copy(alpha = 0.92f),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            )
+          }
         }
     }
 }
