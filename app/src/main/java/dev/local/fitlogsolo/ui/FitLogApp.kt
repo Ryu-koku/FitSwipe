@@ -439,11 +439,8 @@ private fun RecordScreen(
                     (slideInVertically(tween(320)) { height -> height / 4 } + fadeIn(tween(220))) togetherWith fadeOut(tween(160))
                 initialState != null && targetState == null ->
                     fadeIn(tween(160)) togetherWith (slideOutVertically(tween(280)) { height -> height / 4 } + fadeOut(tween(180)))
-                else -> {
-                    val direction = if ((targetState?.second ?: 0L) >= (initialState?.second ?: 0L)) 1 else -1
-                    (slideInHorizontally(tween(120)) { width -> direction * width / 5 } + fadeIn(tween(100))) togetherWith
-                        (slideOutHorizontally(tween(100)) { width -> -direction * width / 5 } + fadeOut(tween(80)))
-                }
+                else -> androidx.compose.animation.EnterTransition.None togetherWith
+                    androidx.compose.animation.ExitTransition.None
             }
         },
         label = "workout screen",
@@ -711,6 +708,11 @@ private fun ExerciseEditor(
         }
         else -> null
     }
+    val cardBehind = if (restEndsAtMillis > 0L && currentSet != null) {
+        exercise to currentSet
+    } else {
+        upcomingCard
+    }
     val cardScene = when {
         restEndsAtMillis > 0L && currentSet != null -> EditorCardScene(
             key = "rest:$restEndsAtMillis",
@@ -765,8 +767,8 @@ private fun ExerciseEditor(
 
     Column(Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 4.dp)) {
         Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-            if (currentSet != null && upcomingCard != null) {
-                val (nextExercise, nextSet) = upcomingCard
+            if (cardBehind != null) {
+                val (nextExercise, nextSet) = cardBehind
                 UpcomingSetPreviewCard(
                     exercise = nextExercise,
                     set = nextSet,
@@ -778,8 +780,15 @@ private fun ExerciseEditor(
                 targetState = cardScene,
                 contentKey = { it?.key },
                 transitionSpec = {
-                    (slideInHorizontally(tween(320)) { width -> width / 4 } + fadeIn(tween(240))) togetherWith
-                        fadeOut(tween(180))
+                    val promotesVisibleBackCard = targetState?.key?.startsWith("set:") == true &&
+                        (initialState?.key?.startsWith("set:") == true || initialState?.key?.startsWith("rest:") == true)
+                    if (promotesVisibleBackCard) {
+                        androidx.compose.animation.EnterTransition.None togetherWith
+                            androidx.compose.animation.ExitTransition.None
+                    } else {
+                        (slideInHorizontally(tween(320)) { width -> width / 4 } + fadeIn(tween(240))) togetherWith
+                            fadeOut(tween(180))
+                    }
                 },
                 modifier = Modifier.fillMaxSize().padding(horizontal = 4.dp),
                 contentAlignment = Alignment.Center,
