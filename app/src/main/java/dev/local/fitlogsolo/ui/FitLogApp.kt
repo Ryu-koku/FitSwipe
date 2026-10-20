@@ -648,20 +648,6 @@ private fun ExerciseEditor(
                             .coerceAtLeast(displayedSet.setOrder + 1),
                         enabled = currentSet != null,
                         onUpdate = viewModel::updateSet,
-                        onAdjustWeight = { step ->
-                            currentSet?.let { activeSet ->
-                                val adjusted = when (displayedExercise.mode) {
-                                    ExerciseMode.NORMAL -> activeSet.copy(
-                                        normalWeightKg = adjustWeight(activeSet.normalWeightKg, step),
-                                    )
-                                    ExerciseMode.BILATERAL -> activeSet.copy(
-                                        leftWeightKg = adjustWeight(activeSet.leftWeightKg, step),
-                                        rightWeightKg = adjustWeight(activeSet.rightWeightKg, step),
-                                    )
-                                }
-                                viewModel.updateSet(adjusted)
-                            }
-                        },
                         onAdvance = { currentSet?.let(::advance) },
                         onSkip = { currentSet?.let(::skip) },
                     )
@@ -678,11 +664,9 @@ private fun SetEditorCard(
     totalSets: Int,
     enabled: Boolean,
     onUpdate: (WorkoutSetEntity) -> Unit,
-    onAdjustWeight: (Int) -> Unit,
     onAdvance: () -> Unit,
     onSkip: () -> Unit,
 ) {
-    val view = LocalView.current
     var swipeOffsetX by androidx.compose.runtime.remember(set.id) { androidx.compose.runtime.mutableFloatStateOf(0f) }
     var swipeOffsetY by androidx.compose.runtime.remember(set.id) { androidx.compose.runtime.mutableFloatStateOf(0f) }
     LaunchedEffect(enabled, set.id) {
@@ -692,73 +676,46 @@ private fun SetEditorCard(
         }
     }
     val animationScope = rememberCoroutineScope()
-    val swipeHintColor = MaterialTheme.colorScheme.primary
     Card(
         Modifier.fillMaxSize()
             .graphicsLayer {
                 translationX = swipeOffsetX
-                rotationZ = if (size.width > 0f) (swipeOffsetX / size.width * 8f).coerceIn(-8f, 8f) else 0f
+                translationY = swipeOffsetY
+                rotationZ = if (size.width > 0f) (swipeOffsetX / size.width * 12f).coerceIn(-12f, 12f) else 0f
             }
             .drawWithContent {
                 drawContent()
-                val horizontalProgress = (abs(swipeOffsetX) / (size.width * 0.25f)).coerceIn(0f, 1f)
-                if (horizontalProgress > 0f && size.width > 0f) {
+                val horizontal = abs(swipeOffsetX) >= abs(swipeOffsetY)
+                val distance = if (horizontal) abs(swipeOffsetX) else abs(swipeOffsetY)
+                val edgeSize = if (horizontal) size.width else size.height
+                val progress = if (edgeSize > 0f) (distance / (edgeSize * 0.12f)).coerceIn(0f, 1f) else 0f
+                if (progress > 0f) {
                     // Keep the swipe cue lighter than #F0442E, even at the action threshold.
-                    val tint = Color(0xFFF0442E).copy(alpha = horizontalProgress * 0.22f)
+                    val tint = Color(0xFFF0442E).copy(alpha = progress * 0.22f)
                     val clear = Color.Transparent
-                    val brush = if (swipeOffsetX > 0f) {
-                        Brush.horizontalGradient(listOf(clear, clear, tint), endX = size.width)
-                    } else {
-                        Brush.horizontalGradient(listOf(tint, clear, clear), endX = size.width)
+                    val brush = when {
+                        horizontal && swipeOffsetX > 0f -> Brush.horizontalGradient(listOf(clear, clear, tint), endX = size.width)
+                        horizontal -> Brush.horizontalGradient(listOf(tint, clear, clear), endX = size.width)
+                        swipeOffsetY < 0f -> Brush.verticalGradient(listOf(tint, clear, clear), endY = size.height)
+                        else -> Brush.verticalGradient(listOf(clear, clear, tint), endY = size.height)
                     }
                     drawRect(brush = brush)
-                }
-                val drag = swipeOffsetY
-                val progress = (abs(drag) / (size.height * 0.14f)).coerceIn(0f, 1f)
-                if (progress > 0.12f) {
-                    val centerX = size.width / 2f
-                    val edge = 30.dp.toPx()
-                    val stem = 48.dp.toPx()
-                    val head = 15.dp.toPx()
-                    val stroke = 5.dp.toPx()
-                    val color = (if (drag < 0f) Color.White else swipeHintColor).copy(alpha = progress * 0.9f)
-                    if (drag < 0f) {
-                        val tipY = edge
-                        val stemY = tipY + stem
-                        drawLine(color, androidx.compose.ui.geometry.Offset(centerX, stemY), androidx.compose.ui.geometry.Offset(centerX, tipY), stroke)
-                        drawLine(color, androidx.compose.ui.geometry.Offset(centerX, tipY), androidx.compose.ui.geometry.Offset(centerX - head, tipY + head), stroke, cap = StrokeCap.Round)
-                        drawLine(color, androidx.compose.ui.geometry.Offset(centerX, tipY), androidx.compose.ui.geometry.Offset(centerX + head, tipY + head), stroke, cap = StrokeCap.Round)
-                    } else {
-                        val tipY = size.height - edge
-                        val stemY = tipY - stem
-                        drawLine(color, androidx.compose.ui.geometry.Offset(centerX, stemY), androidx.compose.ui.geometry.Offset(centerX, tipY), stroke)
-                        drawLine(color, androidx.compose.ui.geometry.Offset(centerX, tipY), androidx.compose.ui.geometry.Offset(centerX - head, tipY - head), stroke, cap = StrokeCap.Round)
-                        drawLine(color, androidx.compose.ui.geometry.Offset(centerX, tipY), androidx.compose.ui.geometry.Offset(centerX + head, tipY - head), stroke, cap = StrokeCap.Round)
-                    }
                 }
             }
             .pointerInput(set.id, enabled) {
                 var dragX = 0f
                 var dragY = 0f
-                var horizontalGesture: Boolean? = null
                 detectDragGestures(
                     onDragStart = {
                         dragX = 0f
                         dragY = 0f
-                        horizontalGesture = null
                     },
                     onDrag = { change, dragAmount ->
                         change.consume()
                         dragX += dragAmount.x
                         dragY += dragAmount.y
-                        if (horizontalGesture == null) horizontalGesture = abs(dragX) >= abs(dragY)
-                        if (horizontalGesture == true) {
-                            swipeOffsetX = (swipeOffsetX + dragAmount.x).coerceIn(-size.width.toFloat(), size.width.toFloat())
-                            swipeOffsetY = 0f
-                        } else {
-                            swipeOffsetX = 0f
-                            swipeOffsetY = dragY.coerceIn(-size.height * 0.3f, size.height * 0.3f)
-                        }
+                        swipeOffsetX = dragX.coerceIn(-size.width * 0.35f, size.width * 0.35f)
+                        swipeOffsetY = dragY.coerceIn(-size.height * 0.35f, size.height * 0.35f)
                     },
                     onDragEnd = {
                         if (!enabled) {
@@ -835,27 +792,11 @@ private fun SetEditorCard(
                 }
             }
             if (exercise.mode == ExerciseMode.NORMAL) {
-                Column(
-                    Modifier.weight(1f).fillMaxWidth().padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                InvisibleTapZone(
-                    description = "重量を2.5キログラム増やす",
-                    enabled = enabled,
-                    onClick = { onUpdate(set.copy(normalWeightKg = (set.normalWeightKg ?: 0.0) + 2.5)) },
-                    modifier = Modifier.fillMaxWidth().weight(0.8f),
-                )
-                Row(Modifier.fillMaxWidth().weight(3.4f), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    InvisibleTapZone(
-                        description = "回数を1回減らす",
-                        enabled = enabled && (set.normalReps ?: 0) > 0,
-                        onClick = { onUpdate(set.copy(normalReps = ((set.normalReps ?: 0) - 1).coerceAtLeast(0))) },
-                        modifier = Modifier.weight(0.75f).fillMaxHeight(),
-                    )
+                Box(Modifier.weight(1f).fillMaxWidth().padding(12.dp)) {
                     Surface(
-                        Modifier.weight(2.5f).fillMaxHeight(),
+                        Modifier.align(Alignment.Center).fillMaxWidth(0.96f).fillMaxHeight(0.64f),
                         shape = MaterialTheme.shapes.extraLarge,
-                        color = MaterialTheme.colorScheme.surface,
+                        color = MaterialTheme.colorScheme.surfaceVariant,
                         tonalElevation = 0.dp,
                     ) {
                         Row(
@@ -866,7 +807,7 @@ private fun SetEditorCard(
                             Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text(
                                     set.normalWeightKg?.let(::formatWeight) ?: "—",
-                                    style = MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.ExtraBold),
+                                    style = MaterialTheme.typography.displayLarge.copy(fontWeight = FontWeight.ExtraBold),
                                     maxLines = 1,
                                     softWrap = false,
                                 )
@@ -876,7 +817,7 @@ private fun SetEditorCard(
                             Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text(
                                     set.normalReps?.toString() ?: "—",
-                                    style = MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.ExtraBold),
+                                    style = MaterialTheme.typography.displayLarge.copy(fontWeight = FontWeight.ExtraBold),
                                     maxLines = 1,
                                     softWrap = false,
                                 )
@@ -884,19 +825,36 @@ private fun SetEditorCard(
                             }
                         }
                     }
-                    InvisibleTapZone(
-                        description = "回数を1回増やす",
-                        enabled = enabled,
-                        onClick = { onUpdate(set.copy(normalReps = (set.normalReps ?: 0) + 1)) },
-                        modifier = Modifier.weight(0.75f).fillMaxHeight(),
-                    )
-                }
-                InvisibleTapZone(
-                    description = "重量を2.5キログラム減らす",
-                    enabled = enabled && (set.normalWeightKg ?: 0.0) >= 2.5,
-                    onClick = { onUpdate(set.copy(normalWeightKg = ((set.normalWeightKg ?: 0.0) - 2.5).coerceAtLeast(0.0))) },
-                    modifier = Modifier.fillMaxWidth().weight(0.8f),
-                )
+                    Column(Modifier.fillMaxSize()) {
+                        Row(Modifier.weight(1f).fillMaxWidth()) {
+                            InvisibleTapZone(
+                                description = "重量を2.5キログラム増やす",
+                                enabled = enabled,
+                                onClick = { onUpdate(set.copy(normalWeightKg = (set.normalWeightKg ?: 0.0) + 2.5)) },
+                                modifier = Modifier.weight(1f).fillMaxHeight(),
+                            )
+                            InvisibleTapZone(
+                                description = "回数を1回増やす",
+                                enabled = enabled,
+                                onClick = { onUpdate(set.copy(normalReps = (set.normalReps ?: 0) + 1)) },
+                                modifier = Modifier.weight(1f).fillMaxHeight(),
+                            )
+                        }
+                        Row(Modifier.weight(1f).fillMaxWidth()) {
+                            InvisibleTapZone(
+                                description = "重量を2.5キログラム減らす",
+                                enabled = enabled && (set.normalWeightKg ?: 0.0) >= 2.5,
+                                onClick = { onUpdate(set.copy(normalWeightKg = ((set.normalWeightKg ?: 0.0) - 2.5).coerceAtLeast(0.0))) },
+                                modifier = Modifier.weight(1f).fillMaxHeight(),
+                            )
+                            InvisibleTapZone(
+                                description = "回数を1回減らす",
+                                enabled = enabled && (set.normalReps ?: 0) > 0,
+                                onClick = { onUpdate(set.copy(normalReps = ((set.normalReps ?: 0) - 1).coerceAtLeast(0))) },
+                                modifier = Modifier.weight(1f).fillMaxHeight(),
+                            )
+                        }
+                    }
                 }
             } else {
                 Column(Modifier.weight(1f).fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -912,12 +870,6 @@ private fun SetEditorCard(
         }
     }
 }
-}
-
-private fun adjustWeight(weightKg: Double?, step: Int): Double? = when {
-    step > 0 -> (weightKg ?: 0.0) + 2.5
-    weightKg == null -> null
-    else -> (weightKg - 2.5).coerceAtLeast(0.0)
 }
 
 @Composable
@@ -950,48 +902,57 @@ private fun BilateralTapControls(
     modifier: Modifier = Modifier,
     onChange: (Double, Int) -> Unit,
 ) {
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(side, style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
-        InvisibleTapZone(
-            description = "${side}側の重量を2.5キログラム増やす",
-            enabled = enabled,
-            onClick = { onChange((weightKg ?: 0.0) + 2.5, reps ?: 0) },
-            modifier = Modifier.fillMaxWidth().weight(0.8f),
-        )
-        Row(Modifier.fillMaxWidth().weight(3f), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            InvisibleTapZone(
-                description = "${side}側の回数を1回減らす",
-                enabled = enabled && (reps ?: 0) > 0,
-                onClick = { onChange(weightKg ?: 0.0, ((reps ?: 0) - 1).coerceAtLeast(0)) },
-                modifier = Modifier.weight(0.7f).fillMaxHeight(),
-            )
-        Surface(
-            Modifier.weight(2f).fillMaxHeight(),
-            shape = MaterialTheme.shapes.extraLarge,
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 0.dp,
-        ) {
-            Column(Modifier.fillMaxSize().padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-                Text(weightKg?.let(::formatWeight) ?: "—", style = MaterialTheme.typography.headlineMedium, maxLines = 1)
-                Text("kg", style = MaterialTheme.typography.labelMedium)
-                Spacer(Modifier.height(8.dp))
-                Text(reps?.toString() ?: "—", style = MaterialTheme.typography.headlineMedium, maxLines = 1)
-                Text("回", style = MaterialTheme.typography.labelMedium)
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+            Surface(
+                Modifier.align(Alignment.Center).fillMaxWidth(0.96f).fillMaxHeight(0.64f),
+                shape = MaterialTheme.shapes.extraLarge,
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                tonalElevation = 0.dp,
+            ) {
+                Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(weightKg?.let(::formatWeight) ?: "—", style = MaterialTheme.typography.displayMedium, maxLines = 1, softWrap = false)
+                        Text("kg", style = MaterialTheme.typography.labelLarge)
+                    }
+                    Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(reps?.toString() ?: "—", style = MaterialTheme.typography.displayMedium, maxLines = 1, softWrap = false)
+                        Text("回", style = MaterialTheme.typography.labelLarge)
+                    }
+                }
+            }
+            Column(Modifier.fillMaxSize()) {
+                Row(Modifier.weight(1f).fillMaxWidth()) {
+                    InvisibleTapZone(
+                        description = "${side}側の重量を2.5キログラム増やす",
+                        enabled = enabled,
+                        onClick = { onChange((weightKg ?: 0.0) + 2.5, reps ?: 0) },
+                        modifier = Modifier.weight(1f).fillMaxHeight(),
+                    )
+                    InvisibleTapZone(
+                        description = "${side}側の回数を1回増やす",
+                        enabled = enabled,
+                        onClick = { onChange(weightKg ?: 0.0, (reps ?: 0) + 1) },
+                        modifier = Modifier.weight(1f).fillMaxHeight(),
+                    )
+                }
+                Row(Modifier.weight(1f).fillMaxWidth()) {
+                    InvisibleTapZone(
+                        description = "${side}側の重量を2.5キログラム減らす",
+                        enabled = enabled && (weightKg ?: 0.0) >= 2.5,
+                        onClick = { onChange(((weightKg ?: 0.0) - 2.5).coerceAtLeast(0.0), reps ?: 0) },
+                        modifier = Modifier.weight(1f).fillMaxHeight(),
+                    )
+                    InvisibleTapZone(
+                        description = "${side}側の回数を1回減らす",
+                        enabled = enabled && (reps ?: 0) > 0,
+                        onClick = { onChange(weightKg ?: 0.0, ((reps ?: 0) - 1).coerceAtLeast(0)) },
+                        modifier = Modifier.weight(1f).fillMaxHeight(),
+                    )
+                }
             }
         }
-            InvisibleTapZone(
-                description = "${side}側の回数を1回増やす",
-                enabled = enabled,
-                onClick = { onChange(weightKg ?: 0.0, (reps ?: 0) + 1) },
-                modifier = Modifier.weight(0.7f).fillMaxHeight(),
-            )
-        }
-        InvisibleTapZone(
-            description = "${side}側の重量を2.5キログラム減らす",
-            enabled = enabled && (weightKg ?: 0.0) >= 2.5,
-            onClick = { onChange(((weightKg ?: 0.0) - 2.5).coerceAtLeast(0.0), reps ?: 0) },
-            modifier = Modifier.fillMaxWidth().weight(0.8f),
-        )
     }
 }
 
