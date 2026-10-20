@@ -161,31 +161,4 @@ class FitLogRepository(private val database: AppDatabase) {
         }
     }
 
-    suspend fun reopenSession(sessionId: Long): Long {
-        sessions.observeInProgress().first()?.let { current ->
-            if (current.id != sessionId) error("別の下書きセッションが記録中です")
-        }
-        sessions.findById(sessionId)?.let {
-            sessions.update(it.copy(status = SessionStatus.IN_PROGRESS, endedAt = null))
-        }
-        return sessionId
-    }
-
-    suspend fun deleteSession(sessionId: Long) {
-        sessions.findById(sessionId)?.let { session -> sessions.delete(session) }
-    }
-
-    suspend fun allSetsForExercise(exerciseId: Long): List<WorkoutSetEntity> = sets.findCompletedForExercise(exerciseId)
-
-    suspend fun snapshot(): ExportSnapshot = ExportSnapshot(
-        exercises = exercises.observeAll().first(),
-        sessions = sessions.observeCompleted().first(),
-        sets = sessions.observeCompleted().first().flatMap { sets.findForSession(it.id) },
-    )
 }
-
-data class ExportSnapshot(
-    val exercises: List<ExerciseEntity>,
-    val sessions: List<WorkoutSessionEntity>,
-    val sets: List<WorkoutSetEntity>,
-)

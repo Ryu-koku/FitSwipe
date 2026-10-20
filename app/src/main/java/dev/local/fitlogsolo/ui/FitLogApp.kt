@@ -15,9 +15,10 @@ import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.Canvas
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -29,6 +30,7 @@ import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -52,14 +54,13 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FitnessCenter
-import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -107,12 +108,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.input.KeyboardType
@@ -127,12 +126,9 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import dev.local.fitlogsolo.FitLogViewModel
 import dev.local.fitlogsolo.data.PresetExerciseConfig
 import dev.local.fitlogsolo.data.WorkoutPreset
-import dev.local.fitlogsolo.data.BilateralWorkoutPoints
 import dev.local.fitlogsolo.data.ExerciseEntity
 import dev.local.fitlogsolo.data.ExerciseMode
-import dev.local.fitlogsolo.data.GraphAggregator
 import dev.local.fitlogsolo.data.SessionStatus
-import dev.local.fitlogsolo.data.WorkoutPoint
 import dev.local.fitlogsolo.data.WorkoutSetEntity
 import java.time.ZoneId
 import java.time.LocalDate
@@ -145,11 +141,10 @@ import kotlin.math.abs
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-private enum class Tab { RECORD, HISTORY, CHARTS }
 private const val REST_SECONDS = 90L
 
 @Composable
-private fun Modifier.pressMotionClickable(onClick: () -> Unit): Modifier {
+private fun Modifier.pressMotionClickable(enabled: Boolean = true, onClick: () -> Unit): Modifier {
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
@@ -158,7 +153,7 @@ private fun Modifier.pressMotionClickable(onClick: () -> Unit): Modifier {
         label = "press motion",
     )
     return graphicsLayer { scaleX = scale; scaleY = scale }
-        .clickable(interactionSource = interactionSource, onClick = onClick)
+        .clickable(enabled = enabled, interactionSource = interactionSource, onClick = onClick)
 }
 
 private val FitLogRedColors = lightColorScheme(
@@ -171,8 +166,8 @@ private val FitLogRedColors = lightColorScheme(
     secondaryContainer = Color(0xFFFFDAD5),
     onSecondaryContainer = Color(0xFF410001),
     tertiary = Color(0xFF775652),
-    background = Color(0xFFFFF8F7),
-    surface = Color(0xFFFFF8F7),
+    background = Color(0xFFF4E9E7),
+    surface = Color.White,
     surfaceVariant = Color(0xFFF4DDDA),
     onSurface = Color(0xFF201A19),
     onSurfaceVariant = Color(0xFF534341),
@@ -182,10 +177,9 @@ private val FitLogRedColors = lightColorScheme(
 @Composable
 fun FitLogApp(
     viewModel: FitLogViewModel,
-    onExport: () -> Unit,
 ) {
     MaterialTheme(colorScheme = FitLogRedColors) {
-        FitLogAppContent(viewModel, onExport)
+        FitLogAppContent(viewModel)
     }
 }
 
@@ -193,13 +187,12 @@ fun FitLogApp(
 @Composable
 private fun FitLogAppContent(
     viewModel: FitLogViewModel,
-    onExport: () -> Unit,
 ) {
-    var tab by rememberSaveable { mutableStateOf(Tab.RECORD) }
     var settings by rememberSaveable { mutableStateOf(false) }
     var selectedExerciseId by rememberSaveable { mutableStateOf<Long?>(null) }
-    var selectedHistoryId by rememberSaveable { mutableStateOf<Long?>(null) }
     var showAddExercise by rememberSaveable { mutableStateOf(false) }
+    var showWorkoutComplete by rememberSaveable { mutableStateOf(false) }
+    var workoutCompletionSaved by rememberSaveable { mutableStateOf(false) }
     var restEndsAtMillis by rememberSaveable { mutableLongStateOf(0L) }
     var presetExerciseOrder by rememberSaveable { mutableStateOf("") }
     val exercises by viewModel.exercises.collectAsStateWithLifecycle()
@@ -240,47 +233,52 @@ private fun FitLogAppContent(
         }
     }
 
+    LaunchedEffect(showWorkoutComplete, workoutCompletionSaved) {
+        if (showWorkoutComplete && workoutCompletionSaved) {
+            delay(2_200L)
+            (context as? Activity)?.finish()
+        }
+    }
+
     val selectedExercise = exercises.firstOrNull { it.id == selectedExerciseId }
     val workoutFullscreen = activeSession != null
     BackHandler(
-        enabled = showAddExercise || settings || tab != Tab.RECORD || (activeSession != null && selectedExerciseId != null),
+        enabled = showAddExercise || settings || (activeSession != null && selectedExerciseId != null),
     ) {
         when {
             showAddExercise -> showAddExercise = false
-            settings -> { settings = false; tab = Tab.RECORD }
-            tab == Tab.HISTORY && selectedHistoryId != null -> selectedHistoryId = null
-            tab != Tab.RECORD -> { settings = true; tab = Tab.RECORD }
+            settings -> settings = false
             activeSession != null && selectedExerciseId != null -> selectedExerciseId = null
         }
     }
     Scaffold(
         modifier = Modifier.safeDrawingPadding(),
         topBar = {
-            if (!workoutFullscreen && (settings || tab != Tab.RECORD)) {
+            if (!workoutFullscreen && settings) {
                 TopAppBar(
-                    title = { Text(when { settings -> "設定"; tab == Tab.HISTORY -> "履歴"; else -> "グラフ" }) },
+                    title = { Text("設定") },
                     navigationIcon = {
-                        if (settings || tab != Tab.RECORD) {
-                            IconButton(onClick = {
-                                if (settings) settings = false else settings = true
-                                tab = Tab.RECORD
-                            }) { Icon(Icons.Default.ArrowBack, "戻る") }
-                        }
+                        IconButton(onClick = { settings = false }) { Icon(Icons.Default.ArrowBack, "戻る") }
                     },
                 )
             }
         },
         floatingActionButton = {
-            if (!workoutFullscreen && !settings && tab == Tab.RECORD && !flatCandidate) {
-                FloatingActionButton(onClick = { settings = true }) {
+            if (!workoutFullscreen && !settings && !flatCandidate) {
+                FloatingActionButton(onClick = { settings = true }, shape = CircleShape) {
                     Icon(Icons.Default.Settings, contentDescription = "設定")
                 }
             }
         },
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
-        Surface(Modifier.fillMaxSize().padding(padding).animateContentSize(spring(stiffness = 500f))) {
-            if (!settings && activeSession != null && flatCandidate) {
+        Surface(
+            Modifier.fillMaxSize().padding(padding).animateContentSize(spring(stiffness = 500f)),
+            color = MaterialTheme.colorScheme.background,
+        ) {
+            if (showWorkoutComplete) {
+                WorkoutCompleteScreen()
+            } else if (!settings && activeSession != null && flatCandidate) {
                 WorkoutDock(displayName = displayName)
             } else if (settings) {
                 SettingsScreen(
@@ -288,63 +286,56 @@ private fun FitLogAppContent(
                     exercises = exercises,
                     presets = presets,
                     onAddExercise = { showAddExercise = true },
-                    onExport = onExport,
                     flatModeEnabled = flatModeEnabled,
                     displayName = displayName,
                     onDisplayNameChange = viewModel::setDisplayName,
                     onFlatModeEnabledChange = viewModel::setFlatModeEnabled,
-                    onShowHistory = { settings = false; tab = Tab.HISTORY },
-                    onShowCharts = { settings = false; tab = Tab.CHARTS },
                 )
             } else {
-                when (tab) {
-                    Tab.RECORD -> RecordScreen(
-                        viewModel = viewModel,
-                        exercises = exercises,
-                        presets = presets,
-                        routineExerciseIds = routineExerciseIds,
-                        activeSessionId = activeSession?.id,
-                        completedSessions = sessions,
-                        presetExerciseOrder = presetExerciseOrder.split(',').mapNotNull(String::toLongOrNull),
-                        selectedExercise = selectedExercise,
-                        restEndsAtMillis = restEndsAtMillis,
-                        onStartPreset = { preset ->
-                            viewModel.startPreset(preset) { _, exerciseIds ->
-                                selectedExerciseId = exerciseIds.firstOrNull()
-                                presetExerciseOrder = exerciseIds.joinToString(",")
-                            }
-                        },
-                        onSelectExercise = { exercise ->
-                            viewModel.startExercise(exercise) {
-                                selectedExerciseId = exercise.id
-                            }
-                        },
-                        onToggleRoutineExercise = viewModel::toggleRoutineExercise,
-                        onSetCompleted = { restEndsAtMillis = System.currentTimeMillis() + REST_SECONDS * 1_000L },
-                        onAddRestSeconds = { restEndsAtMillis = maxOf(restEndsAtMillis, System.currentTimeMillis()) + 15_000L },
-                        onSkipRest = { restEndsAtMillis = 0L },
-                        onFinishSession = {
-                            activeSession?.id?.let(viewModel::finishSession)
-                            selectedExerciseId = null
-                            restEndsAtMillis = 0L
-                            presetExerciseOrder = ""
-                        },
-                        onBack = { selectedExerciseId = null },
-                        onAddExercise = { showAddExercise = true },
-                    )
-                    Tab.HISTORY -> HistoryScreen(
-                        viewModel = viewModel,
-                        sessions = sessions,
-                        exercises = exercises,
-                        selectedSessionId = selectedHistoryId,
-                        onSelect = { selectedHistoryId = it },
-                        onClose = { selectedHistoryId = null },
-                        onEdit = { id ->
-                            viewModel.reopenSession(id) { tab = Tab.RECORD; selectedHistoryId = null }
-                        },
-                    )
-                    Tab.CHARTS -> WorkoutChartScreen(viewModel, exercises)
-                }
+                RecordScreen(
+                    viewModel = viewModel,
+                    exercises = exercises,
+                    presets = presets,
+                    routineExerciseIds = routineExerciseIds,
+                    activeSessionId = activeSession?.id,
+                    completedSessions = sessions,
+                    presetExerciseOrder = presetExerciseOrder.split(',').mapNotNull(String::toLongOrNull),
+                    selectedExercise = selectedExercise,
+                    restEndsAtMillis = restEndsAtMillis,
+                    onStartPreset = { preset ->
+                        viewModel.startPreset(preset) { _, exerciseIds ->
+                            selectedExerciseId = exerciseIds.firstOrNull()
+                            presetExerciseOrder = exerciseIds.joinToString(",")
+                        }
+                    },
+                    onSelectExercise = { exercise ->
+                        viewModel.startExercise(exercise) {
+                            selectedExerciseId = exercise.id
+                        }
+                    },
+                    onToggleRoutineExercise = viewModel::toggleRoutineExercise,
+                    onSetCompleted = { restEndsAtMillis = System.currentTimeMillis() + REST_SECONDS * 1_000L },
+                    onAddRestSeconds = { restEndsAtMillis = maxOf(restEndsAtMillis, System.currentTimeMillis()) + 15_000L },
+                    onSkipRest = { restEndsAtMillis = 0L },
+                    onFinishSession = {
+                        activeSession?.id?.let { viewModel.finishSession(it) }
+                        selectedExerciseId = null
+                        restEndsAtMillis = 0L
+                        presetExerciseOrder = ""
+                    },
+                    onWorkoutComplete = {
+                        workoutCompletionSaved = false
+                        activeSession?.id?.let { sessionId ->
+                            viewModel.finishSession(sessionId, announce = false) { workoutCompletionSaved = true }
+                        } ?: run { workoutCompletionSaved = true }
+                        selectedExerciseId = null
+                        restEndsAtMillis = 0L
+                        presetExerciseOrder = ""
+                        showWorkoutComplete = true
+                    },
+                    onBack = { selectedExerciseId = null },
+                    onAddExercise = { showAddExercise = true },
+                )
             }
         }
     }
@@ -375,34 +366,56 @@ private fun RecordScreen(
     onAddRestSeconds: () -> Unit,
     onSkipRest: () -> Unit,
     onFinishSession: () -> Unit,
+    onWorkoutComplete: () -> Unit,
     onBack: () -> Unit,
     onAddExercise: () -> Unit,
 ) {
     val sessionSets by (activeSessionId?.let(viewModel::sessionSets) ?: kotlinx.coroutines.flow.flowOf(emptyList()))
         .collectAsStateWithLifecycle(emptyList())
-    if (selectedExercise != null && activeSessionId != null) {
-        ExerciseEditor(
-            viewModel = viewModel,
-            sessionId = activeSessionId,
-            exercise = selectedExercise,
-            allSessionSets = sessionSets,
-            exerciseOrderIds = presetExerciseOrder,
-            restEndsAtMillis = restEndsAtMillis,
-            onSetCompleted = onSetCompleted,
-            onAddRestSeconds = onAddRestSeconds,
-            onSkipRest = onSkipRest,
-            onBack = onBack,
-            onNextExercise = { nextId -> exercises.firstOrNull { it.id == nextId }?.let(onSelectExercise) },
-            onFinishSession = onFinishSession,
-        )
-        return
-    }
-    LazyColumn(
-        Modifier.fillMaxSize().padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
+    AnimatedContent(
+        targetState = selectedExercise?.let { exercise -> activeSessionId?.let { sessionId -> sessionId to exercise.id } },
+        transitionSpec = {
+            when {
+                initialState == null && targetState != null ->
+                    (slideInVertically(tween(320)) { height -> height / 4 } + fadeIn(tween(220))) togetherWith fadeOut(tween(160))
+                initialState != null && targetState == null ->
+                    fadeIn(tween(160)) togetherWith (slideOutVertically(tween(280)) { height -> height / 4 } + fadeOut(tween(180)))
+                else -> {
+                    val direction = if ((targetState?.second ?: 0L) >= (initialState?.second ?: 0L)) 1 else -1
+                    (slideInHorizontally(tween(120)) { width -> direction * width / 5 } + fadeIn(tween(100))) togetherWith
+                        (slideOutHorizontally(tween(100)) { width -> -direction * width / 5 } + fadeOut(tween(80)))
+                }
+            }
+        },
+        label = "workout screen",
+    ) { editorRoute ->
+        val editorExercise = editorRoute?.let { route -> exercises.firstOrNull { it.id == route.second } }
+        if (editorRoute != null && editorExercise != null) {
+            ExerciseEditor(
+                viewModel = viewModel,
+                sessionId = editorRoute.first,
+                exercise = editorExercise,
+                allExercises = exercises,
+                allSessionSets = sessionSets,
+                exerciseOrderIds = presetExerciseOrder,
+                restEndsAtMillis = restEndsAtMillis,
+                onSetCompleted = onSetCompleted,
+                onAddRestSeconds = onAddRestSeconds,
+                onSkipRest = onSkipRest,
+                onBack = onBack,
+                onNextExercise = { nextId -> exercises.firstOrNull { it.id == nextId }?.let(onSelectExercise) },
+                onFinishSession = onFinishSession,
+                onWorkoutComplete = onWorkoutComplete,
+            )
+        } else {
+            LazyColumn(
+                Modifier.fillMaxSize().padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
         if (activeSessionId == null) {
+            item { Text("カレンダー", style = MaterialTheme.typography.titleLarge) }
             item { WorkoutCalendar(completedSessions) }
+            item { Text("プリセット", style = MaterialTheme.typography.titleLarge) }
             if (presets.isEmpty()) {
                 item { Text("設定からプリセットを追加してください", style = MaterialTheme.typography.titleMedium) }
             } else {
@@ -430,16 +443,49 @@ private fun RecordScreen(
             }
             item { TextButton(onClick = onFinishSession) { Text("終了") } }
         }
+            }
+        }
     }
 }
 
 @Composable
 private fun PresetChoiceCard(label: String, detail: String, enabled: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    Card(modifier = modifier.height(116.dp).clickable(enabled = enabled, onClick = onClick)) {
+    Card(modifier = modifier.height(116.dp).pressMotionClickable(enabled, onClick)) {
         Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
             Text(label, style = MaterialTheme.typography.headlineLarge, maxLines = 2)
             Text(detail, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
+    }
+}
+
+@Composable
+private fun WorkoutCompleteScreen() {
+    var animateIn by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { animateIn = true }
+    val progress by animateFloatAsState(
+        targetValue = if (animateIn) 1f else 0f,
+        animationSpec = spring(dampingRatio = 0.55f, stiffness = 420f),
+        label = "workout complete check",
+    )
+    Column(
+        Modifier.fillMaxSize().padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Box(
+            Modifier.size(112.dp)
+                .graphicsLayer { scaleX = progress; scaleY = progress; alpha = progress }
+                .background(MaterialTheme.colorScheme.primary, CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(Icons.Default.Check, contentDescription = "完了", modifier = Modifier.size(72.dp), tint = Color.White)
+        }
+        Text(
+            "ワークアウト完了",
+            Modifier.padding(top = 24.dp).graphicsLayer { alpha = progress },
+            style = MaterialTheme.typography.headlineMedium,
+            color = MaterialTheme.colorScheme.onBackground,
+        )
     }
 }
 
@@ -522,7 +568,6 @@ private fun WorkoutCalendar(sessions: List<dev.local.fitlogsolo.data.WorkoutSess
                         }
                     }
                 }
-                Text("● 記録あり", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
             }
         }
     }
@@ -537,7 +582,7 @@ private fun ExerciseCard(
 ) {
     Card(Modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f).pressMotionClickable(onClick)) {
+            Column(Modifier.weight(1f).pressMotionClickable(onClick = onClick)) {
                 Text(exercise.name, style = MaterialTheme.typography.titleMedium)
                 Text(if (exercise.mode == ExerciseMode.NORMAL) "通常" else "左右別", style = MaterialTheme.typography.bodySmall)
             }
@@ -557,6 +602,7 @@ private fun ExerciseEditor(
     viewModel: FitLogViewModel,
     sessionId: Long,
     exercise: ExerciseEntity,
+    allExercises: List<ExerciseEntity>,
     allSessionSets: List<WorkoutSetEntity>,
     exerciseOrderIds: List<Long>,
     restEndsAtMillis: Long,
@@ -566,6 +612,7 @@ private fun ExerciseEditor(
     onBack: () -> Unit,
     onNextExercise: (Long) -> Unit,
     onFinishSession: () -> Unit,
+    onWorkoutComplete: () -> Unit,
 ) {
     val sets by viewModel.exerciseSets(sessionId, exercise.id).collectAsStateWithLifecycle()
     // Keep the current card visible while this exercise-specific Room flow starts collecting.
@@ -587,11 +634,26 @@ private fun ExerciseEditor(
     }
     val displayedCard = currentSet?.let { exercise to it } ?: lastVisibleCard
     val orderedIds = exerciseOrderIds.ifEmpty { allSessionSets.map { it.exerciseId }.distinct() }
-    val upcomingExerciseId = orderedIds.dropWhile { it != exercise.id }.drop(1)
-        .firstOrNull { nextId -> allSessionSets.any { it.exerciseId == nextId && !it.isCompleted } }
-    val hasUpcomingCard = currentSet != null && (
-        exerciseSets.any { it.setOrder > currentSet.setOrder && !it.isCompleted } || upcomingExerciseId != null
-    )
+    val nextSetInExercise = currentSet?.let { current ->
+        exerciseSets.filter { it.setOrder > current.setOrder && !it.isCompleted }
+            .minByOrNull { it.setOrder }
+    }
+    val upcomingExerciseId = if (currentSet != null && nextSetInExercise == null) {
+        orderedIds.dropWhile { it != exercise.id }.drop(1)
+            .firstOrNull { nextId -> allSessionSets.any { it.exerciseId == nextId && !it.isCompleted } }
+    } else {
+        null
+    }
+    val upcomingCard = when {
+        nextSetInExercise != null -> exercise to nextSetInExercise
+        upcomingExerciseId != null -> {
+            val nextExercise = allExercises.firstOrNull { it.id == upcomingExerciseId }
+            val nextSet = allSessionSets.filter { it.exerciseId == upcomingExerciseId && !it.isCompleted }
+                .minByOrNull { it.setOrder }
+            if (nextExercise != null && nextSet != null) nextExercise to nextSet else null
+        }
+        else -> null
+    }
 
     fun proceedFrom(set: WorkoutSetEntity) {
         val nextSet = exerciseSets.firstOrNull { it.setOrder > set.setOrder && !it.isCompleted }
@@ -600,16 +662,14 @@ private fun ExerciseEditor(
         } else {
             val nextExerciseId = orderedIds.dropWhile { it != exercise.id }.drop(1)
                 .firstOrNull { nextId -> allSessionSets.any { it.exerciseId == nextId && !it.isCompleted } }
-            if (nextExerciseId != null) onNextExercise(nextExerciseId) else onFinishSession()
+            if (nextExerciseId != null) onNextExercise(nextExerciseId) else onWorkoutComplete()
         }
     }
 
     fun advance(set: WorkoutSetEntity) {
-        val hasNextSetInExercise = exerciseSets.any {
-            it.setOrder > set.setOrder && !it.isCompleted
-        }
+        val hasRemainingSet = upcomingCard != null
         viewModel.updateSet(set.copy(isCompleted = true))
-        if (hasNextSetInExercise) onSetCompleted()
+        if (hasRemainingSet) onSetCompleted()
         proceedFrom(set)
     }
 
@@ -633,27 +693,124 @@ private fun ExerciseEditor(
             if (displayedCard != null) {
                 val (displayedExercise, displayedSet) = displayedCard
                 Box(Modifier.fillMaxSize().padding(horizontal = 4.dp), contentAlignment = Alignment.Center) {
-                    if (currentSet != null && hasUpcomingCard) {
-                        Card(
-                            Modifier.fillMaxSize().padding(horizontal = 22.dp, vertical = 18.dp).offset(y = 18.dp)
-                                .graphicsLayer { scaleX = 0.91f; scaleY = 0.94f; rotationZ = 1.5f },
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
-                        ) {
-                        }
+                    if (restEndsAtMillis > 0L && currentSet != null) {
+                        SetEditorCard(
+                            exercise = exercise,
+                            set = currentSet,
+                            totalSets = allSessionSets.count { it.exerciseId == exercise.id }
+                                .coerceAtLeast(currentSet.setOrder + 1),
+                            enabled = false,
+                            onUpdate = {},
+                            onAdvance = {},
+                            onSkip = {},
+                        )
+                        RestTimerCard(
+                            restEndsAtMillis = restEndsAtMillis,
+                            onAddRestSeconds = onAddRestSeconds,
+                            onSkipRest = onSkipRest,
+                        )
+                    } else if (currentSet != null && upcomingCard != null) {
+                        val (nextExercise, nextSet) = upcomingCard
+                        UpcomingSetPreviewCard(
+                            exercise = nextExercise,
+                            set = nextSet,
+                            totalSets = allSessionSets.count { it.exerciseId == nextExercise.id }
+                                .coerceAtLeast(nextSet.setOrder + 1),
+                        )
                     }
-                    SetEditorCard(
-                        exercise = displayedExercise,
-                        set = displayedSet,
-                        totalSets = allSessionSets.count { it.exerciseId == displayedExercise.id }
-                            .coerceAtLeast(displayedSet.setOrder + 1),
-                        enabled = currentSet != null,
-                        onUpdate = viewModel::updateSet,
-                        onAdvance = { currentSet?.let(::advance) },
-                        onSkip = { currentSet?.let(::skip) },
-                    )
+                    if (restEndsAtMillis <= 0L || currentSet == null) {
+                        SetEditorCard(
+                            exercise = displayedExercise,
+                            set = displayedSet,
+                            totalSets = allSessionSets.count { it.exerciseId == displayedExercise.id }
+                                .coerceAtLeast(displayedSet.setOrder + 1),
+                            enabled = currentSet != null,
+                            onUpdate = viewModel::updateSet,
+                            onAdvance = { if (currentSet?.id == displayedSet.id) advance(displayedSet) },
+                            onSkip = { if (currentSet?.id == displayedSet.id) skip(displayedSet) },
+                        )
+                    }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun UpcomingSetPreviewCard(
+    exercise: ExerciseEntity,
+    set: WorkoutSetEntity,
+    totalSets: Int,
+) {
+    Card(
+        Modifier.fillMaxWidth().fillMaxHeight(0.78f).offset(y = 14.dp)
+            .graphicsLayer { scaleX = 0.94f; scaleY = 0.95f; rotationZ = 1.2f },
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF0EB)),
+    ) {
+        Column(Modifier.fillMaxSize()) {
+            Row(
+                Modifier.fillMaxWidth().background(Color(0xFFE93630)).padding(horizontal = 20.dp, vertical = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(
+                    exercise.name,
+                    style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.ExtraBold, color = Color.White),
+                    maxLines = 2,
+                    modifier = Modifier.weight(1f),
+                )
+                Surface(color = Color.White, shape = CircleShape) {
+                    Box(Modifier.height(44.dp).padding(horizontal = 12.dp), contentAlignment = Alignment.Center) {
+                        Text(
+                            "${set.setOrder + 1}/$totalSets",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold),
+                            color = Color(0xFFE12F2B),
+                            maxLines = 1,
+                        )
+                    }
+                }
+            }
+            if (exercise.mode == ExerciseMode.NORMAL) {
+                Row(
+                    Modifier.weight(1f).fillMaxWidth().padding(horizontal = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center,
+                ) {
+                    Text(
+                        set.normalWeightKg?.let(::formatWeight) ?: "—",
+                        style = MaterialTheme.typography.displayMedium.copy(fontWeight = FontWeight.ExtraBold),
+                        maxLines = 1,
+                    )
+                    Text(" × ", style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.primary)
+                    Text(
+                        set.normalReps?.toString() ?: "—",
+                        style = MaterialTheme.typography.displayMedium.copy(fontWeight = FontWeight.ExtraBold),
+                        maxLines = 1,
+                    )
+                }
+            } else {
+                Row(
+                    Modifier.weight(1f).fillMaxWidth().padding(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    PreviewSideValue("左", set.leftWeightKg, set.leftReps, Modifier.weight(1f))
+                    PreviewSideValue("右", set.rightWeightKg, set.rightReps, Modifier.weight(1f))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PreviewSideValue(label: String, weightKg: Double?, reps: Int?, modifier: Modifier = Modifier) {
+    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(
+            "${weightKg?.let(::formatWeight) ?: "—"} × ${reps ?: "—"}",
+            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.ExtraBold),
+            maxLines = 1,
+        )
     }
 }
 
@@ -676,8 +833,18 @@ private fun SetEditorCard(
         }
     }
     val animationScope = rememberCoroutineScope()
-    Card(
-        Modifier.fillMaxSize()
+    val density = LocalDensity.current
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val horizontalSwipe = abs(swipeOffsetX) >= abs(swipeOffsetY)
+        val cardWidthPx = with(density) { maxWidth.toPx() }
+        val cardHeightPx = with(density) { (maxHeight * 0.78f).toPx() }
+        val swipeEdgePx = if (horizontalSwipe) cardWidthPx else cardHeightPx
+        val swipeDistance = if (horizontalSwipe) abs(swipeOffsetX) else abs(swipeOffsetY)
+        val swipeProgress = if (swipeEdgePx > 0f) (swipeDistance / (swipeEdgePx * 0.45f)).coerceIn(0f, 1f) else 0f
+        val advancing = if (horizontalSwipe) swipeOffsetX > 0f else swipeOffsetY < 0f
+        val swipeColor = if (!advancing) Color(0xFF201A19) else Color(0xFFF0442E)
+        Card(
+        Modifier.fillMaxWidth().fillMaxHeight(0.78f)
             .graphicsLayer {
                 translationX = swipeOffsetX
                 translationY = swipeOffsetY
@@ -688,16 +855,31 @@ private fun SetEditorCard(
                 val horizontal = abs(swipeOffsetX) >= abs(swipeOffsetY)
                 val distance = if (horizontal) abs(swipeOffsetX) else abs(swipeOffsetY)
                 val edgeSize = if (horizontal) size.width else size.height
-                val progress = if (edgeSize > 0f) (distance / (edgeSize * 0.12f)).coerceIn(0f, 1f) else 0f
+                val progress = if (edgeSize > 0f) (distance / (edgeSize * 0.45f)).coerceIn(0f, 1f) else 0f
                 if (progress > 0f) {
-                    // Keep the swipe cue lighter than #F0442E, even at the action threshold.
-                    val tint = Color(0xFFF0442E).copy(alpha = progress * 0.22f)
+                    val swipeAdvances = if (horizontal) swipeOffsetX > 0f else swipeOffsetY < 0f
+                    val color = if (swipeAdvances) Color(0xFFF0442E) else Color(0xFF201A19)
+                    val tint = color.copy(alpha = progress * 0.2f)
+                    val softTint = tint.copy(alpha = tint.alpha * 0.58f)
                     val clear = Color.Transparent
+                    val spread = 0.12f + progress * 0.62f
                     val brush = when {
-                        horizontal && swipeOffsetX > 0f -> Brush.horizontalGradient(listOf(clear, clear, tint), endX = size.width)
-                        horizontal -> Brush.horizontalGradient(listOf(tint, clear, clear), endX = size.width)
-                        swipeOffsetY < 0f -> Brush.verticalGradient(listOf(tint, clear, clear), endY = size.height)
-                        else -> Brush.verticalGradient(listOf(clear, clear, tint), endY = size.height)
+                        horizontal && swipeOffsetX > 0f -> Brush.horizontalGradient(
+                            colorStops = arrayOf(0f to tint, spread * 0.55f to softTint, spread to clear, 1f to clear),
+                            endX = size.width,
+                        )
+                        horizontal -> Brush.horizontalGradient(
+                            colorStops = arrayOf(0f to clear, 1f - spread to clear, 1f - spread * 0.55f to softTint, 1f to tint),
+                            endX = size.width,
+                        )
+                        swipeOffsetY > 0f -> Brush.verticalGradient(
+                            colorStops = arrayOf(0f to tint, spread * 0.55f to softTint, spread to clear, 1f to clear),
+                            endY = size.height,
+                        )
+                        else -> Brush.verticalGradient(
+                            colorStops = arrayOf(0f to clear, 1f - spread to clear, 1f - spread * 0.55f to softTint, 1f to tint),
+                            endY = size.height,
+                        )
                     }
                     drawRect(brush = brush)
                 }
@@ -714,7 +896,7 @@ private fun SetEditorCard(
                         change.consume()
                         dragX += dragAmount.x
                         dragY += dragAmount.y
-                        swipeOffsetX = dragX.coerceIn(-size.width * 0.35f, size.width * 0.35f)
+                        swipeOffsetX = dragX
                         swipeOffsetY = dragY.coerceIn(-size.height * 0.35f, size.height * 0.35f)
                     },
                     onDragEnd = {
@@ -723,34 +905,21 @@ private fun SetEditorCard(
                                 Animatable(swipeOffsetX).animateTo(0f, spring()) { swipeOffsetX = value }
                                 Animatable(swipeOffsetY).animateTo(0f, spring()) { swipeOffsetY = value }
                             }
-                        } else if (horizontalGesture == true && dragX > size.width * 0.25f) {
-                            animationScope.launch {
-                                Animatable(swipeOffsetX).animateTo(size.width * 0.35f, tween(100)) { swipeOffsetX = value }
-                                onAdvance()
-                            }
-                        } else if (horizontalGesture == true && dragX < -size.width * 0.25f) {
-                            animationScope.launch {
-                                Animatable(swipeOffsetX).animateTo(-size.width * 0.35f, tween(100)) { swipeOffsetX = value }
-                                onSkip()
-                            }
-                        } else if (horizontalGesture == false && dragY < -size.height * 0.14f) {
-                            animationScope.launch {
-                                Animatable(swipeOffsetY).animateTo(-size.height * 0.12f, tween(80)) { swipeOffsetY = value }
-                                view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
-                                onAdjustWeight(1)
-                                Animatable(swipeOffsetY).animateTo(0f, spring()) { swipeOffsetY = value }
-                            }
-                        } else if (horizontalGesture == false && dragY > size.height * 0.14f) {
-                            animationScope.launch {
-                                Animatable(swipeOffsetY).animateTo(size.height * 0.12f, tween(80)) { swipeOffsetY = value }
-                                view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
-                                onAdjustWeight(-1)
-                                Animatable(swipeOffsetY).animateTo(0f, spring()) { swipeOffsetY = value }
-                            }
                         } else {
-                            animationScope.launch {
-                                Animatable(swipeOffsetX).animateTo(0f, spring()) { swipeOffsetX = value }
-                                Animatable(swipeOffsetY).animateTo(0f, spring()) { swipeOffsetY = value }
+                            val horizontal = abs(dragX) >= abs(dragY)
+                            val distance = if (horizontal) abs(dragX) else abs(dragY)
+                            val threshold = minOf(size.width, size.height) * 0.12f
+                            if (distance >= threshold) {
+                                val advance = if (horizontal) dragX > 0f else dragY < 0f
+                                // Promote the real card behind this one immediately on release.
+                                // The drag itself already provides the swipe motion, so waiting for
+                                // an extra off-screen animation only made skip feel delayed.
+                                if (advance) onAdvance() else onSkip()
+                            } else {
+                                animationScope.launch {
+                                    Animatable(swipeOffsetX).animateTo(0f, spring()) { swipeOffsetX = value }
+                                    Animatable(swipeOffsetY).animateTo(0f, spring()) { swipeOffsetY = value }
+                                }
                             }
                         }
                     },
@@ -762,10 +931,11 @@ private fun SetEditorCard(
                     },
                 )
             },
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         colors = CardDefaults.cardColors(containerColor = Color(0xFFFFFAF7)),
-    ) {
-        Column(Modifier.fillMaxSize()) {
+        ) {
+        Box(Modifier.fillMaxSize()) {
+          Column(Modifier.fillMaxSize()) {
             Row(
                 Modifier.fillMaxWidth().background(Color(0xFFE93630)).padding(horizontal = 20.dp, vertical = 16.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -796,7 +966,7 @@ private fun SetEditorCard(
                     Surface(
                         Modifier.align(Alignment.Center).fillMaxWidth(0.96f).fillMaxHeight(0.64f),
                         shape = MaterialTheme.shapes.extraLarge,
-                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        color = Color.Transparent,
                         tonalElevation = 0.dp,
                     ) {
                         Row(
@@ -867,6 +1037,29 @@ private fun SetEditorCard(
                     }
                 }
             }
+          }
+          }
+          if (swipeProgress > 0f) {
+              Box(
+                  modifier = Modifier
+                      .align(Alignment.Center)
+                      .size(72.dp)
+                      .graphicsLayer {
+                          alpha = swipeProgress
+                          scaleX = 0.72f + 0.28f * swipeProgress
+                          scaleY = 0.72f + 0.28f * swipeProgress
+                      }
+                      .background(swipeColor.copy(alpha = 0.16f), CircleShape),
+                  contentAlignment = Alignment.Center,
+              ) {
+                  Icon(
+                      imageVector = if (advancing) Icons.Default.Check else Icons.Default.Close,
+                      contentDescription = null,
+                      modifier = Modifier.size(36.dp),
+                      tint = swipeColor,
+                  )
+              }
+          }
         }
     }
 }
@@ -908,7 +1101,7 @@ private fun BilateralTapControls(
             Surface(
                 Modifier.align(Alignment.Center).fillMaxWidth(0.96f).fillMaxHeight(0.64f),
                 shape = MaterialTheme.shapes.extraLarge,
-                color = MaterialTheme.colorScheme.surfaceVariant,
+                color = Color.Transparent,
                 tonalElevation = 0.dp,
             ) {
                 Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
@@ -960,7 +1153,7 @@ private fun formatWeight(weightKg: Double): String =
     BigDecimal.valueOf(weightKg).stripTrailingZeros().toPlainString()
 
 @Composable
-private fun RestTimerBanner(
+private fun RestTimerCard(
     restEndsAtMillis: Long,
     onAddRestSeconds: () -> Unit,
     onSkipRest: () -> Unit,
@@ -976,19 +1169,57 @@ private fun RestTimerBanner(
         }
         value = 0L
     }
-    Card(Modifier.fillMaxWidth()) {
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Text(
-                text = if (remainingSeconds > 0) "休憩 ${remainingSeconds / 60}:${(remainingSeconds % 60).toString().padStart(2, '0')}" else "休憩終了",
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.weight(1f),
-            )
-            if (remainingSeconds > 0) TextButton(onClick = onAddRestSeconds) { Text("+15秒") }
-            TextButton(onClick = onSkipRest) { Text(if (remainingSeconds > 0) "終了" else "閉じる") }
+    Card(
+        Modifier.fillMaxWidth().fillMaxHeight(0.78f),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1976D2)),
+    ) {
+        Column(Modifier.fillMaxSize()) {
+            Row(
+                Modifier.fillMaxWidth().background(Color(0xFF0D47A1)).padding(horizontal = 20.dp, vertical = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("休憩", style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.ExtraBold), color = Color.White)
+            }
+            Column(
+                Modifier.weight(1f).fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+            ) {
+                Text(
+                    if (remainingSeconds > 0L) "次のセットまで" else "休憩終了",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = Color.White.copy(alpha = 0.88f),
+                )
+                Text(
+                    "${remainingSeconds / 60}:${(remainingSeconds % 60).toString().padStart(2, '0')}",
+                    style = MaterialTheme.typography.displayLarge.copy(fontSize = 76.sp, fontWeight = FontWeight.ExtraBold),
+                    color = Color.White,
+                    maxLines = 1,
+                )
+            }
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                if (remainingSeconds > 0L) {
+                    OutlinedButton(
+                        onClick = onAddRestSeconds,
+                        modifier = Modifier.weight(1f).height(56.dp),
+                        colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                    ) { Text("+15秒", style = MaterialTheme.typography.titleMedium) }
+                }
+                Button(
+                    onClick = onSkipRest,
+                    modifier = Modifier.weight(1f).height(56.dp),
+                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                        containerColor = Color.White,
+                        contentColor = Color(0xFF0D47A1),
+                    ),
+                ) {
+                    Text(if (remainingSeconds > 0L) "休憩終了" else "次へ", style = MaterialTheme.typography.titleMedium)
+                }
+            }
         }
     }
 }
@@ -1114,183 +1345,15 @@ private fun NumberRow(label: String, value: String, keyboard: KeyboardType, onCh
 private fun Double.toInput(): String = String.format(Locale.US, "%.2f", this).trimEnd('0').trimEnd('.')
 
 @Composable
-private fun HistoryScreen(
-    viewModel: FitLogViewModel,
-    sessions: List<dev.local.fitlogsolo.data.WorkoutSessionEntity>,
-    exercises: List<ExerciseEntity>,
-    selectedSessionId: Long?,
-    onSelect: (Long) -> Unit,
-    onClose: () -> Unit,
-    onEdit: (Long) -> Unit,
-) {
-    if (sessions.isEmpty()) {
-        EmptyState("履歴はまだありません", "記録タブでトレーニングを保存すると、ここに表示されます。")
-        return
-    }
-    val exerciseNames = exercises.associate { it.id to it.name }
-    LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        items(sessions, key = { it.id }) { session ->
-            val sets by viewModel.sessionSets(session.id).collectAsStateWithLifecycle()
-            Card(Modifier.fillMaxWidth().pressMotionClickable { onSelect(session.id) }) {
-                Column(Modifier.padding(16.dp)) {
-                    Text(formatInstant(session.startedAt), style = MaterialTheme.typography.titleMedium)
-                    Text("${sets.map { it.exerciseId }.distinct().size}種目 / ${sets.size}セット")
-                    Text(sets.mapNotNull { exerciseNames[it.exerciseId] }.distinct().joinToString("、"), style = MaterialTheme.typography.bodySmall)
-                }
-            }
-        }
-    }
-    if (selectedSessionId != null) {
-        SessionDetailDialog(
-            viewModel = viewModel,
-            sessionId = selectedSessionId,
-            exerciseNames = exerciseNames,
-            onDismiss = onClose,
-            onEdit = { onEdit(selectedSessionId) },
-        )
-    }
-}
-
-@Composable
-private fun SessionDetailDialog(
-    viewModel: FitLogViewModel,
-    sessionId: Long,
-    exerciseNames: Map<Long, String>,
-    onDismiss: () -> Unit,
-    onEdit: () -> Unit,
-) {
-    val sets by viewModel.sessionSets(sessionId).collectAsStateWithLifecycle()
-    var confirmDelete by rememberSaveable(sessionId) { mutableStateOf(false) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("トレーニング詳細") },
-        text = {
-            Column(Modifier.verticalScroll(rememberScrollState())) {
-                sets.groupBy { it.exerciseId }.forEach { (exerciseId, exerciseSets) ->
-                    Text(exerciseNames[exerciseId] ?: "種目", style = MaterialTheme.typography.titleSmall)
-                    exerciseSets.forEach { set ->
-                        val value = if (set.normalWeightKg != null || set.normalReps != null) {
-                            "${set.normalWeightKg?.toInput() ?: "—"}kg × ${set.normalReps ?: "—"}回"
-                        } else {
-                            "左 ${set.leftWeightKg?.toInput() ?: "—"}kg × ${set.leftReps ?: "—"}回 / 右 ${set.rightWeightKg?.toInput() ?: "—"}kg × ${set.rightReps ?: "—"}回"
-                        }
-                        Text("セット ${set.setOrder + 1}: $value")
-                    }
-                    Spacer(Modifier.height(8.dp))
-                }
-            }
-        },
-        confirmButton = { TextButton(onClick = onEdit) { Icon(Icons.Default.Edit, null); Text("編集") } },
-        dismissButton = {
-            Row {
-                TextButton(onClick = { confirmDelete = true }) { Icon(Icons.Default.Delete, null); Text("削除") }
-                TextButton(onClick = onDismiss) { Text("閉じる") }
-            }
-        },
-    )
-    if (confirmDelete) {
-        AlertDialog(
-            onDismissRequest = { confirmDelete = false },
-            title = { Text("履歴を削除しますか？") },
-            text = { Text("このセッションとセット記録を削除します。この操作は戻せません。") },
-            confirmButton = {
-                TextButton(onClick = { viewModel.deleteSession(sessionId); confirmDelete = false; onDismiss() }) { Text("削除") }
-            },
-            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("キャンセル") } },
-        )
-    }
-}
-
-@Composable
-private fun WorkoutChartScreen(
-    viewModel: FitLogViewModel,
-    exercises: List<ExerciseEntity>,
-) {
-    Column(Modifier.fillMaxSize().padding(16.dp)) { WorkoutChart(viewModel, exercises) }
-}
-
-@Composable
-private fun WorkoutChart(viewModel: FitLogViewModel, exercises: List<ExerciseEntity>) {
-    var expanded by rememberSaveable { mutableStateOf(false) }
-    var selectedId by rememberSaveable { mutableStateOf<Long?>(null) }
-    val selected = exercises.firstOrNull { it.id == selectedId } ?: exercises.firstOrNull()
-    val chartData by produceState<Pair<List<WorkoutPoint>, BilateralWorkoutPoints?>>(emptyList<WorkoutPoint>() to null, selected?.id) {
-        value = if (selected == null) emptyList<WorkoutPoint>() to null else {
-            when (val result = viewModel.pointsFor(selected)) {
-                is List<*> -> @Suppress("UNCHECKED_CAST") (result as List<WorkoutPoint>) to null
-                is BilateralWorkoutPoints -> emptyList<WorkoutPoint>() to result
-                else -> emptyList<WorkoutPoint>() to null
-            }
-        }
-    }
-    if (selected == null) {
-        EmptyState("グラフを表示できる種目がありません", "記録タブから種目を追加してください。")
-        return
-    }
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Box {
-            OutlinedButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()) { Text(selected.name) }
-            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                exercises.forEach { exercise ->
-                    DropdownMenuItem(text = { Text(exercise.name) }, onClick = { selectedId = exercise.id; expanded = false })
-                }
-            }
-        }
-        if (selected.mode == ExerciseMode.NORMAL) {
-            if (chartData.first.isEmpty()) EmptyState("この種目の完了記録がありません", "セットを完了すると重量推移が表示されます。")
-            else LineGraph(chartData.first, MaterialTheme.colorScheme.primary)
-        } else {
-            val data = chartData.second
-            if (data == null || (data.left.isEmpty() && data.right.isEmpty())) EmptyState("この種目の完了記録がありません")
-            else {
-                if (data.left.isNotEmpty()) LineGraph(data.left, MaterialTheme.colorScheme.primary, "左")
-                if (data.right.isNotEmpty()) LineGraph(data.right, MaterialTheme.colorScheme.tertiary, "右")
-            }
-        }
-        Text("各トレーニング日の最大使用重量を表示しています。", style = MaterialTheme.typography.bodySmall)
-    }
-}
-
-@Composable
-private fun LineGraph(points: List<WorkoutPoint>, color: Color, label: String? = null) {
-    Column {
-        if (label != null) Text(label, color = color, style = MaterialTheme.typography.labelLarge)
-        Canvas(Modifier.fillMaxWidth().height(220.dp).padding(8.dp)) {
-            if (points.isEmpty()) return@Canvas
-            val max = points.maxOf { it.value }.coerceAtLeast(1.0)
-            val min = points.minOf { it.value }.coerceAtMost(0.0)
-            val range = (max - min).coerceAtLeast(1.0)
-            val xStep = if (points.size == 1) 0f else size.width / (points.size - 1)
-            val path = Path()
-            points.forEachIndexed { index, point ->
-                val x = index * xStep
-                val y = size.height - ((point.value - min) / range * size.height).toFloat()
-                if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
-                drawCircle(color, 5f, androidx.compose.ui.geometry.Offset(x, y))
-            }
-            drawPath(path, color, style = Stroke(width = 5f, cap = StrokeCap.Round))
-        }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(points.first().date, style = MaterialTheme.typography.labelSmall)
-            Text("最大 ${points.maxOf { it.value }.toInput()} kg", style = MaterialTheme.typography.labelSmall)
-            Text(points.last().date, style = MaterialTheme.typography.labelSmall)
-        }
-    }
-}
-
-@Composable
 private fun SettingsScreen(
     viewModel: FitLogViewModel,
     exercises: List<ExerciseEntity>,
     presets: List<WorkoutPreset>,
     onAddExercise: () -> Unit,
-    onExport: () -> Unit,
     flatModeEnabled: Boolean,
     displayName: String,
     onDisplayNameChange: (String) -> Unit,
     onFlatModeEnabledChange: (Boolean) -> Unit,
-    onShowHistory: () -> Unit,
-    onShowCharts: () -> Unit,
 ) {
     val routineExerciseIds by viewModel.routineExerciseIds.collectAsStateWithLifecycle()
     var displayNameDraft by rememberSaveable { mutableStateOf(displayName) }
@@ -1315,9 +1378,6 @@ private fun SettingsScreen(
                 ) { Text("保存") }
             }
         }
-        item { Text("記録を振り返る", style = MaterialTheme.typography.titleLarge) }
-        item { OutlinedButton(onClick = onShowHistory, modifier = Modifier.fillMaxWidth().height(56.dp)) { Icon(Icons.Default.History, null); Text("履歴") } }
-        item { OutlinedButton(onClick = onShowCharts, modifier = Modifier.fillMaxWidth().height(56.dp)) { Icon(Icons.Default.BarChart, null); Text("グラフ") } }
         item { Text("プリセット", style = MaterialTheme.typography.titleLarge) }
         items(presets, key = { "preset-${it.id}" }) { preset ->
             Card(Modifier.fillMaxWidth().pressMotionClickable { editingPresetId = preset.id }) {
@@ -1367,9 +1427,6 @@ private fun SettingsScreen(
                 Switch(checked = flatModeEnabled, onCheckedChange = onFlatModeEnabledChange)
             }
         }
-        item { Divider() }
-        item { Text("データ", style = MaterialTheme.typography.titleLarge) }
-        item { Button(onClick = onExport, modifier = Modifier.fillMaxWidth()) { Text("データを書き出す（JSON）") } }
         item { Text("このアプリは筋トレ記録を端末内に保存し、外部へ送信しません。", style = MaterialTheme.typography.bodySmall) }
     }
     if (showAddPreset) {
@@ -1561,9 +1618,6 @@ private fun EmptyState(title: String, message: String = "", action: (() -> Unit)
         if (action != null) Button(onClick = action, modifier = Modifier.padding(top = 16.dp)) { Text("種目を追加") }
     }
 }
-
-private fun formatInstant(instant: java.time.Instant): String = instant.atZone(ZoneId.systemDefault())
-    .format(DateTimeFormatter.ofPattern("yyyy年M月d日（E）", Locale.JAPAN))
 
 @Preview(showBackground = true)
 @Composable
