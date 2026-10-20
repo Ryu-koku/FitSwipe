@@ -7,6 +7,7 @@ import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.os.SystemClock
+import android.view.HapticFeedbackConstants
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
@@ -89,6 +90,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.contentDescription
@@ -99,6 +101,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -632,6 +635,7 @@ private fun SetEditorCard(
     onAdvance: () -> Unit,
     onSkip: () -> Unit,
 ) {
+    val view = LocalView.current
     var swipeOffsetX by androidx.compose.runtime.remember(set.id) { androidx.compose.runtime.mutableFloatStateOf(0f) }
     var swipeOffsetY by androidx.compose.runtime.remember(set.id) { androidx.compose.runtime.mutableFloatStateOf(0f) }
     LaunchedEffect(enabled, set.id) {
@@ -650,6 +654,18 @@ private fun SetEditorCard(
             }
             .drawWithContent {
                 drawContent()
+                val horizontalProgress = (abs(swipeOffsetX) / (size.width * 0.25f)).coerceIn(0f, 1f)
+                if (horizontalProgress > 0f && size.width > 0f) {
+                    // Keep the swipe cue lighter than #F0442E, even at the action threshold.
+                    val tint = Color(0xFFF0442E).copy(alpha = horizontalProgress * 0.22f)
+                    val clear = Color.Transparent
+                    val brush = if (swipeOffsetX > 0f) {
+                        Brush.horizontalGradient(listOf(clear, clear, tint), endX = size.width)
+                    } else {
+                        Brush.horizontalGradient(listOf(tint, clear, clear), endX = size.width)
+                    }
+                    drawRect(brush = brush)
+                }
                 val drag = swipeOffsetY
                 val progress = (abs(drag) / (size.height * 0.14f)).coerceIn(0f, 1f)
                 if (progress > 0.12f) {
@@ -716,12 +732,14 @@ private fun SetEditorCard(
                         } else if (horizontalGesture == false && dragY < -size.height * 0.14f) {
                             animationScope.launch {
                                 Animatable(swipeOffsetY).animateTo(-size.height * 0.12f, tween(80)) { swipeOffsetY = value }
+                                view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
                                 onAdjustWeight(1)
                                 Animatable(swipeOffsetY).animateTo(0f, spring()) { swipeOffsetY = value }
                             }
                         } else if (horizontalGesture == false && dragY > size.height * 0.14f) {
                             animationScope.launch {
                                 Animatable(swipeOffsetY).animateTo(size.height * 0.12f, tween(80)) { swipeOffsetY = value }
+                                view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
                                 onAdjustWeight(-1)
                                 Animatable(swipeOffsetY).animateTo(0f, spring()) { swipeOffsetY = value }
                             }
@@ -862,12 +880,16 @@ private fun InvisibleTapZone(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val view = LocalView.current
     Box(
         modifier.clickable(
             enabled = enabled,
             interactionSource = androidx.compose.runtime.remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
             indication = null,
-            onClick = onClick,
+            onClick = {
+                view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                onClick()
+            },
         ).semantics { contentDescription = description },
     )
 }
