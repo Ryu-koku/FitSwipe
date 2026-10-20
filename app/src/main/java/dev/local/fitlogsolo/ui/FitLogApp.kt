@@ -14,6 +14,7 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -589,6 +590,20 @@ private fun ExerciseEditor(
                         set = displayedSet,
                         enabled = currentSet != null,
                         onUpdate = viewModel::updateSet,
+                        onAdjustWeight = { step ->
+                            currentSet?.let { activeSet ->
+                                val adjusted = when (displayedExercise.mode) {
+                                    ExerciseMode.NORMAL -> activeSet.copy(
+                                        normalWeightKg = adjustWeight(activeSet.normalWeightKg, step),
+                                    )
+                                    ExerciseMode.BILATERAL -> activeSet.copy(
+                                        leftWeightKg = adjustWeight(activeSet.leftWeightKg, step),
+                                        rightWeightKg = adjustWeight(activeSet.rightWeightKg, step),
+                                    )
+                                }
+                                viewModel.updateSet(adjusted)
+                            }
+                        },
                         onAdvance = { currentSet?.let(::advance) },
                         onSkip = { currentSet?.let(::skip) },
                     )
@@ -604,43 +619,82 @@ private fun SetEditorCard(
     set: WorkoutSetEntity,
     enabled: Boolean,
     onUpdate: (WorkoutSetEntity) -> Unit,
+    onAdjustWeight: (Int) -> Unit,
     onAdvance: () -> Unit,
     onSkip: () -> Unit,
 ) {
     var swipeOffsetX by androidx.compose.runtime.remember(set.id) { androidx.compose.runtime.mutableFloatStateOf(0f) }
+    var swipeOffsetY by androidx.compose.runtime.remember(set.id) { androidx.compose.runtime.mutableFloatStateOf(0f) }
     LaunchedEffect(enabled, set.id) {
-        if (!enabled) swipeOffsetX = 0f
+        if (!enabled) {
+            swipeOffsetX = 0f
+            swipeOffsetY = 0f
+        }
     }
     val animationScope = rememberCoroutineScope()
     Card(
         Modifier.fillMaxSize()
             .graphicsLayer {
                 translationX = swipeOffsetX
+                translationY = swipeOffsetY
+                rotationZ = if (size.width > 0f) (swipeOffsetX / size.width * 8f).coerceIn(-8f, 8f) else 0f
             }
             .pointerInput(set.id, enabled) {
-                var horizontalDistance = 0f
-                detectHorizontalDragGestures(
-                    onHorizontalDrag = { change, dragAmount ->
+                var dragX = 0f
+                var dragY = 0f
+                detectDragGestures(
+                    onDragStart = {
+                        dragX = 0f
+                        dragY = 0f
+                    },
+                    onDrag = { change, dragAmount ->
                         change.consume()
-                        horizontalDistance += dragAmount
-                        swipeOffsetX = (swipeOffsetX + dragAmount).coerceIn(-size.width.toFloat(), size.width.toFloat())
+                        dragX += dragAmount.x
+                        dragY += dragAmount.y
+                        swipeOffsetX = (swipeOffsetX + dragAmount.x).coerceIn(-size.width.toFloat(), size.width.toFloat())
+                        swipeOffsetY = (swipeOffsetY + dragAmount.y).coerceIn(-size.height * 0.3f, size.height * 0.3f)
                     },
                     onDragEnd = {
-                        if (enabled && horizontalDistance > size.width * 0.25f) {
+                        if (!enabled) {
+                            animationScope.launch {
+                                Animatable(swipeOffsetX).animateTo(0f, spring()) { swipeOffsetX = value }
+                                Animatable(swipeOffsetY).animateTo(0f, spring()) { swipeOffsetY = value }
+                            }
+                        } else if (abs(dragX) >= abs(dragY) && dragX > size.width * 0.25f) {
                             animationScope.launch {
                                 Animatable(swipeOffsetX).animateTo(size.width * 0.35f, tween(100)) { swipeOffsetX = value }
                                 onAdvance()
                             }
-                        } else if (enabled && horizontalDistance < -size.width * 0.25f) {
+                        } else if (abs(dragX) >= abs(dragY) && dragX < -size.width * 0.25f) {
                             animationScope.launch {
                                 Animatable(swipeOffsetX).animateTo(-size.width * 0.35f, tween(100)) { swipeOffsetX = value }
                                 onSkip()
                             }
+                        } else if (abs(dragY) > abs(dragX) && dragY < -size.height * 0.14f) {
+                            animationScope.launch {
+                                Animatable(swipeOffsetY).animateTo(-size.height * 0.12f, tween(80)) { swipeOffsetY = value }
+                                onAdjustWeight(1)
+                                Animatable(swipeOffsetY).animateTo(0f, spring()) { swipeOffsetY = value }
+                            }
+                        } else if (abs(dragY) > abs(dragX) && dragY > size.height * 0.14f) {
+                            animationScope.launch {
+                                Animatable(swipeOffsetY).animateTo(size.height * 0.12f, tween(80)) { swipeOffsetY = value }
+                                onAdjustWeight(-1)
+                                Animatable(swipeOffsetY).animateTo(0f, spring()) { swipeOffsetY = value }
+                            }
                         } else {
-                            animationScope.launch { Animatable(swipeOffsetX).animateTo(0f, spring()) { swipeOffsetX = value } }
+                            animationScope.launch {
+                                Animatable(swipeOffsetX).animateTo(0f, spring()) { swipeOffsetX = value }
+                                Animatable(swipeOffsetY).animateTo(0f, spring()) { swipeOffsetY = value }
+                            }
                         }
                     },
-                    onDragCancel = { animationScope.launch { Animatable(swipeOffsetX).animateTo(0f, spring()) { swipeOffsetX = value } } },
+                    onDragCancel = {
+                        animationScope.launch {
+                            Animatable(swipeOffsetX).animateTo(0f, spring()) { swipeOffsetX = value }
+                            Animatable(swipeOffsetY).animateTo(0f, spring()) { swipeOffsetY = value }
+                        }
+                    },
                 )
             },
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
@@ -716,6 +770,12 @@ private fun SetEditorCard(
             }
         }
     }
+}
+
+private fun adjustWeight(weightKg: Double?, step: Int): Double? = when {
+    step > 0 -> (weightKg ?: 0.0) + 2.5
+    weightKg == null -> null
+    else -> (weightKg - 2.5).coerceAtLeast(0.0)
 }
 
 @Composable
