@@ -238,12 +238,12 @@ private fun FitLogAppContent(
             if (restEndsAtMillis == scheduledEnd) {
                 val tone = runCatching { ToneGenerator(AudioManager.STREAM_ALARM, 80) }.getOrNull()
                 try {
-                    val toneStarted = tone?.startTone(ToneGenerator.TONE_PROP_ACK, 700) == true
+                    val toneStarted = tone?.startTone(ToneGenerator.TONE_PROP_PROMPT, 200) == true
                     val vibrator = context.getSystemService(Vibrator::class.java)
                     if (vibrator?.hasVibrator() == true) {
                         vibrator.vibrate(VibrationEffect.createWaveform(longArrayOf(0L, 320L, 140L, 480L), -1))
                     }
-                    if (toneStarted) delay(700L)
+                    if (toneStarted) delay(200L)
                 } finally {
                     tone?.release()
                 }
