@@ -16,6 +16,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -32,6 +33,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -650,7 +652,7 @@ private fun SetEditorCard(
                     val stem = 48.dp.toPx()
                     val head = 15.dp.toPx()
                     val stroke = 5.dp.toPx()
-                    val color = swipeHintColor.copy(alpha = progress * 0.9f)
+                    val color = (if (drag < 0f) Color.White else swipeHintColor).copy(alpha = progress * 0.9f)
                     if (drag < 0f) {
                         val tipY = edge
                         val stemY = tipY + stem
@@ -733,16 +735,35 @@ private fun SetEditorCard(
                 )
             },
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFFAF7)),
     ) {
-        if (exercise.mode == ExerciseMode.NORMAL) {
-            Column(
-                Modifier.fillMaxSize().padding(14.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+        Column(Modifier.fillMaxSize()) {
+            Row(
+                Modifier.fillMaxWidth().background(Color(0xFFE93630)).padding(horizontal = 20.dp, vertical = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text(exercise.name, style = MaterialTheme.typography.headlineSmall, maxLines = 2, modifier = Modifier.weight(1f))
-                    Text("${set.setOrder + 1}", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
+                Text(
+                    exercise.name,
+                    style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.ExtraBold, color = Color.White),
+                    maxLines = 2,
+                    modifier = Modifier.weight(1f),
+                )
+                Surface(color = Color.White, shape = CircleShape, modifier = Modifier.size(44.dp)) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text(
+                            "${set.setOrder + 1}",
+                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.ExtraBold),
+                            color = Color(0xFFE12F2B),
+                        )
+                    }
                 }
+            }
+            if (exercise.mode == ExerciseMode.NORMAL) {
+                Column(
+                    Modifier.weight(1f).fillMaxWidth().padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
                 InvisibleTapZone(
                     description = "重量を2.5キログラム増やす",
                     enabled = enabled,
@@ -762,16 +783,30 @@ private fun SetEditorCard(
                         color = MaterialTheme.colorScheme.surface,
                         tonalElevation = 0.dp,
                     ) {
-                        Column(
-                            Modifier.fillMaxSize().padding(12.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center,
+                        Row(
+                            Modifier.fillMaxSize().padding(horizontal = 5.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center,
                         ) {
-                            Text(set.normalWeightKg?.let(::formatWeight) ?: "—", style = MaterialTheme.typography.displayMedium, maxLines = 1)
-                            Text("kg", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Spacer(Modifier.height(18.dp))
-                            Text(set.normalReps?.toString() ?: "—", style = MaterialTheme.typography.displayMedium, maxLines = 1)
-                            Text("回", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(
+                                    set.normalWeightKg?.let(::formatWeight) ?: "—",
+                                    style = MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.ExtraBold),
+                                    maxLines = 1,
+                                    softWrap = false,
+                                )
+                                Text("kg", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            Text("×", style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold), color = MaterialTheme.colorScheme.primary)
+                            Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(
+                                    set.normalReps?.toString() ?: "—",
+                                    style = MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.ExtraBold),
+                                    maxLines = 1,
+                                    softWrap = false,
+                                )
+                                Text("回", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
                         }
                     }
                     InvisibleTapZone(
@@ -787,13 +822,9 @@ private fun SetEditorCard(
                     onClick = { onUpdate(set.copy(normalWeightKg = ((set.normalWeightKg ?: 0.0) - 2.5).coerceAtLeast(0.0))) },
                     modifier = Modifier.fillMaxWidth().weight(0.8f),
                 )
-            }
-        } else {
-            Column(Modifier.fillMaxSize().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text(exercise.name, style = MaterialTheme.typography.headlineSmall, maxLines = 2, modifier = Modifier.weight(1f))
-                    Text("${set.setOrder + 1}", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
                 }
+            } else {
+                Column(Modifier.weight(1f).fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     BilateralTapControls("左", set.leftWeightKg, set.leftReps, enabled, Modifier.weight(1f)) { weight, reps ->
                         onUpdate(set.copy(leftWeightKg = weight, leftReps = reps))
@@ -805,6 +836,7 @@ private fun SetEditorCard(
             }
         }
     }
+}
 }
 
 private fun adjustWeight(weightKg: Double?, step: Int): Double? = when {
