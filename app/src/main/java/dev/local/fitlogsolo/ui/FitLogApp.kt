@@ -1040,9 +1040,18 @@ private fun SetEditorCard(
           }
           }
           if (swipeProgress > 0f) {
+              val tintSpread = 0.12f + swipeProgress * 0.62f
+              val markPosition = when {
+                  horizontalSwipe && swipeOffsetX > 0f -> Modifier.align(Alignment.TopStart).padding(start = 16.dp, top = 84.dp)
+                  horizontalSwipe -> Modifier.align(Alignment.TopEnd).padding(end = 16.dp, top = 84.dp)
+                  swipeOffsetY < 0f -> Modifier.align(Alignment.TopCenter).padding(top = 84.dp)
+                  else -> {
+                      val tintedHeight = with(density) { (cardHeightPx * tintSpread).toDp() }
+                      Modifier.align(Alignment.BottomCenter).offset(y = -(tintedHeight + 36.dp))
+                  }
+              }
               Box(
-                  modifier = Modifier
-                      .align(Alignment.Center)
+                  modifier = markPosition
                       .size(72.dp)
                       .graphicsLayer {
                           alpha = swipeProgress
