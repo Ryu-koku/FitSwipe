@@ -555,8 +555,11 @@ private fun ExerciseEditor(
     }
 
     fun advance(set: WorkoutSetEntity) {
+        val hasNextSetInExercise = exerciseSets.any {
+            it.setOrder > set.setOrder && !it.isCompleted
+        }
         viewModel.updateSet(set.copy(isCompleted = true))
-        onSetCompleted()
+        if (hasNextSetInExercise) onSetCompleted()
         proceedFrom(set)
     }
 
