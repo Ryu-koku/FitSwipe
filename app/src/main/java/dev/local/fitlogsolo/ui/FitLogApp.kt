@@ -1733,9 +1733,15 @@ private fun PresetEditorDialog(
                                 OutlinedTextField(
                                     value = config.weightKg,
                                     onValueChange = { value ->
-                                        onChange(preset.copy(exercises = preset.exercises.map {
-                                            if (it.exerciseId == config.exerciseId) it.copy(weightKg = value.filter { char -> char.isDigit() || char == '.' }) else it
-                                        }))
+                                        val normalized = value.replace(',', '.')
+                                        if (normalized.count { it == '.' } <= 1 &&
+                                            normalized.all { it.isDigit() || it == '.' } &&
+                                            normalized.substringAfter('.', "").length <= 2
+                                        ) {
+                                            onChange(preset.copy(exercises = preset.exercises.map {
+                                                if (it.exerciseId == config.exerciseId) it.copy(weightKg = normalized) else it
+                                            }))
+                                        }
                                     },
                                     label = { Text("kg") },
                                     singleLine = true,
