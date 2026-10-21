@@ -34,6 +34,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -117,6 +118,8 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.draw.drawWithContent
@@ -135,6 +138,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import dev.local.fitlogsolo.FitLogViewModel
+import dev.local.fitlogsolo.R
 import dev.local.fitlogsolo.RestTimerAlarm
 import dev.local.fitlogsolo.data.PresetExerciseConfig
 import dev.local.fitlogsolo.data.WorkoutPreset
@@ -895,6 +899,14 @@ private fun ExerciseCard(
 ) {
     Card(Modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (exercise.name.isDumbbellCurl()) {
+                Image(
+                    painter = painterResource(R.drawable.dumbbell_curl),
+                    contentDescription = "ダンベルカールのピクトグラム",
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.size(width = 88.dp, height = 64.dp).padding(end = 12.dp),
+                )
+            }
             Column(Modifier.weight(1f).pressMotionClickable(onClick = onClick)) {
                 Text(exercise.name, style = MaterialTheme.typography.titleMedium)
                 Text(if (exercise.mode == ExerciseMode.NORMAL) "通常" else "左右別", style = MaterialTheme.typography.bodySmall)
@@ -909,6 +921,15 @@ private fun ExerciseCard(
         }
     }
 }
+
+private fun String.isDumbbellCurl(): Boolean = trim().lowercase() in setOf(
+    "ダンベルカール",
+    "ダンベル・カール",
+    "dumbbell curl",
+    "dumbbell curls",
+    "dumbbell bicep curl",
+    "dumbbell biceps curl",
+)
 
 @Composable
 private fun ExerciseEditor(
