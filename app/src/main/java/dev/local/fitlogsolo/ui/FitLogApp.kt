@@ -157,6 +157,7 @@ import java.util.Locale
 import java.math.BigDecimal
 import kotlin.math.abs
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 
 private const val WORKOUT_CARD_HEIGHT_FRACTION = 0.78f
@@ -1009,6 +1010,7 @@ private fun ExerciseEditor(
         else -> firstSide
     }
     val activeSide = currentSide.takeIf { exercise.mode == ExerciseMode.BILATERAL }
+    var restStackCard by remember(sessionId) { mutableStateOf<WorkoutCardRef?>(null) }
     // Keep the outgoing card on screen while Compose/Room switches to the next exercise query.
     // The exercise-specific flow briefly emits an empty list during that handoff.
     var lastVisibleCard by androidx.compose.runtime.remember(sessionId) {
@@ -1058,8 +1060,9 @@ private fun ExerciseEditor(
         }
         else -> null
     }
-    val cardBehind = upcomingCard
+    val cardBehind = if (restEndsAtMillis > 0L) restStackCard ?: upcomingCard else upcomingCard
     val effectiveRestSeconds = exerciseRestDurations[exercise.id] ?: restDurationSeconds
+    var dismissRestStack by remember(restEndsAtMillis) { mutableStateOf(false) }
     val cardScene = when {
         restEndsAtMillis > 0L && currentSet != null -> EditorCardScene(
             key = "rest:$restEndsAtMillis",
@@ -1102,14 +1105,20 @@ private fun ExerciseEditor(
             if (!otherSideCompleted) {
                 viewModel.updateSet(updated)
                 currentSideName = otherSide?.name ?: firstSide.name
-                if (exercise.id in sideSwitchRestExerciseIds) onSetCompleted(effectiveRestSeconds)
+                if (exercise.id in sideSwitchRestExerciseIds) {
+                    restStackCard = WorkoutCardRef(exercise, set, activeSide)
+                    onSetCompleted(effectiveRestSeconds)
+                }
                 return
             }
             viewModel.updateSet(updated.copy(isCompleted = true))
         } else {
             viewModel.updateSet(set.copy(isCompleted = true))
         }
-        if (upcomingCard != null) onSetCompleted(effectiveRestSeconds)
+        if (upcomingCard?.exercise?.id == exercise.id) {
+            restStackCard = WorkoutCardRef(exercise, set, activeSide)
+            onSetCompleted(effectiveRestSeconds)
+        }
         proceedFrom(set)
     }
 
@@ -1146,6 +1155,8 @@ private fun ExerciseEditor(
                     side = cardBehind.side,
                     totalSets = allSessionSets.count { it.exerciseId == cardBehind.exercise.id }
                         .coerceAtLeast(cardBehind.set.setOrder + 1),
+                    restCardActive = restEndsAtMillis > 0L,
+                    dismissWithRest = dismissRestStack,
                 )
             }
             AnimatedContent(
@@ -1170,7 +1181,11 @@ private fun ExerciseEditor(
                     scene == null -> Unit
                     scene.restEndsAtMillis > 0L -> RestTimerCard(
                         restEndsAtMillis = scene.restEndsAtMillis,
-                        onSkipRest = onSkipRest,
+                        onSkipRestStarted = { dismissRestStack = true },
+                        onSkipRest = {
+                            restStackCard = null
+                            onSkipRest()
+                        },
                     )
                     scene.exercise != null && scene.set != null -> SetEditorCard(
                         exercise = scene.exercise,
@@ -1196,13 +1211,28 @@ private fun UpcomingSetPreviewCard(
     set: WorkoutSetEntity,
     side: ExerciseSide?,
     totalSets: Int,
+    restCardActive: Boolean,
+    dismissWithRest: Boolean,
 ) {
     val palette = exerciseCardPalette(exercise.name)
-    Card(
-        Modifier.fillMaxWidth().fillMaxHeight(WORKOUT_CARD_HEIGHT_FRACTION).offset(y = 14.dp)
-            .graphicsLayer { scaleX = 0.94f; scaleY = 0.95f; rotationZ = 1.2f },
-        colors = CardDefaults.cardColors(containerColor = palette.surfaceStart),
-    ) {
+    val density = LocalDensity.current
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val widthPx = with(density) { maxWidth.toPx() }
+        val translationX by animateFloatAsState(
+            targetValue = if (restCardActive && dismissWithRest) -widthPx * 1.25f else 0f,
+            animationSpec = tween(if (restCardActive) 220 else 0),
+            label = "rest preview card dismissal",
+        )
+        Card(
+            Modifier.fillMaxWidth().fillMaxHeight(WORKOUT_CARD_HEIGHT_FRACTION).offset(y = 14.dp)
+                .graphicsLayer {
+                    scaleX = 0.94f
+                    scaleY = 0.95f
+                    rotationZ = 1.2f
+                    this.translationX = translationX
+                },
+            colors = CardDefaults.cardColors(containerColor = palette.surfaceStart),
+        ) {
         Column(
             Modifier.fillMaxSize().background(
                 Brush.verticalGradient(listOf(palette.surfaceStart, palette.surfaceEnd)),
@@ -1268,6 +1298,7 @@ private fun UpcomingSetPreviewCard(
                 }
             }
         }
+    }
     }
 }
 
@@ -1707,6 +1738,7 @@ private fun adjustWeight(weightKg: Double?, stepKg: Double, increase: Boolean): 
 @Composable
 private fun RestTimerCard(
     restEndsAtMillis: Long,
+    onSkipRestStarted: () -> Unit,
     onSkipRest: () -> Unit,
 ) {
     val remainingSeconds by produceState(
@@ -1729,6 +1761,22 @@ private fun RestTimerCard(
         androidx.compose.runtime.mutableStateOf(false)
     }
     val animationScope = rememberCoroutineScope()
+    fun dismissTo(targetX: Float, targetY: Float, dismissStack: Boolean) {
+        if (isDismissing) return
+        isDismissing = true
+        if (dismissStack) onSkipRestStarted()
+        animationScope.launch {
+            coroutineScope {
+                launch {
+                    Animatable(dragOffsetX).animateTo(targetX, tween(220)) { dragOffsetX = value }
+                }
+                launch {
+                    Animatable(dragOffsetY).animateTo(targetY, tween(220)) { dragOffsetY = value }
+                }
+            }
+            onSkipRest()
+        }
+    }
     BoxWithConstraints(
         Modifier.fillMaxSize().pointerInput(restEndsAtMillis) {
             var dragX = 0f
@@ -1753,17 +1801,19 @@ private fun RestTimerCard(
                         val distance = if (horizontal) abs(dragX) else abs(dragY)
                         val edgeSize = if (horizontal) size.width else size.height
                         if (distance >= edgeSize * 0.12f) {
-                            isDismissing = true
-                            animationScope.launch {
-                                if (horizontal) {
-                                    val targetX = if (dragX > 0f) size.width * 1.25f else -size.width * 1.25f
-                                    Animatable(dragOffsetX).animateTo(targetX, tween(220)) { dragOffsetX = value }
-                                } else {
-                                    val targetY = if (dragY > 0f) size.height * 1.25f else -size.height * 1.25f
-                                    Animatable(dragOffsetY).animateTo(targetY, tween(220)) { dragOffsetY = value }
-                                }
-                                onSkipRest()
+                            val targetX = if (horizontal) {
+                                if (dragX > 0f) size.width * 1.25f else -size.width * 1.25f
+                            } else {
+                                0f
                             }
+                            val targetY = if (horizontal) {
+                                0f
+                            } else if (dragY > 0f) {
+                                size.height * 1.25f
+                            } else {
+                                -size.height * 1.25f
+                            }
+                            dismissTo(targetX, targetY, dismissStack = false)
                         } else {
                             animationScope.launch {
                                 Animatable(dragOffsetX).animateTo(0f, spring(dampingRatio = 0.62f, stiffness = 220f)) {
@@ -1881,6 +1931,11 @@ private fun RestTimerCard(
                 color = Color.White.copy(alpha = 0.92f),
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             )
+            TextButton(onClick = {
+                dismissTo(-cardWidthPx * 1.25f, 0f, dismissStack = true)
+            }) {
+                Text("スキップ", color = Color.White)
+            }
           }
         }
     }
