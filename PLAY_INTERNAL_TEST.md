@@ -4,7 +4,7 @@
 
 ## 初回設定
 
-1. Play Consoleでアプリを作成する。表示名: FitLog Solo、言語: 日本語、種類: アプリ、無料。
+1. Play Consoleでアプリを作成する。表示名: FitSwipe、言語: 日本語、種類: アプリ、無料。
 2. 「テストとリリース → テスト → 内部テスト」でリリースを作成する。
 3. Play App Signingを設定し、Googleがアプリ署名鍵を生成する方式を選ぶ。ローカルの鍵はアップロード鍵として使用する。
 4. `app/build/outputs/bundle/release/app-release.aab` をアップロードする。パッケージ名は `dev.local.fitlogsolo`。Play Console上ではversionCode 1が先行アップロードで使用済み扱いになったため、最初の配信版はversionCode 2。

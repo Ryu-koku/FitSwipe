@@ -13,8 +13,8 @@ android {
         applicationId = "dev.local.fitlogsolo"
         minSdk = 28
         targetSdk = 36
-        versionCode = 16
-        versionName = "2.3"
+        versionCode = 19
+        versionName = "2.6"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true

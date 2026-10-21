@@ -3,6 +3,7 @@ package dev.local.fitlogsolo.data
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
+import androidx.room.ColumnInfo
 import androidx.room.PrimaryKey
 import java.time.Instant
 
@@ -56,6 +57,8 @@ data class WorkoutSetEntity(
     val leftReps: Int? = null,
     val rightWeightKg: Double? = null,
     val rightReps: Int? = null,
+    @ColumnInfo(defaultValue = "0") val leftCompleted: Boolean = false,
+    @ColumnInfo(defaultValue = "0") val rightCompleted: Boolean = false,
     val isCompleted: Boolean = false,
     val createdAt: Instant = Instant.now(),
     val updatedAt: Instant = Instant.now(),

@@ -11,6 +11,8 @@ import java.util.UUID
 data class PresetExerciseConfig(
     val exerciseId: Long,
     val weightKg: String = "",
+    val leftWeightKg: String = "",
+    val rightWeightKg: String = "",
     val reps: String = "",
     val sets: String = "3",
 )
@@ -42,6 +44,21 @@ class WorkoutPreferences(context: Context) {
 
     private val _exerciseWeightSteps = MutableStateFlow(readExerciseWeightSteps())
     val exerciseWeightSteps: StateFlow<Map<Long, Double>> = _exerciseWeightSteps.asStateFlow()
+
+    private val _restDurationSeconds = MutableStateFlow(
+        preferences.getInt(KEY_REST_DURATION_SECONDS, DEFAULT_REST_DURATION_SECONDS.toInt())
+            .toLong().coerceIn(0L, MAX_REST_DURATION_SECONDS),
+    )
+    val restDurationSeconds: StateFlow<Long> = _restDurationSeconds.asStateFlow()
+
+    private val _exerciseRestDurations = MutableStateFlow(readExerciseRestDurations())
+    val exerciseRestDurations: StateFlow<Map<Long, Long>> = _exerciseRestDurations.asStateFlow()
+
+    private val _sideSwitchRestExerciseIds = MutableStateFlow(readIds(KEY_SIDE_SWITCH_REST_EXERCISES).toSet())
+    val sideSwitchRestExerciseIds: StateFlow<Set<Long>> = _sideSwitchRestExerciseIds.asStateFlow()
+
+    private val _leftFirstExerciseIds = MutableStateFlow(readIds(KEY_LEFT_FIRST_EXERCISES).toSet())
+    val leftFirstExerciseIds: StateFlow<Set<Long>> = _leftFirstExerciseIds.asStateFlow()
 
     private val _gymPresetExerciseIds = MutableStateFlow(readIds(KEY_GYM_PRESET))
     val gymPresetExerciseIds: StateFlow<List<Long>> = _gymPresetExerciseIds.asStateFlow()
@@ -93,6 +110,37 @@ class WorkoutPreferences(context: Context) {
         _exerciseWeightSteps.value = steps
     }
 
+    fun setRestDurationSeconds(seconds: Long) {
+        if (seconds !in 0L..MAX_REST_DURATION_SECONDS) return
+        preferences.edit().putInt(KEY_REST_DURATION_SECONDS, seconds.toInt()).apply()
+        _restDurationSeconds.value = seconds
+    }
+
+    fun setExerciseRestDurationSeconds(exerciseId: Long, seconds: Long?) {
+        if (seconds != null && seconds !in 0L..MAX_REST_DURATION_SECONDS) return
+        val durations = if (seconds == null) {
+            _exerciseRestDurations.value - exerciseId
+        } else {
+            _exerciseRestDurations.value + (exerciseId to seconds)
+        }
+        preferences.edit().putString(KEY_EXERCISE_REST_DURATIONS, encodeExerciseRestDurations(durations)).apply()
+        _exerciseRestDurations.value = durations
+    }
+
+    fun setExerciseSideSwitchRestEnabled(exerciseId: Long, enabled: Boolean) {
+        val ids = if (enabled) _sideSwitchRestExerciseIds.value + exerciseId
+        else _sideSwitchRestExerciseIds.value - exerciseId
+        preferences.edit().putString(KEY_SIDE_SWITCH_REST_EXERCISES, ids.joinToString(",")).apply()
+        _sideSwitchRestExerciseIds.value = ids
+    }
+
+    fun setExerciseStartsLeft(exerciseId: Long, startsLeft: Boolean) {
+        val ids = if (startsLeft) _leftFirstExerciseIds.value + exerciseId
+        else _leftFirstExerciseIds.value - exerciseId
+        preferences.edit().putString(KEY_LEFT_FIRST_EXERCISES, ids.joinToString(",")).apply()
+        _leftFirstExerciseIds.value = ids
+    }
+
     fun togglePresetExercise(gym: Boolean, exerciseId: Long) {
         val key = if (gym) KEY_GYM_PRESET else KEY_HOME_PRESET
         val state = if (gym) _gymPresetExerciseIds else _homePresetExerciseIds
@@ -127,6 +175,27 @@ class WorkoutPreferences(context: Context) {
         )
     }
 
+    fun initializePresetTrainingDefaults(defaultsByExerciseId: Map<Long, ExerciseTrainingDefault>) {
+        if (preferences.getBoolean(KEY_PRESET_TRAINING_DEFAULTS_INITIALIZED, false)) return
+        val updated = _presets.value.map { preset ->
+            preset.copy(
+                exercises = preset.exercises.map { config ->
+                    val default = defaultsByExerciseId[config.exerciseId]
+                    val defaultWeight = default?.tenRepWeightKg?.let(::formatWeightValue)
+                        ?: config.weightKg.ifBlank { "0" }
+                    config.copy(
+                        weightKg = defaultWeight,
+                        leftWeightKg = config.leftWeightKg.ifBlank { defaultWeight },
+                        rightWeightKg = config.rightWeightKg.ifBlank { defaultWeight },
+                        reps = "10",
+                    )
+                },
+            )
+        }
+        if (updated != _presets.value) setPresets(updated)
+        preferences.edit().putBoolean(KEY_PRESET_TRAINING_DEFAULTS_INITIALIZED, true).apply()
+    }
+
     fun markDefaultPresetsInitialized() {
         preferences.edit().putBoolean(KEY_DEFAULT_PRESETS_INITIALIZED, true).apply()
     }
@@ -157,6 +226,25 @@ class WorkoutPreferences(context: Context) {
         steps.forEach { (exerciseId, step) -> put(exerciseId.toString(), step) }
     }.toString()
 
+    private fun readExerciseRestDurations(): Map<Long, Long> {
+        val value = preferences.getString(KEY_EXERCISE_REST_DURATIONS, null) ?: return emptyMap()
+        return runCatching {
+            val json = JSONObject(value)
+            json.keys().asSequence().mapNotNull { key ->
+                val exerciseId = key.toLongOrNull() ?: return@mapNotNull null
+                val duration = json.optLong(key, -1L)
+                if (duration in 0L..MAX_REST_DURATION_SECONDS) exerciseId to duration else null
+            }.toMap()
+        }.getOrDefault(emptyMap())
+    }
+
+    private fun encodeExerciseRestDurations(durations: Map<Long, Long>): String = JSONObject().apply {
+        durations.forEach { (exerciseId, duration) -> put(exerciseId.toString(), duration) }
+    }.toString()
+
+    private fun formatWeightValue(weightKg: Double): String =
+        java.math.BigDecimal.valueOf(weightKg).stripTrailingZeros().toPlainString()
+
     private fun readPresets(): List<WorkoutPreset> = runCatching {
         val json = preferences.getString(KEY_PRESETS, null) ?: return emptyList()
         val array = JSONArray(json)
@@ -168,6 +256,8 @@ class WorkoutPreferences(context: Context) {
                 PresetExerciseConfig(
                     exerciseId = config.getLong("exerciseId"),
                     weightKg = config.optString("weightKg", ""),
+                    leftWeightKg = config.optString("leftWeightKg", config.optString("weightKg", "")),
+                    rightWeightKg = config.optString("rightWeightKg", config.optString("weightKg", "")),
                     reps = config.optString("reps", ""),
                     sets = config.optString("sets", "3"),
                 )
@@ -186,6 +276,8 @@ class WorkoutPreferences(context: Context) {
                         put(JSONObject().apply {
                             put("exerciseId", config.exerciseId)
                             put("weightKg", config.weightKg)
+                            put("leftWeightKg", config.leftWeightKg)
+                            put("rightWeightKg", config.rightWeightKg)
                             put("reps", config.reps)
                             put("sets", config.sets)
                         })
@@ -201,9 +293,16 @@ class WorkoutPreferences(context: Context) {
         const val KEY_DISPLAY_NAME = "display_name"
         const val KEY_WEIGHT_STEP_KG = "weight_step_kg"
         const val KEY_EXERCISE_WEIGHT_STEPS = "exercise_weight_steps"
+        const val KEY_REST_DURATION_SECONDS = "rest_duration_seconds"
+        const val KEY_EXERCISE_REST_DURATIONS = "exercise_rest_durations"
+        const val KEY_SIDE_SWITCH_REST_EXERCISES = "side_switch_rest_exercises"
+        const val KEY_LEFT_FIRST_EXERCISES = "left_first_exercises"
+        const val KEY_PRESET_TRAINING_DEFAULTS_INITIALIZED = "preset_training_defaults_initialized"
         const val DEFAULT_WEIGHT_STEP_KG = 1.0
         const val MIN_WEIGHT_STEP_KG = 0.01
         const val MAX_WEIGHT_STEP_KG = 1000.0
+        const val DEFAULT_REST_DURATION_SECONDS = 90L
+        const val MAX_REST_DURATION_SECONDS = 7200L
         const val KEY_GYM_PRESET = "gym_preset_exercise_ids"
         const val KEY_HOME_PRESET = "home_preset_exercise_ids"
         const val KEY_DEFAULT_PRESETS_INITIALIZED = "default_presets_initialized"

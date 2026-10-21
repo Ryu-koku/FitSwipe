@@ -98,6 +98,8 @@ class FitLogRepository(private val database: AppDatabase) {
                 currentSets = sets.findForSession(sessionId).filter { it.exerciseId == exercise.id }.sortedBy { it.setOrder }
             }
             val weight = config.weightKg.toDoubleOrNull()?.takeIf { it >= 0.0 }
+            val leftWeight = config.leftWeightKg.toDoubleOrNull()?.takeIf { it >= 0.0 } ?: weight
+            val rightWeight = config.rightWeightKg.toDoubleOrNull()?.takeIf { it >= 0.0 } ?: weight
             val reps = config.reps.toIntOrNull()?.takeIf { it >= 0 }
             currentSets.forEach { set ->
                 if (set.id in createdSetIds) {
@@ -105,9 +107,9 @@ class FitLogRepository(private val database: AppDatabase) {
                         when (exercise.mode) {
                             ExerciseMode.NORMAL -> set.copy(normalWeightKg = weight, normalReps = reps)
                             ExerciseMode.BILATERAL -> set.copy(
-                                leftWeightKg = weight,
+                                leftWeightKg = leftWeight,
                                 leftReps = reps,
-                                rightWeightKg = weight,
+                                rightWeightKg = rightWeight,
                                 rightReps = reps,
                             )
                         },
@@ -150,7 +152,17 @@ class FitLogRepository(private val database: AppDatabase) {
         val previous = sets.findForSession(sessionId).filter { it.exerciseId == exerciseId }.maxByOrNull { it.setOrder }
             ?: return addSet(sessionId, exercises.findById(exerciseId) ?: error("種目が見つかりません"))
         val now = Instant.now()
-        return sets.insert(previous.copy(id = 0, setOrder = previous.setOrder + 1, isCompleted = false, createdAt = now, updatedAt = now))
+        return sets.insert(
+            previous.copy(
+                id = 0,
+                setOrder = previous.setOrder + 1,
+                leftCompleted = false,
+                rightCompleted = false,
+                isCompleted = false,
+                createdAt = now,
+                updatedAt = now,
+            ),
+        )
     }
 
     suspend fun updateSet(set: WorkoutSetEntity) {

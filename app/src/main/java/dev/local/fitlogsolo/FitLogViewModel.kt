@@ -10,6 +10,7 @@ import dev.local.fitlogsolo.data.SessionStatus
 import dev.local.fitlogsolo.data.WorkoutPreferences
 import dev.local.fitlogsolo.data.WorkoutPreset
 import dev.local.fitlogsolo.data.WorkoutSetEntity
+import dev.local.fitlogsolo.data.exerciseTrainingDefault
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -36,6 +37,10 @@ class FitLogViewModel(
     val displayName = workoutPreferences.displayName
     val weightStepKg = workoutPreferences.weightStepKg
     val exerciseWeightSteps = workoutPreferences.exerciseWeightSteps
+    val restDurationSeconds = workoutPreferences.restDurationSeconds
+    val exerciseRestDurations = workoutPreferences.exerciseRestDurations
+    val sideSwitchRestExerciseIds = workoutPreferences.sideSwitchRestExerciseIds
+    val leftFirstExerciseIds = workoutPreferences.leftFirstExerciseIds
     val gymPresetExerciseIds = workoutPreferences.gymPresetExerciseIds
     val homePresetExerciseIds = workoutPreferences.homePresetExerciseIds
     val presets = workoutPreferences.presets
@@ -80,6 +85,10 @@ class FitLogViewModel(
             workoutPreferences.markDefaultPresetsInitialized()
         }
         workoutPreferences.initializePresetsIfMissing(gymIds, homeIds)
+        val exerciseDefaults = repository.observeExercises().first().mapNotNull { exercise ->
+            exerciseTrainingDefault(exercise.name)?.let { exercise.id to it }
+        }.toMap()
+        workoutPreferences.initializePresetTrainingDefaults(exerciseDefaults)
     }
 
     fun setPresets(presets: List<WorkoutPreset>) = workoutPreferences.setPresets(presets)
@@ -110,6 +119,17 @@ class FitLogViewModel(
         workoutPreferences.setExerciseWeightStepKg(exerciseId, weightStepKg)
 
     fun resetExerciseWeightStepKg(exerciseId: Long) = workoutPreferences.resetExerciseWeightStepKg(exerciseId)
+
+    fun setRestDurationSeconds(seconds: Long) = workoutPreferences.setRestDurationSeconds(seconds)
+
+    fun setExerciseRestDurationSeconds(exerciseId: Long, seconds: Long?) =
+        workoutPreferences.setExerciseRestDurationSeconds(exerciseId, seconds)
+
+    fun setExerciseSideSwitchRestEnabled(exerciseId: Long, enabled: Boolean) =
+        workoutPreferences.setExerciseSideSwitchRestEnabled(exerciseId, enabled)
+
+    fun setExerciseStartsLeft(exerciseId: Long, startsLeft: Boolean) =
+        workoutPreferences.setExerciseStartsLeft(exerciseId, startsLeft)
 
     fun addSet(sessionId: Long, exercise: ExerciseEntity) = viewModelScope.launch {
         repository.addSet(sessionId, exercise)
