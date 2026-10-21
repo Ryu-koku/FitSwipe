@@ -128,6 +128,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -241,6 +242,8 @@ private fun FitLogAppContent(
     val sessions by viewModel.completedSessions.collectAsStateWithLifecycle()
     val routineExerciseIds by viewModel.routineExerciseIds.collectAsStateWithLifecycle()
     val flatModeEnabled by viewModel.flatModeEnabled.collectAsStateWithLifecycle()
+    var lastUserInteractionAtMillis by remember { mutableLongStateOf(0L) }
+    var userInteractionActive by remember { mutableStateOf(false) }
     val displayName by viewModel.displayName.collectAsStateWithLifecycle()
     val weightStepKg by viewModel.weightStepKg.collectAsStateWithLifecycle()
     val exerciseWeightSteps by viewModel.exerciseWeightSteps.collectAsStateWithLifecycle()
@@ -251,7 +254,12 @@ private fun FitLogAppContent(
     val presets by viewModel.presets.collectAsStateWithLifecycle()
     val message by viewModel.message.collectAsStateWithLifecycle()
     val snackbar = SnackbarHostState()
-    val flatCandidate = rememberFlatDeviceCandidate(flatModeEnabled, activeSession != null)
+    val flatCandidate = rememberFlatDeviceCandidate(
+        enabled = flatModeEnabled,
+        workoutActive = activeSession != null,
+        lastUserInteractionAtMillis = lastUserInteractionAtMillis,
+        userInteractionActive = userInteractionActive,
+    )
     val context = LocalContext.current
     val permissionScope = rememberCoroutineScope()
 
@@ -352,7 +360,25 @@ private fun FitLogAppContent(
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
         Surface(
-            Modifier.fillMaxSize().padding(padding).animateContentSize(spring(stiffness = 500f)),
+            Modifier.fillMaxSize()
+                .padding(padding)
+                .animateContentSize(spring(stiffness = 500f))
+                .pointerInput(Unit) {
+                    awaitPointerEventScope {
+                        while (true) {
+                            val event = awaitPointerEvent(PointerEventPass.Initial)
+                            val now = SystemClock.elapsedRealtime()
+                            if (event.changes.any { it.pressed && !it.previousPressed }) {
+                                userInteractionActive = true
+                                lastUserInteractionAtMillis = now
+                            }
+                            if (event.changes.any { !it.pressed && it.previousPressed }) {
+                                userInteractionActive = event.changes.any { it.pressed }
+                                if (!userInteractionActive) lastUserInteractionAtMillis = now
+                            }
+                        }
+                    }
+                },
             color = MaterialTheme.colorScheme.background,
         ) {
             AnimatedContent(
@@ -1885,11 +1911,23 @@ private fun WorkoutDock(
 }
 
 @Composable
-private fun rememberFlatDeviceCandidate(enabled: Boolean, workoutActive: Boolean): Boolean {
+private fun rememberFlatDeviceCandidate(
+    enabled: Boolean,
+    workoutActive: Boolean,
+    lastUserInteractionAtMillis: Long,
+    userInteractionActive: Boolean,
+): Boolean {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val isFlat = androidx.compose.runtime.remember { mutableStateOf(false) }
-    DisposableEffect(context, lifecycleOwner, enabled, workoutActive) {
+    DisposableEffect(
+        context,
+        lifecycleOwner,
+        enabled,
+        workoutActive,
+        lastUserInteractionAtMillis,
+        userInteractionActive,
+    ) {
         isFlat.value = false
         if (!enabled || !workoutActive) {
             onDispose { }
@@ -1910,6 +1948,12 @@ private fun rememberFlatDeviceCandidate(enabled: Boolean, workoutActive: Boolean
                         val y = abs(event.values[1])
                         val z = event.values[2]
                         if (!isCurrentlyFlat) {
+                            val interactionCooldownActive = userInteractionActive ||
+                                (lastUserInteractionAtMillis > 0L && now - lastUserInteractionAtMillis < 5_000L)
+                            if (interactionCooldownActive) {
+                                flatSinceMillis = 0L
+                                return
+                            }
                             val flatEnoughToEnter = x < 1.8f && y < 1.8f && z > 8.8f
                             if (flatEnoughToEnter) {
                                 if (flatSinceMillis == 0L) flatSinceMillis = now
