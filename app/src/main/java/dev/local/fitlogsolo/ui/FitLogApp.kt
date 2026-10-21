@@ -1480,7 +1480,7 @@ private fun rememberFlatDeviceCandidate(enabled: Boolean, workoutActive: Boolean
                             val flatEnoughToEnter = x < 1.8f && y < 1.8f && z > 8.8f
                             if (flatEnoughToEnter) {
                                 if (flatSinceMillis == 0L) flatSinceMillis = now
-                                if (now - flatSinceMillis >= 500L) {
+                                if (now - flatSinceMillis >= 1_000L) {
                                     isCurrentlyFlat = true
                                     tiltedSinceMillis = 0L
                                     isFlat.value = true
