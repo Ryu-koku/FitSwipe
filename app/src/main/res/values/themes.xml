@@ -1,3 +1,7 @@
 <resources>
-    <style name="Theme.FitLogSolo" parent="android:style/Theme.Material.Light.NoActionBar" />
+    <style name="Theme.FitLogSolo" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/system_bar_background</item>
+        <item name="android:statusBarColor">@color/system_bar_background</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
 </resources>

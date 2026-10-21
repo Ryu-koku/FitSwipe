@@ -1060,8 +1060,21 @@ private fun ExerciseEditor(
         }
         else -> null
     }
-    val cardBehind = if (restEndsAtMillis > 0L) restStackCard ?: upcomingCard else upcomingCard
     val effectiveRestSeconds = exerciseRestDurations[exercise.id] ?: restDurationSeconds
+    val restWillFollowCurrentCard = if (activeSide != null && !otherSideCompleted) {
+        exercise.id in sideSwitchRestExerciseIds
+    } else {
+        nextSetInExercise != null
+    }
+    val showRestPreview = restEndsAtMillis <= 0L && restWillFollowCurrentCard
+    var restPreviewDragOffset by remember(displayedCard?.set?.id, displayedCard?.side) {
+        mutableStateOf(Offset.Zero)
+    }
+    val cardBehind = when {
+        restEndsAtMillis > 0L -> restStackCard ?: upcomingCard
+        restWillFollowCurrentCard -> null
+        else -> upcomingCard
+    }
     var dismissRestStack by remember(restEndsAtMillis) { mutableStateOf(false) }
     val cardScene = when {
         restEndsAtMillis > 0L && currentSet != null -> EditorCardScene(
@@ -1148,7 +1161,12 @@ private fun ExerciseEditor(
 
     Column(Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 4.dp)) {
         Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-            if (cardBehind != null) {
+            if (showRestPreview) {
+                RestTimerPreviewCard(
+                    restSeconds = effectiveRestSeconds,
+                    swipeOffset = restPreviewDragOffset,
+                )
+            } else if (cardBehind != null) {
                 UpcomingSetPreviewCard(
                     exercise = cardBehind.exercise,
                     set = cardBehind.set,
@@ -1198,8 +1216,76 @@ private fun ExerciseEditor(
                         onUpdate = viewModel::updateSet,
                         onAdvance = { if (currentSet?.id == scene.set.id) advance(scene.set) },
                         onSkip = { if (currentSet?.id == scene.set.id) skip(scene.set) },
+                        onSwipeOffsetChanged = { restPreviewDragOffset = it },
                     )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RestTimerPreviewCard(restSeconds: Long, swipeOffset: Offset) {
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val horizontal = abs(swipeOffset.x) >= abs(swipeOffset.y)
+        val skipped = if (horizontal) swipeOffset.x < 0f else swipeOffset.y > 0f
+        Card(
+            Modifier.align(Alignment.Center).fillMaxWidth().padding(horizontal = 4.dp)
+                .fillMaxHeight(WORKOUT_CARD_HEIGHT_FRACTION)
+                .graphicsLayer {
+                    if (skipped) {
+                        translationX = swipeOffset.x
+                        translationY = swipeOffset.y
+                        rotationZ = if (size.width > 0f) {
+                            (swipeOffset.x / size.width * 12f).coerceIn(-12f, 12f)
+                        } else {
+                            0f
+                        }
+                    }
+                },
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF1976D2)),
+        ) {
+            Column(Modifier.fillMaxSize()) {
+                Row(
+                    Modifier.fillMaxWidth().background(Color(0xFF0D47A1)).padding(horizontal = 20.dp, vertical = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        "休憩",
+                        style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.ExtraBold),
+                        color = Color.White,
+                    )
+                }
+                Column(
+                    Modifier.weight(1f).fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    Text(
+                        "次のセットまで",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = Color.White.copy(alpha = 0.88f),
+                    )
+                    Text(
+                        "${restSeconds / 60}:${(restSeconds % 60).toString().padStart(2, '0')}",
+                        style = MaterialTheme.typography.displayLarge.copy(fontSize = 76.sp, fontWeight = FontWeight.ExtraBold),
+                        color = Color.White,
+                        maxLines = 1,
+                    )
+                }
+                Text(
+                    "スライドして休憩を終了",
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 18.dp),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Color.White.copy(alpha = 0.92f),
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                )
+                Text(
+                    "スキップ",
+                    Modifier.align(Alignment.CenterHorizontally).padding(vertical = 8.dp),
+                    color = Color.White,
+                )
             }
         }
     }
@@ -1224,11 +1310,9 @@ private fun UpcomingSetPreviewCard(
             label = "rest preview card dismissal",
         )
         Card(
-            Modifier.fillMaxWidth().fillMaxHeight(WORKOUT_CARD_HEIGHT_FRACTION).offset(y = 14.dp)
+            Modifier.align(Alignment.Center).fillMaxWidth().padding(horizontal = 4.dp)
+                .fillMaxHeight(WORKOUT_CARD_HEIGHT_FRACTION)
                 .graphicsLayer {
-                    scaleX = 0.94f
-                    scaleY = 0.95f
-                    rotationZ = 1.2f
                     this.translationX = translationX
                 },
             colors = CardDefaults.cardColors(containerColor = palette.surfaceStart),
@@ -1352,6 +1436,7 @@ private fun SetEditorCard(
     onUpdate: (WorkoutSetEntity) -> Unit,
     onAdvance: () -> Unit,
     onSkip: () -> Unit,
+    onSwipeOffsetChanged: (Offset) -> Unit,
 ) {
     val palette = exerciseCardPalette(exercise.name)
     var swipeOffsetX by androidx.compose.runtime.remember(set.id, side) { androidx.compose.runtime.mutableFloatStateOf(0f) }
@@ -1360,6 +1445,7 @@ private fun SetEditorCard(
         if (!enabled) {
             swipeOffsetX = 0f
             swipeOffsetY = 0f
+            onSwipeOffsetChanged(Offset.Zero)
         }
     }
     val animationScope = rememberCoroutineScope()
@@ -1421,6 +1507,7 @@ private fun SetEditorCard(
                     onDragStart = {
                         dragX = 0f
                         dragY = 0f
+                        onSwipeOffsetChanged(Offset.Zero)
                     },
                     onDrag = { change, dragAmount ->
                         change.consume()
@@ -1428,6 +1515,7 @@ private fun SetEditorCard(
                         dragY += dragAmount.y
                         swipeOffsetX = dragX
                         swipeOffsetY = dragY.coerceIn(-size.height * 0.35f, size.height * 0.35f)
+                        onSwipeOffsetChanged(Offset(swipeOffsetX, swipeOffsetY))
                     },
                     onDragEnd = {
                         if (!enabled) {
@@ -1444,25 +1532,43 @@ private fun SetEditorCard(
                                 animationScope.launch {
                                     if (horizontal) {
                                         val targetX = if (dragX > 0f) size.width * 1.25f else -size.width * 1.25f
-                                        Animatable(swipeOffsetX).animateTo(targetX, tween(220)) { swipeOffsetX = value }
+                                        Animatable(swipeOffsetX).animateTo(targetX, tween(220)) {
+                                            swipeOffsetX = value
+                                            onSwipeOffsetChanged(Offset(value, swipeOffsetY))
+                                        }
                                     } else {
                                         val targetY = if (dragY > 0f) size.height * 1.25f else -size.height * 1.25f
-                                        Animatable(swipeOffsetY).animateTo(targetY, tween(220)) { swipeOffsetY = value }
+                                        Animatable(swipeOffsetY).animateTo(targetY, tween(220)) {
+                                            swipeOffsetY = value
+                                            onSwipeOffsetChanged(Offset(swipeOffsetX, value))
+                                        }
                                     }
                                     if (advance) onAdvance() else onSkip()
                                 }
                             } else {
                                 animationScope.launch {
-                                    Animatable(swipeOffsetX).animateTo(0f, spring(dampingRatio = 0.62f, stiffness = 220f)) { swipeOffsetX = value }
-                                    Animatable(swipeOffsetY).animateTo(0f, spring(dampingRatio = 0.62f, stiffness = 220f)) { swipeOffsetY = value }
+                                    Animatable(swipeOffsetX).animateTo(0f, spring(dampingRatio = 0.62f, stiffness = 220f)) {
+                                        swipeOffsetX = value
+                                        onSwipeOffsetChanged(Offset(value, swipeOffsetY))
+                                    }
+                                    Animatable(swipeOffsetY).animateTo(0f, spring(dampingRatio = 0.62f, stiffness = 220f)) {
+                                        swipeOffsetY = value
+                                        onSwipeOffsetChanged(Offset(swipeOffsetX, value))
+                                    }
                                 }
                             }
                         }
                     },
                     onDragCancel = {
                         animationScope.launch {
-                            Animatable(swipeOffsetX).animateTo(0f, spring(dampingRatio = 0.62f, stiffness = 220f)) { swipeOffsetX = value }
-                            Animatable(swipeOffsetY).animateTo(0f, spring(dampingRatio = 0.62f, stiffness = 220f)) { swipeOffsetY = value }
+                            Animatable(swipeOffsetX).animateTo(0f, spring(dampingRatio = 0.62f, stiffness = 220f)) {
+                                swipeOffsetX = value
+                                onSwipeOffsetChanged(Offset(value, swipeOffsetY))
+                            }
+                            Animatable(swipeOffsetY).animateTo(0f, spring(dampingRatio = 0.62f, stiffness = 220f)) {
+                                swipeOffsetY = value
+                                onSwipeOffsetChanged(Offset(swipeOffsetX, value))
+                            }
                         }
                     },
                 )
