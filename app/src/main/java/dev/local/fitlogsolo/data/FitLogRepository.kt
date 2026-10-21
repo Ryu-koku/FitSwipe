@@ -153,7 +153,31 @@ class FitLogRepository(private val database: AppDatabase) {
         return sets.insert(previous.copy(id = 0, setOrder = previous.setOrder + 1, isCompleted = false, createdAt = now, updatedAt = now))
     }
 
-    suspend fun updateSet(set: WorkoutSetEntity) = sets.update(set.copy(updatedAt = Instant.now()))
+    suspend fun updateSet(set: WorkoutSetEntity) {
+        val sessionSets = sets.findForSession(set.sessionId)
+        val previous = sessionSets.firstOrNull { it.id == set.id }
+        val updatedAt = Instant.now()
+        sets.update(set.copy(updatedAt = updatedAt))
+        if (previous == null) return
+
+        val carryNormalWeight = set.normalWeightKg != previous.normalWeightKg && set.normalWeightKg != null
+        val carryLeftWeight = set.leftWeightKg != previous.leftWeightKg && set.leftWeightKg != null
+        val carryRightWeight = set.rightWeightKg != previous.rightWeightKg && set.rightWeightKg != null
+        if (!carryNormalWeight && !carryLeftWeight && !carryRightWeight) return
+
+        sessionSets.asSequence()
+            .filter { it.exerciseId == set.exerciseId && it.setOrder > set.setOrder && !it.isCompleted }
+            .forEach { nextSet ->
+                sets.update(
+                    nextSet.copy(
+                        normalWeightKg = if (carryNormalWeight) set.normalWeightKg else nextSet.normalWeightKg,
+                        leftWeightKg = if (carryLeftWeight) set.leftWeightKg else nextSet.leftWeightKg,
+                        rightWeightKg = if (carryRightWeight) set.rightWeightKg else nextSet.rightWeightKg,
+                        updatedAt = updatedAt,
+                    ),
+                )
+            }
+    }
 
     suspend fun finishSession(sessionId: Long) {
         sessions.findById(sessionId)?.let {
