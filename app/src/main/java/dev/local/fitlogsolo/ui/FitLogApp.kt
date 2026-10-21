@@ -221,6 +221,7 @@ private fun FitLogAppContent(
     var showExactAlarmPermissionDialog by rememberSaveable { mutableStateOf(false) }
     var presetExerciseOrder by rememberSaveable { mutableStateOf("") }
     val exercises by viewModel.exercises.collectAsStateWithLifecycle()
+    val allExercises by viewModel.allExercises.collectAsStateWithLifecycle()
     val activeSession by viewModel.activeSession.collectAsStateWithLifecycle()
     val sessions by viewModel.completedSessions.collectAsStateWithLifecycle()
     val routineExerciseIds by viewModel.routineExerciseIds.collectAsStateWithLifecycle()
@@ -369,6 +370,7 @@ private fun FitLogAppContent(
                     MainScreen.HOME -> RecordScreen(
                         viewModel = viewModel,
                         exercises = exercises,
+                        allExercises = allExercises,
                         presets = presets,
                         routineExerciseIds = routineExerciseIds,
                         activeSessionId = activeSession?.id,
@@ -470,6 +472,7 @@ private fun FitLogAppContent(
 private fun RecordScreen(
     viewModel: FitLogViewModel,
     exercises: List<ExerciseEntity>,
+    allExercises: List<ExerciseEntity>,
     presets: List<WorkoutPreset>,
     routineExerciseIds: List<Long>,
     activeSessionId: Long?,
@@ -531,7 +534,7 @@ private fun RecordScreen(
             ) {
         if (activeSessionId == null) {
             item { Text("カレンダー", style = MaterialTheme.typography.titleLarge) }
-            item { WorkoutCalendar(completedSessions) }
+            item { WorkoutCalendar(completedSessions, allExercises, viewModel) }
             item { Text("プリセット", style = MaterialTheme.typography.titleLarge) }
             if (presets.isEmpty()) {
                 item { Text("設定からプリセットを追加してください", style = MaterialTheme.typography.titleMedium) }
@@ -607,27 +610,56 @@ private fun WorkoutCompleteScreen() {
 }
 
 @Composable
-private fun WorkoutCalendar(sessions: List<dev.local.fitlogsolo.data.WorkoutSessionEntity>) {
+private fun WorkoutCalendar(
+    sessions: List<dev.local.fitlogsolo.data.WorkoutSessionEntity>,
+    exercises: List<ExerciseEntity>,
+    viewModel: FitLogViewModel,
+) {
     var month by rememberSaveable { mutableStateOf(YearMonth.now().toString()) }
+    var selectedDateText by rememberSaveable { mutableStateOf<String?>(null) }
+    var historySets by remember { mutableStateOf<List<WorkoutSetEntity>?>(null) }
     val yearMonth = YearMonth.parse(month)
+    val selectedDate = selectedDateText?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
     val sessionDays = sessions.mapNotNull { session ->
         runCatching { session.startedAt.atZone(ZoneId.systemDefault()).toLocalDate() }.getOrNull()
     }.toSet()
+    val selectedSessions = sessions.filter { session ->
+        selectedDate != null && runCatching {
+            session.startedAt.atZone(ZoneId.systemDefault()).toLocalDate() == selectedDate
+        }.getOrDefault(false)
+    }
+    val selectedSessionIds = selectedSessions.map { it.id }
+
+    LaunchedEffect(selectedSessionIds) {
+        if (selectedSessionIds.isEmpty()) {
+            historySets = emptyList()
+        } else {
+            historySets = null
+            historySets = viewModel.historySets(selectedSessionIds)
+        }
+    }
+
     Card(
         Modifier.fillMaxWidth()
             .animateContentSize(spring(stiffness = 500f))
             .pointerInput(yearMonth) {
-            var horizontalDistance = 0f
-            detectHorizontalDragGestures(
-                onHorizontalDrag = { change, dragAmount -> change.consume(); horizontalDistance += dragAmount },
-                onDragEnd = {
-                    when {
-                        horizontalDistance > 64f -> month = yearMonth.minusMonths(1).toString()
-                        horizontalDistance < -64f -> month = yearMonth.plusMonths(1).toString()
-                    }
-                },
-            )
-        },
+                var horizontalDistance = 0f
+                detectHorizontalDragGestures(
+                    onHorizontalDrag = { change, dragAmount -> change.consume(); horizontalDistance += dragAmount },
+                    onDragEnd = {
+                        when {
+                            horizontalDistance > 64f -> {
+                                month = yearMonth.minusMonths(1).toString()
+                                selectedDateText = null
+                            }
+                            horizontalDistance < -64f -> {
+                                month = yearMonth.plusMonths(1).toString()
+                                selectedDateText = null
+                            }
+                        }
+                    },
+                )
+            },
     ) {
         AnimatedContent(
             targetState = yearMonth,
@@ -641,30 +673,50 @@ private fun WorkoutCalendar(sessions: List<dev.local.fitlogsolo.data.WorkoutSess
             val workoutDays = sessionDays.filter { YearMonth.from(it) == displayedMonth }.toSet()
             Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { month = displayedMonth.minusMonths(1).toString() }) { Icon(Icons.Default.ChevronLeft, "前の月") }
-                    Text(displayedMonth.format(DateTimeFormatter.ofPattern("yyyy年 M月", Locale.JAPAN)), style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                    IconButton(onClick = { month = displayedMonth.plusMonths(1).toString() }) { Icon(Icons.Default.ChevronRight, "次の月") }
+                    IconButton(onClick = {
+                        month = displayedMonth.minusMonths(1).toString()
+                        selectedDateText = null
+                    }) { Icon(Icons.Default.ChevronLeft, "前の月") }
+                    Text(
+                        displayedMonth.format(DateTimeFormatter.ofPattern("yyyy年 M月", Locale.JAPAN)),
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.weight(1f),
+                    )
+                    IconButton(onClick = {
+                        month = displayedMonth.plusMonths(1).toString()
+                        selectedDateText = null
+                    }) { Icon(Icons.Default.ChevronRight, "次の月") }
                 }
                 Row(Modifier.fillMaxWidth()) {
                     listOf("月", "火", "水", "木", "金", "土", "日").forEach { day ->
                         Text(day, modifier = Modifier.weight(1f), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
-                val leadingBlanks = (displayedMonth.atDay(1).dayOfWeek.value - 1)
+                val leadingBlanks = displayedMonth.atDay(1).dayOfWeek.value - 1
                 val cells = ((leadingBlanks + displayedMonth.lengthOfMonth() + 6) / 7) * 7
                 repeat(cells / 7) { week ->
                     Row(Modifier.fillMaxWidth()) {
                         repeat(7) { column ->
                             val dayNumber = week * 7 + column - leadingBlanks + 1
-                            Box(Modifier.weight(1f).height(34.dp), contentAlignment = Alignment.Center) {
+                            Box(Modifier.weight(1f).height(40.dp), contentAlignment = Alignment.Center) {
                                 if (dayNumber in 1..displayedMonth.lengthOfMonth()) {
                                     val day = displayedMonth.atDay(dayNumber)
+                                    val hasWorkout = day in workoutDays
+                                    val isSelected = day == selectedDate
                                     Surface(
-                                        modifier = Modifier.size(30.dp),
+                                        modifier = Modifier.size(36.dp)
+                                            .clickable(enabled = hasWorkout) { selectedDateText = day.toString() }
+                                            .semantics {
+                                                contentDescription = buildString {
+                                                    append(day.format(DateTimeFormatter.ofPattern("M月d日", Locale.JAPAN)))
+                                                    if (hasWorkout) append("、トレーニング記録あり")
+                                                    if (isSelected) append("、選択中")
+                                                }
+                                            },
                                         shape = MaterialTheme.shapes.large,
                                         color = when {
-                                            day == LocalDate.now() -> MaterialTheme.colorScheme.primary
-                                            day in workoutDays -> MaterialTheme.colorScheme.secondaryContainer
+                                            isSelected || day == LocalDate.now() -> MaterialTheme.colorScheme.primary
+                                            hasWorkout -> MaterialTheme.colorScheme.secondaryContainer
                                             else -> Color.Transparent
                                         },
                                     ) {
@@ -673,8 +725,8 @@ private fun WorkoutCalendar(sessions: List<dev.local.fitlogsolo.data.WorkoutSess
                                                 dayNumber.toString(),
                                                 style = MaterialTheme.typography.bodySmall,
                                                 color = when {
-                                                    day == LocalDate.now() -> MaterialTheme.colorScheme.onPrimary
-                                                    day in workoutDays -> MaterialTheme.colorScheme.onSecondaryContainer
+                                                    isSelected || day == LocalDate.now() -> MaterialTheme.colorScheme.onPrimary
+                                                    hasWorkout -> MaterialTheme.colorScheme.onSecondaryContainer
                                                     else -> MaterialTheme.colorScheme.onSurface
                                                 },
                                             )
@@ -684,6 +736,113 @@ private fun WorkoutCalendar(sessions: List<dev.local.fitlogsolo.data.WorkoutSess
                             }
                         }
                     }
+                }
+
+                if (selectedDate != null) {
+                    Divider(Modifier.padding(top = 8.dp, bottom = 4.dp), color = MaterialTheme.colorScheme.surfaceVariant)
+                    WorkoutHistorySummary(
+                        date = selectedDate,
+                        sessions = selectedSessions,
+                        sets = historySets,
+                        exercises = exercises,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun WorkoutHistorySummary(
+    date: LocalDate,
+    sessions: List<dev.local.fitlogsolo.data.WorkoutSessionEntity>,
+    sets: List<WorkoutSetEntity>?,
+    exercises: List<ExerciseEntity>,
+) {
+    val exerciseById = remember(exercises) { exercises.associateBy { it.id } }
+    val recordedSets = sets.orEmpty().filter { set ->
+        listOf(set.normalWeightKg, set.leftWeightKg, set.rightWeightKg).any { it != null } ||
+            listOf(set.normalReps, set.leftReps, set.rightReps).any { it != null && it > 0 }
+    }
+    val groupedSets = recordedSets.groupBy { it.exerciseId }.toList().sortedWith(
+        compareBy<Pair<Long, List<WorkoutSetEntity>>> { (_, exerciseSets) -> exerciseSets.minOf { it.setOrder } }
+            .thenBy { (exerciseId, _) -> exerciseId },
+    )
+    val recordedSetCount = groupedSets.sumOf { (_, exerciseSets) -> exerciseSets.size }
+    val dateLabel = date.format(DateTimeFormatter.ofPattern("M月d日 (E)", Locale.JAPAN))
+
+    fun performance(weight: Double?, reps: Int?): String =
+        "${weight?.let { "${formatWeight(it)}kg" } ?: "—"} × ${reps?.let { "${it}回" } ?: "—"}"
+
+    Column(
+        Modifier.fillMaxWidth().animateContentSize(spring(stiffness = 500f)),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(dateLabel, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+            Text(
+                when {
+                    sets == null -> "読み込み中"
+                    recordedSetCount == 0 -> "記録なし"
+                    else -> "${groupedSets.size}種目 · ${recordedSetCount}セット"
+                },
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
+        when {
+            sets == null -> Text("記録を読み込んでいます", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            recordedSetCount == 0 -> Text(
+                if (sessions.isEmpty()) "この日の記録はありません" else "この日に完了したセットはありません",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            else -> groupedSets.forEach { (exerciseId, exerciseSets) ->
+                Column(
+                    Modifier.fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f), MaterialTheme.shapes.medium)
+                        .padding(horizontal = 12.dp, vertical = 9.dp),
+                    verticalArrangement = Arrangement.spacedBy(5.dp),
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            exerciseById[exerciseId]?.name ?: "種目",
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Text(
+                            "${exerciseSets.size}セット",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    exerciseSets.sortedWith(compareBy<WorkoutSetEntity> { it.setOrder }.thenBy { it.id })
+                        .forEachIndexed { index, set ->
+                            val normalPerformance = if (set.normalWeightKg != null || set.normalReps != null) {
+                                performance(set.normalWeightKg, set.normalReps)
+                            } else null
+                            val leftPerformance = if (set.leftWeightKg != null || set.leftReps != null) {
+                                "左 ${performance(set.leftWeightKg, set.leftReps)}"
+                            } else null
+                            val rightPerformance = if (set.rightWeightKg != null || set.rightReps != null) {
+                                "右 ${performance(set.rightWeightKg, set.rightReps)}"
+                            } else null
+                            val detail = listOfNotNull(normalPerformance, leftPerformance, rightPerformance)
+                                .joinToString("  ·  ")
+                            if (detail.isNotEmpty()) {
+                                Row(verticalAlignment = Alignment.Top) {
+                                    Text(
+                                        "${index + 1}",
+                                        modifier = Modifier.padding(end = 8.dp),
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                    Text(detail, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                                }
+                            }
+                        }
                 }
             }
         }
