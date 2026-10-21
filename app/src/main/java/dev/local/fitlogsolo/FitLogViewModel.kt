@@ -33,6 +33,8 @@ class FitLogViewModel(
     val routineExerciseIds = workoutPreferences.routineExerciseIds
     val flatModeEnabled = workoutPreferences.flatModeEnabled
     val displayName = workoutPreferences.displayName
+    val weightStepKg = workoutPreferences.weightStepKg
+    val exerciseWeightSteps = workoutPreferences.exerciseWeightSteps
     val gymPresetExerciseIds = workoutPreferences.gymPresetExerciseIds
     val homePresetExerciseIds = workoutPreferences.homePresetExerciseIds
     val presets = workoutPreferences.presets
@@ -97,6 +99,13 @@ class FitLogViewModel(
     fun setFlatModeEnabled(enabled: Boolean) = workoutPreferences.setFlatModeEnabled(enabled)
 
     fun setDisplayName(name: String) = workoutPreferences.setDisplayName(name)
+
+    fun setWeightStepKg(weightStepKg: Double) = workoutPreferences.setWeightStepKg(weightStepKg)
+
+    fun setExerciseWeightStepKg(exerciseId: Long, weightStepKg: Double) =
+        workoutPreferences.setExerciseWeightStepKg(exerciseId, weightStepKg)
+
+    fun resetExerciseWeightStepKg(exerciseId: Long) = workoutPreferences.resetExerciseWeightStepKg(exerciseId)
 
     fun addSet(sessionId: Long, exercise: ExerciseEntity) = viewModelScope.launch {
         repository.addSet(sessionId, exercise)

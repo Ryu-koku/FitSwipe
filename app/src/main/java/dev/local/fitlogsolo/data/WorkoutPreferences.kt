@@ -33,6 +33,16 @@ class WorkoutPreferences(context: Context) {
     private val _displayName = MutableStateFlow(preferences.getString(KEY_DISPLAY_NAME, null) ?: "あなた")
     val displayName: StateFlow<String> = _displayName.asStateFlow()
 
+    private val _weightStepKg = MutableStateFlow(
+        preferences.getString(KEY_WEIGHT_STEP_KG, null)?.toDoubleOrNull()
+            ?.takeIf { it.isFinite() && it in MIN_WEIGHT_STEP_KG..MAX_WEIGHT_STEP_KG }
+            ?: DEFAULT_WEIGHT_STEP_KG,
+    )
+    val weightStepKg: StateFlow<Double> = _weightStepKg.asStateFlow()
+
+    private val _exerciseWeightSteps = MutableStateFlow(readExerciseWeightSteps())
+    val exerciseWeightSteps: StateFlow<Map<Long, Double>> = _exerciseWeightSteps.asStateFlow()
+
     private val _gymPresetExerciseIds = MutableStateFlow(readIds(KEY_GYM_PRESET))
     val gymPresetExerciseIds: StateFlow<List<Long>> = _gymPresetExerciseIds.asStateFlow()
 
@@ -60,6 +70,27 @@ class WorkoutPreferences(context: Context) {
         val updated = name.trim().ifEmpty { "あなた" }.take(24)
         preferences.edit().putString(KEY_DISPLAY_NAME, updated).apply()
         _displayName.value = updated
+    }
+
+    fun setWeightStepKg(weightStepKg: Double) {
+        if (!weightStepKg.isFinite() || weightStepKg !in MIN_WEIGHT_STEP_KG..MAX_WEIGHT_STEP_KG) return
+        val updated = (kotlin.math.round(weightStepKg * 100.0) / 100.0).coerceAtLeast(MIN_WEIGHT_STEP_KG)
+        preferences.edit().putString(KEY_WEIGHT_STEP_KG, updated.toString()).apply()
+        _weightStepKg.value = updated
+    }
+
+    fun setExerciseWeightStepKg(exerciseId: Long, weightStepKg: Double) {
+        if (!weightStepKg.isFinite() || weightStepKg !in MIN_WEIGHT_STEP_KG..MAX_WEIGHT_STEP_KG) return
+        val updated = (kotlin.math.round(weightStepKg * 100.0) / 100.0).coerceAtLeast(MIN_WEIGHT_STEP_KG)
+        val steps = _exerciseWeightSteps.value + (exerciseId to updated)
+        preferences.edit().putString(KEY_EXERCISE_WEIGHT_STEPS, encodeExerciseWeightSteps(steps)).apply()
+        _exerciseWeightSteps.value = steps
+    }
+
+    fun resetExerciseWeightStepKg(exerciseId: Long) {
+        val steps = _exerciseWeightSteps.value - exerciseId
+        preferences.edit().putString(KEY_EXERCISE_WEIGHT_STEPS, encodeExerciseWeightSteps(steps)).apply()
+        _exerciseWeightSteps.value = steps
     }
 
     fun togglePresetExercise(gym: Boolean, exerciseId: Long) {
@@ -110,6 +141,22 @@ class WorkoutPreferences(context: Context) {
         ?.mapNotNull(String::toLongOrNull)
         .orEmpty()
 
+    private fun readExerciseWeightSteps(): Map<Long, Double> {
+        val value = preferences.getString(KEY_EXERCISE_WEIGHT_STEPS, null) ?: return emptyMap()
+        return runCatching {
+            val json = JSONObject(value)
+            json.keys().asSequence().mapNotNull { key ->
+                val exerciseId = key.toLongOrNull() ?: return@mapNotNull null
+                val step = json.optDouble(key, Double.NaN)
+                if (step.isFinite() && step in MIN_WEIGHT_STEP_KG..MAX_WEIGHT_STEP_KG) exerciseId to step else null
+            }.toMap()
+        }.getOrDefault(emptyMap())
+    }
+
+    private fun encodeExerciseWeightSteps(steps: Map<Long, Double>): String = JSONObject().apply {
+        steps.forEach { (exerciseId, step) -> put(exerciseId.toString(), step) }
+    }.toString()
+
     private fun readPresets(): List<WorkoutPreset> = runCatching {
         val json = preferences.getString(KEY_PRESETS, null) ?: return emptyList()
         val array = JSONArray(json)
@@ -152,6 +199,11 @@ class WorkoutPreferences(context: Context) {
         const val KEY_ROUTINE_EXERCISES = "routine_exercise_ids"
         const val KEY_FLAT_MODE = "flat_mode_enabled"
         const val KEY_DISPLAY_NAME = "display_name"
+        const val KEY_WEIGHT_STEP_KG = "weight_step_kg"
+        const val KEY_EXERCISE_WEIGHT_STEPS = "exercise_weight_steps"
+        const val DEFAULT_WEIGHT_STEP_KG = 1.0
+        const val MIN_WEIGHT_STEP_KG = 0.01
+        const val MAX_WEIGHT_STEP_KG = 1000.0
         const val KEY_GYM_PRESET = "gym_preset_exercise_ids"
         const val KEY_HOME_PRESET = "home_preset_exercise_ids"
         const val KEY_DEFAULT_PRESETS_INITIALIZED = "default_presets_initialized"

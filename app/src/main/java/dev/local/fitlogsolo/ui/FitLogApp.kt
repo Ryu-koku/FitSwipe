@@ -226,6 +226,8 @@ private fun FitLogAppContent(
     val routineExerciseIds by viewModel.routineExerciseIds.collectAsStateWithLifecycle()
     val flatModeEnabled by viewModel.flatModeEnabled.collectAsStateWithLifecycle()
     val displayName by viewModel.displayName.collectAsStateWithLifecycle()
+    val weightStepKg by viewModel.weightStepKg.collectAsStateWithLifecycle()
+    val exerciseWeightSteps by viewModel.exerciseWeightSteps.collectAsStateWithLifecycle()
     val presets by viewModel.presets.collectAsStateWithLifecycle()
     val message by viewModel.message.collectAsStateWithLifecycle()
     val snackbar = SnackbarHostState()
@@ -356,7 +358,12 @@ private fun FitLogAppContent(
                         onAddExercise = { showAddExercise = true },
                         flatModeEnabled = flatModeEnabled,
                         displayName = displayName,
+                        weightStepKg = weightStepKg,
+                        exerciseWeightSteps = exerciseWeightSteps,
                         onDisplayNameChange = viewModel::setDisplayName,
+                        onWeightStepKgChange = viewModel::setWeightStepKg,
+                        onExerciseWeightStepChange = viewModel::setExerciseWeightStepKg,
+                        onResetExerciseWeightStep = viewModel::resetExerciseWeightStepKg,
                         onFlatModeEnabledChange = viewModel::setFlatModeEnabled,
                     )
                     MainScreen.HOME -> RecordScreen(
@@ -369,6 +376,8 @@ private fun FitLogAppContent(
                         presetExerciseOrder = presetExerciseOrder.split(',').mapNotNull(String::toLongOrNull),
                         selectedExercise = selectedExercise,
                         restEndsAtMillis = restEndsAtMillis,
+                        weightStepKg = weightStepKg,
+                        exerciseWeightSteps = exerciseWeightSteps,
                         onStartPreset = { preset ->
                             startWorkoutWithBackgroundAlerts {
                                 viewModel.startPreset(preset) { _, exerciseIds ->
@@ -468,6 +477,8 @@ private fun RecordScreen(
     presetExerciseOrder: List<Long>,
     selectedExercise: ExerciseEntity?,
     restEndsAtMillis: Long,
+    weightStepKg: Double,
+    exerciseWeightSteps: Map<Long, Double>,
     onStartPreset: (WorkoutPreset) -> Unit,
     onSelectExercise: (ExerciseEntity) -> Unit,
     onToggleRoutineExercise: (Long) -> Unit,
@@ -504,6 +515,8 @@ private fun RecordScreen(
                 allSessionSets = sessionSets,
                 exerciseOrderIds = presetExerciseOrder,
                 restEndsAtMillis = restEndsAtMillis,
+                weightStepKg = weightStepKg,
+                exerciseWeightSteps = exerciseWeightSteps,
                 onSetCompleted = onSetCompleted,
                 onSkipRest = onSkipRest,
                 onBack = onBack,
@@ -710,6 +723,8 @@ private fun ExerciseEditor(
     allSessionSets: List<WorkoutSetEntity>,
     exerciseOrderIds: List<Long>,
     restEndsAtMillis: Long,
+    weightStepKg: Double,
+    exerciseWeightSteps: Map<Long, Double>,
     onSetCompleted: () -> Unit,
     onSkipRest: () -> Unit,
     onBack: () -> Unit,
@@ -854,6 +869,8 @@ private fun ExerciseEditor(
                         set = scene.set,
                         totalSets = scene.totalSets,
                         enabled = scene.enabled,
+                        weightStepKg = exerciseWeightSteps[scene.exercise.id]
+                            ?: weightStepKg,
                         onUpdate = viewModel::updateSet,
                         onAdvance = { if (currentSet?.id == scene.set.id) advance(scene.set) },
                         onSkip = { if (currentSet?.id == scene.set.id) skip(scene.set) },
@@ -948,6 +965,7 @@ private fun SetEditorCard(
     set: WorkoutSetEntity,
     totalSets: Int,
     enabled: Boolean,
+    weightStepKg: Double,
     onUpdate: (WorkoutSetEntity) -> Unit,
     onAdvance: () -> Unit,
     onSkip: () -> Unit,
@@ -1132,9 +1150,11 @@ private fun SetEditorCard(
                     Column(Modifier.fillMaxSize()) {
                         Row(Modifier.weight(1f).fillMaxWidth()) {
                             InvisibleTapZone(
-                                description = "重量を2.5キログラム増やす",
+                                description = "重量を${formatWeight(weightStepKg)}キログラム増やす",
                                 enabled = enabled,
-                                onClick = { onUpdate(set.copy(normalWeightKg = (set.normalWeightKg ?: 0.0) + 2.5)) },
+                                onClick = {
+                                    onUpdate(set.copy(normalWeightKg = adjustWeight(set.normalWeightKg, weightStepKg, increase = true)))
+                                },
                                 modifier = Modifier.weight(1f).fillMaxHeight(),
                             )
                             InvisibleTapZone(
@@ -1146,9 +1166,11 @@ private fun SetEditorCard(
                         }
                         Row(Modifier.weight(1f).fillMaxWidth()) {
                             InvisibleTapZone(
-                                description = "重量を2.5キログラム減らす",
-                                enabled = enabled && (set.normalWeightKg ?: 0.0) >= 2.5,
-                                onClick = { onUpdate(set.copy(normalWeightKg = ((set.normalWeightKg ?: 0.0) - 2.5).coerceAtLeast(0.0))) },
+                                description = "重量を${formatWeight(weightStepKg)}キログラム減らす",
+                                enabled = enabled && (set.normalWeightKg ?: 0.0) > 0.0,
+                                onClick = {
+                                    onUpdate(set.copy(normalWeightKg = adjustWeight(set.normalWeightKg, weightStepKg, increase = false)))
+                                },
                                 modifier = Modifier.weight(1f).fillMaxHeight(),
                             )
                             InvisibleTapZone(
@@ -1163,10 +1185,10 @@ private fun SetEditorCard(
             } else {
                 Column(Modifier.weight(1f).fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    BilateralTapControls("左", set.leftWeightKg, set.leftReps, enabled, Modifier.weight(1f)) { weight, reps ->
+                    BilateralTapControls("左", set.leftWeightKg, set.leftReps, enabled, weightStepKg, Modifier.weight(1f)) { weight, reps ->
                         onUpdate(set.copy(leftWeightKg = weight, leftReps = reps))
                     }
-                    BilateralTapControls("右", set.rightWeightKg, set.rightReps, enabled, Modifier.weight(1f)) { weight, reps ->
+                    BilateralTapControls("右", set.rightWeightKg, set.rightReps, enabled, weightStepKg, Modifier.weight(1f)) { weight, reps ->
                         onUpdate(set.copy(rightWeightKg = weight, rightReps = reps))
                     }
                 }
@@ -1235,6 +1257,7 @@ private fun BilateralTapControls(
     weightKg: Double?,
     reps: Int?,
     enabled: Boolean,
+    weightStepKg: Double,
     modifier: Modifier = Modifier,
     onChange: (Double, Int) -> Unit,
 ) {
@@ -1261,9 +1284,9 @@ private fun BilateralTapControls(
             Column(Modifier.fillMaxSize()) {
                 Row(Modifier.weight(1f).fillMaxWidth()) {
                     InvisibleTapZone(
-                        description = "${side}側の重量を2.5キログラム増やす",
+                        description = "${side}側の重量を${formatWeight(weightStepKg)}キログラム増やす",
                         enabled = enabled,
-                        onClick = { onChange((weightKg ?: 0.0) + 2.5, reps ?: 0) },
+                        onClick = { onChange(adjustWeight(weightKg, weightStepKg, increase = true), reps ?: 0) },
                         modifier = Modifier.weight(1f).fillMaxHeight(),
                     )
                     InvisibleTapZone(
@@ -1275,9 +1298,9 @@ private fun BilateralTapControls(
                 }
                 Row(Modifier.weight(1f).fillMaxWidth()) {
                     InvisibleTapZone(
-                        description = "${side}側の重量を2.5キログラム減らす",
-                        enabled = enabled && (weightKg ?: 0.0) >= 2.5,
-                        onClick = { onChange(((weightKg ?: 0.0) - 2.5).coerceAtLeast(0.0), reps ?: 0) },
+                        description = "${side}側の重量を${formatWeight(weightStepKg)}キログラム減らす",
+                        enabled = enabled && (weightKg ?: 0.0) > 0.0,
+                        onClick = { onChange(adjustWeight(weightKg, weightStepKg, increase = false), reps ?: 0) },
                         modifier = Modifier.weight(1f).fillMaxHeight(),
                     )
                     InvisibleTapZone(
@@ -1294,6 +1317,13 @@ private fun BilateralTapControls(
 
 private fun formatWeight(weightKg: Double): String =
     BigDecimal.valueOf(weightKg).stripTrailingZeros().toPlainString()
+
+private fun adjustWeight(weightKg: Double?, stepKg: Double, increase: Boolean): Double {
+    val current = BigDecimal.valueOf(weightKg ?: 0.0)
+    val step = BigDecimal.valueOf(stepKg)
+    val updated = if (increase) current.add(step) else current.subtract(step)
+    return updated.max(BigDecimal.ZERO).stripTrailingZeros().toDouble()
+}
 
 @Composable
 private fun RestTimerCard(
@@ -1555,15 +1585,29 @@ private fun SettingsScreen(
     onAddExercise: () -> Unit,
     flatModeEnabled: Boolean,
     displayName: String,
+    weightStepKg: Double,
+    exerciseWeightSteps: Map<Long, Double>,
     onDisplayNameChange: (String) -> Unit,
+    onWeightStepKgChange: (Double) -> Unit,
+    onExerciseWeightStepChange: (Long, Double) -> Unit,
+    onResetExerciseWeightStep: (Long) -> Unit,
     onFlatModeEnabledChange: (Boolean) -> Unit,
 ) {
     val routineExerciseIds by viewModel.routineExerciseIds.collectAsStateWithLifecycle()
     var displayNameDraft by rememberSaveable { mutableStateOf(displayName) }
+    var weightStepDraft by rememberSaveable { mutableStateOf(weightStepKg.toInput()) }
+    var editingWeightStepExerciseId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var exerciseWeightStepDraft by rememberSaveable { mutableStateOf("") }
     var editingPresetId by rememberSaveable { mutableStateOf<String?>(null) }
     var showAddPreset by rememberSaveable { mutableStateOf(false) }
     var newPresetName by rememberSaveable { mutableStateOf("") }
     LaunchedEffect(displayName) { displayNameDraft = displayName }
+    LaunchedEffect(weightStepKg) { weightStepDraft = weightStepKg.toInput() }
+    val parsedWeightStep = weightStepDraft.toDoubleOrNull()
+        ?.takeIf { it.isFinite() && it in 0.01..1_000.0 }
+    val editingWeightStepExercise = editingWeightStepExerciseId?.let { id -> exercises.firstOrNull { it.id == id } }
+    val parsedExerciseWeightStep = exerciseWeightStepDraft.toDoubleOrNull()
+        ?.takeIf { it.isFinite() && it in 0.01..1_000.0 }
     LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Text("表示名", style = MaterialTheme.typography.titleLarge) }
         item {
@@ -1580,6 +1624,39 @@ private fun SettingsScreen(
                     enabled = displayNameDraft.trim().isNotEmpty() && displayNameDraft.trim() != displayName,
                 ) { Text("保存") }
             }
+        }
+        item { Text("基本の重量増減幅", style = MaterialTheme.typography.titleLarge) }
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = weightStepDraft,
+                    onValueChange = { input ->
+                        val normalized = input.replace(',', '.')
+                        if (normalized.length <= 7 &&
+                            normalized.count { it == '.' } <= 1 &&
+                            normalized.all { it.isDigit() || it == '.' } &&
+                            normalized.substringAfter('.', "").length <= 2
+                        ) {
+                            weightStepDraft = normalized
+                        }
+                    },
+                    label = { Text("1タップあたり（kg）") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.weight(1f),
+                )
+                Button(
+                    onClick = { parsedWeightStep?.let(onWeightStepKgChange) },
+                    enabled = parsedWeightStep != null && parsedWeightStep != weightStepKg,
+                ) { Text("保存") }
+            }
+        }
+        item {
+            Text(
+                "すべての種目に適用します。種目ごとの設定がある場合はそちらを使います。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
         item { Text("プリセット", style = MaterialTheme.typography.titleLarge) }
         items(presets, key = { "preset-${it.id}" }) { preset ->
@@ -1604,16 +1681,28 @@ private fun SettingsScreen(
         items(exercises, key = { it.id }) { exercise ->
             var editing by rememberSaveable(exercise.id) { mutableStateOf(false) }
             var name by rememberSaveable(exercise.id) { mutableStateOf(exercise.name) }
+            val exerciseStepKg = exerciseWeightSteps[exercise.id]
+                ?: weightStepKg
             Card(Modifier.fillMaxWidth()) {
                 Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                     if (editing) {
                         OutlinedTextField(name, { name = it }, modifier = Modifier.weight(1f), singleLine = true)
                         IconButton(onClick = { viewModel.renameExercise(exercise, name); editing = false }) { Icon(Icons.Default.Check, "保存") }
                     } else {
-                        Column(Modifier.weight(1f)) { Text(exercise.name); Text(if (exercise.mode == ExerciseMode.NORMAL) "通常" else "左右別", style = MaterialTheme.typography.bodySmall) }
+                        Column(Modifier.weight(1f)) {
+                            Text(exercise.name)
+                            Text(
+                                "${if (exercise.mode == ExerciseMode.NORMAL) "通常" else "左右別"}・${formatWeight(exerciseStepKg)}kg刻み",
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
                         IconButton(onClick = { viewModel.toggleRoutineExercise(exercise.id) }) {
                             Text(if (exercise.id in routineExerciseIds) "★" else "☆")
                         }
+                        IconButton(onClick = {
+                            editingWeightStepExerciseId = exercise.id
+                            exerciseWeightStepDraft = exerciseStepKg.toInput()
+                        }) { Icon(Icons.Default.Settings, "重量の刻み幅を設定") }
                         IconButton(onClick = { editing = true }) { Icon(Icons.Default.Edit, "名前を変更") }
                         IconButton(onClick = { viewModel.archiveExercise(exercise) }) { Icon(Icons.Default.Delete, "非表示") }
                     }
@@ -1631,6 +1720,51 @@ private fun SettingsScreen(
             }
         }
         item { Text("このアプリは筋トレ記録を端末内に保存し、外部へ送信しません。", style = MaterialTheme.typography.bodySmall) }
+    }
+    editingWeightStepExercise?.let { exercise ->
+        AlertDialog(
+            onDismissRequest = { editingWeightStepExerciseId = null },
+            title = { Text("${exercise.name}の刻み幅") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = exerciseWeightStepDraft,
+                        onValueChange = { input ->
+                            val normalized = input.replace(',', '.')
+                            if (normalized.length <= 7 &&
+                                normalized.count { it == '.' } <= 1 &&
+                                normalized.all { it.isDigit() || it == '.' } &&
+                                normalized.substringAfter('.', "").length <= 2
+                            ) {
+                                exerciseWeightStepDraft = normalized
+                            }
+                        },
+                        label = { Text("1タップあたり（kg）") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    )
+                    Text("マシンやプレートの実際の刻みに合わせて設定できます。")
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = parsedExerciseWeightStep != null,
+                    onClick = {
+                        parsedExerciseWeightStep?.let { onExerciseWeightStepChange(exercise.id, it) }
+                        editingWeightStepExerciseId = null
+                    },
+                ) { Text("保存") }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = {
+                        onResetExerciseWeightStep(exercise.id)
+                        editingWeightStepExerciseId = null
+                    }) { Text("基本設定に戻す") }
+                    TextButton(onClick = { editingWeightStepExerciseId = null }) { Text("キャンセル") }
+                }
+            },
+        )
     }
     if (showAddPreset) {
         AlertDialog(
