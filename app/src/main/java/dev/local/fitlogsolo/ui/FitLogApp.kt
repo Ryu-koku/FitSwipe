@@ -72,11 +72,13 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FitnessCenter
+import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Divider
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -108,6 +110,7 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -432,6 +435,7 @@ private fun FitLogAppContent(
                         completedSessions = sessions,
                         presetExerciseOrder = presetExerciseOrder.split(',').mapNotNull(String::toLongOrNull),
                         selectedExercise = selectedExercise,
+                        onExerciseOrderChange = { ids -> presetExerciseOrder = ids.joinToString(",") },
                         restEndsAtMillis = restEndsAtMillis,
                         weightStepKg = weightStepKg,
                         exerciseWeightSteps = exerciseWeightSteps,
@@ -540,6 +544,7 @@ private fun RecordScreen(
     completedSessions: List<dev.local.fitlogsolo.data.WorkoutSessionEntity>,
     presetExerciseOrder: List<Long>,
     selectedExercise: ExerciseEntity?,
+    onExerciseOrderChange: (List<Long>) -> Unit,
     restEndsAtMillis: Long,
     weightStepKg: Double,
     exerciseWeightSteps: Map<Long, Double>,
@@ -579,9 +584,10 @@ private fun RecordScreen(
                 viewModel = viewModel,
                 sessionId = editorRoute.first,
                 exercise = editorExercise,
-                allExercises = exercises,
+                allExercises = allExercises,
                 allSessionSets = sessionSets,
                 exerciseOrderIds = presetExerciseOrder,
+                onExerciseOrderChange = onExerciseOrderChange,
                 restEndsAtMillis = restEndsAtMillis,
                 weightStepKg = weightStepKg,
                 exerciseWeightSteps = exerciseWeightSteps,
@@ -967,6 +973,7 @@ private fun ExerciseEditor(
     allExercises: List<ExerciseEntity>,
     allSessionSets: List<WorkoutSetEntity>,
     exerciseOrderIds: List<Long>,
+    onExerciseOrderChange: (List<Long>) -> Unit,
     restEndsAtMillis: Long,
     weightStepKg: Double,
     exerciseWeightSteps: Map<Long, Double>,
@@ -1011,7 +1018,7 @@ private fun ExerciseEditor(
         else -> firstSide
     }
     val activeSide = currentSide.takeIf { exercise.mode == ExerciseMode.BILATERAL }
-    var restStackCard by remember(sessionId) { mutableStateOf<WorkoutCardRef?>(null) }
+    var showExerciseOrder by rememberSaveable(sessionId) { mutableStateOf(false) }
     // Keep the outgoing card on screen while Compose/Room switches to the next exercise query.
     // The exercise-specific flow briefly emits an empty list during that handoff.
     var lastVisibleCard by androidx.compose.runtime.remember(sessionId) {
@@ -1021,7 +1028,24 @@ private fun ExerciseEditor(
         if (currentSet != null) lastVisibleCard = WorkoutCardRef(exercise, currentSet, activeSide)
     }
     val displayedCard = currentSet?.let { WorkoutCardRef(exercise, it, activeSide) } ?: lastVisibleCard
-    val orderedIds = exerciseOrderIds.ifEmpty { allSessionSets.map { it.exerciseId }.distinct() }
+    val sessionExerciseIds = allSessionSets.map { it.exerciseId }.distinct()
+    val orderedIds = exerciseOrderIds.filter { it in sessionExerciseIds }.distinct() +
+        sessionExerciseIds.filterNot { it in exerciseOrderIds }
+    val completedExerciseIds = allSessionSets.groupBy { it.exerciseId }
+        .filterValues { setsForExercise -> setsForExercise.isNotEmpty() && setsForExercise.all { it.isCompleted } }
+        .keys
+    val upcomingExerciseIds = orderedIds.filter { it != exercise.id && it !in completedExerciseIds }
+    val progressUnits = allSessionSets.sumOf { set ->
+        if (allExercises.firstOrNull { it.id == set.exerciseId }?.mode == ExerciseMode.BILATERAL) 2L else 1L
+    }
+    val completedProgressUnits = allSessionSets.sumOf { set ->
+        if (allExercises.firstOrNull { it.id == set.exerciseId }?.mode == ExerciseMode.BILATERAL) {
+            if (set.isCompleted) 2L else (if (set.leftCompleted) 1L else 0L) + (if (set.rightCompleted) 1L else 0L)
+        } else {
+            if (set.isCompleted) 1L else 0L
+        }
+    }
+    val progress = if (progressUnits > 0) completedProgressUnits.toFloat() / progressUnits else 0f
     val nextSetInExercise = currentSet?.let { current ->
         exerciseSets.filter { it.setOrder > current.setOrder && !it.isCompleted }
             .minByOrNull { it.setOrder }
@@ -1062,21 +1086,6 @@ private fun ExerciseEditor(
         else -> null
     }
     val effectiveRestSeconds = exerciseRestDurations[exercise.id] ?: restDurationSeconds
-    val restWillFollowCurrentCard = if (activeSide != null && !otherSideCompleted) {
-        exercise.id in sideSwitchRestExerciseIds
-    } else {
-        nextSetInExercise != null
-    }
-    val showRestPreview = restEndsAtMillis <= 0L && restWillFollowCurrentCard
-    var restPreviewDragOffset by remember(displayedCard?.set?.id, displayedCard?.side) {
-        mutableStateOf(Offset.Zero)
-    }
-    val cardBehind = when {
-        restEndsAtMillis > 0L -> restStackCard ?: upcomingCard
-        restWillFollowCurrentCard -> null
-        else -> upcomingCard
-    }
-    var dismissRestStack by remember(restEndsAtMillis) { mutableStateOf(false) }
     val cardScene = when {
         restEndsAtMillis > 0L && currentSet != null -> EditorCardScene(
             key = "rest:$restEndsAtMillis",
@@ -1120,7 +1129,6 @@ private fun ExerciseEditor(
                 viewModel.updateSet(updated)
                 currentSideName = otherSide?.name ?: firstSide.name
                 if (exercise.id in sideSwitchRestExerciseIds) {
-                    restStackCard = WorkoutCardRef(exercise, set, activeSide)
                     onSetCompleted(effectiveRestSeconds)
                 }
                 return
@@ -1130,7 +1138,6 @@ private fun ExerciseEditor(
             viewModel.updateSet(set.copy(isCompleted = true))
         }
         if (upcomingCard?.exercise?.id == exercise.id) {
-            restStackCard = WorkoutCardRef(exercise, set, activeSide)
             onSetCompleted(effectiveRestSeconds)
         }
         proceedFrom(set)
@@ -1160,41 +1167,28 @@ private fun ExerciseEditor(
         proceedFrom(set)
     }
 
-    Column(Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 4.dp)) {
-        Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-            if (showRestPreview) {
-                RestTimerPreviewCard(
-                    restSeconds = effectiveRestSeconds,
-                    swipeOffset = restPreviewDragOffset,
-                )
-            } else if (cardBehind != null) {
-                androidx.compose.runtime.key(cardBehind.set.id, cardBehind.side, restEndsAtMillis > 0L) {
-                    UpcomingSetPreviewCard(
-                        exercise = cardBehind.exercise,
-                        set = cardBehind.set,
-                        side = cardBehind.side,
-                        totalSets = allSessionSets.count { it.exerciseId == cardBehind.exercise.id }
-                            .coerceAtLeast(cardBehind.set.setOrder + 1),
-                        restCardActive = restEndsAtMillis > 0L,
-                        dismissWithRest = dismissRestStack,
-                    )
-                }
+    BackHandler(enabled = showExerciseOrder) { showExerciseOrder = false }
+    if (showExerciseOrder) {
+        WorkoutExerciseOrderScreen(
+            exerciseOrderIds = orderedIds,
+            upcomingExerciseIds = upcomingExerciseIds,
+            completedExerciseIds = completedExerciseIds,
+            currentExerciseId = exercise.id,
+            exercises = allExercises,
+            onReorder = onExerciseOrderChange,
+            onClose = { showExerciseOrder = false },
+        )
+    } else {
+        Column(Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 4.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                WorkoutProgressButton(progress = progress) { showExerciseOrder = true }
             }
+            Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
             AnimatedContent(
                 targetState = cardScene,
                 contentKey = { it?.key },
                 transitionSpec = {
-                    val promotesVisibleBackCard = targetState?.key?.startsWith("set:") == true &&
-                        (initialState?.key?.startsWith("set:") == true || initialState?.key?.startsWith("rest:") == true)
-                    val promotesRestPreview = targetState?.key?.startsWith("rest:") == true &&
-                        initialState?.key?.startsWith("set:") == true
-                    if (promotesVisibleBackCard || promotesRestPreview) {
-                        androidx.compose.animation.EnterTransition.None togetherWith
-                            androidx.compose.animation.ExitTransition.None
-                    } else {
-                        (slideInHorizontally(tween(320)) { width -> width / 4 } + fadeIn(tween(240))) togetherWith
-                            fadeOut(tween(180))
-                    }
+                    fadeIn(tween(180)) togetherWith fadeOut(tween(120))
                 },
                 modifier = Modifier.fillMaxSize().padding(horizontal = 4.dp),
                 contentAlignment = Alignment.Center,
@@ -1204,9 +1198,7 @@ private fun ExerciseEditor(
                     scene == null -> Unit
                     scene.restEndsAtMillis > 0L -> RestTimerCard(
                         restEndsAtMillis = scene.restEndsAtMillis,
-                        onSkipRestStarted = { dismissRestStack = true },
                         onSkipRest = {
-                            restStackCard = null
                             onSkipRest()
                         },
                     )
@@ -1221,11 +1213,180 @@ private fun ExerciseEditor(
                         onUpdate = viewModel::updateSet,
                         onAdvance = { if (currentSet?.id == scene.set.id) advance(scene.set) },
                         onSkip = { if (currentSet?.id == scene.set.id) skip(scene.set) },
-                        onSwipeOffsetChanged = { offset, skipping ->
-                            restPreviewDragOffset = if (skipping == true) offset else Offset.Zero
-                        },
+                        onSwipeOffsetChanged = { _, _ -> },
                     )
                 }
+            }
+        }
+        }
+    }
+}
+
+@Composable
+private fun WorkoutProgressButton(progress: Float, onClick: () -> Unit) {
+    Box(
+        Modifier.padding(vertical = 4.dp)
+            .size(52.dp)
+            .clickable(onClick = onClick)
+            .semantics { contentDescription = "トレーニング全体の進捗。タップして種目の順番を変更" },
+        contentAlignment = Alignment.Center,
+    ) {
+        CircularProgressIndicator(
+            progress = { progress.coerceIn(0f, 1f) },
+            modifier = Modifier.fillMaxSize().padding(3.dp),
+            color = MaterialTheme.colorScheme.primary,
+            trackColor = MaterialTheme.colorScheme.surfaceVariant,
+            strokeWidth = 3.dp,
+        )
+        Icon(
+            Icons.Default.Layers,
+            contentDescription = null,
+            modifier = Modifier.size(22.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun WorkoutExerciseOrderScreen(
+    exerciseOrderIds: List<Long>,
+    upcomingExerciseIds: List<Long>,
+    completedExerciseIds: Set<Long>,
+    currentExerciseId: Long,
+    exercises: List<ExerciseEntity>,
+    onReorder: (List<Long>) -> Unit,
+    onClose: () -> Unit,
+) {
+    val exerciseById = remember(exercises) { exercises.associateBy { it.id } }
+    val latestOrder by rememberUpdatedState(exerciseOrderIds)
+    val latestUpcoming by rememberUpdatedState(upcomingExerciseIds)
+    val completedOrder = exerciseOrderIds.filter { it in completedExerciseIds && it != currentExerciseId }
+    val displayOrder = listOf(currentExerciseId) + upcomingExerciseIds + completedOrder
+    val rowPitchPx = with(LocalDensity.current) { 76.dp.toPx() }
+    var draggedExerciseId by remember { mutableStateOf<Long?>(null) }
+
+    Column(
+        Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onClose) { Icon(Icons.Default.Close, contentDescription = "閉じる") }
+            Text("種目の順番", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        }
+        Text(
+            "完了済みと進行中は固定",
+            Modifier.padding(start = 12.dp),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Column(
+            Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            displayOrder.forEach { exerciseId ->
+                val name = exerciseById[exerciseId]?.name ?: "種目"
+                val isCurrent = exerciseId == currentExerciseId
+                val isCompleted = exerciseId in completedExerciseIds
+                val isDraggable = !isCurrent && !isCompleted
+                val isDragged = draggedExerciseId == exerciseId
+                Card(
+                    Modifier.fillMaxWidth().height(68.dp).graphicsLayer {
+                        scaleX = if (isDragged) 1.025f else 1f
+                        scaleY = if (isDragged) 1.025f else 1f
+                    },
+                    elevation = CardDefaults.cardElevation(defaultElevation = if (isDragged) 8.dp else 1.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (isCurrent) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+                    ),
+                ) {
+                    Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
+                        if (isDraggable) {
+                            Box(
+                                Modifier.size(width = 56.dp, height = 68.dp)
+                                    .pointerInput(exerciseId) {
+                                        var startIndex = -1
+                                        var draggedDistance = 0f
+                                        detectDragGesturesAfterLongPress(
+                                            onDragStart = {
+                                                startIndex = latestUpcoming.indexOf(exerciseId)
+                                                draggedDistance = 0f
+                                                draggedExerciseId = exerciseId
+                                            },
+                                            onDrag = { change, amount ->
+                                                change.consume()
+                                                draggedDistance += amount.y
+                                                val currentUpcoming = latestUpcoming
+                                                val currentIndex = currentUpcoming.indexOf(exerciseId)
+                                                if (startIndex >= 0 && currentIndex >= 0 && currentUpcoming.isNotEmpty()) {
+                                                    val targetIndex = (startIndex + (draggedDistance / rowPitchPx).roundToInt())
+                                                        .coerceIn(0, currentUpcoming.lastIndex)
+                                                    if (targetIndex != currentIndex) {
+                                                        val reorderedUpcoming = currentUpcoming.toMutableList().apply {
+                                                            add(targetIndex, removeAt(currentIndex))
+                                                        }
+                                                        val latestCompleted = latestOrder.filter {
+                                                            it in completedExerciseIds && it != currentExerciseId
+                                                        }
+                                                        val reorderedAll = listOf(currentExerciseId) +
+                                                            reorderedUpcoming + latestCompleted
+                                                        onReorder(reorderedAll)
+                                                    }
+                                                }
+                                            },
+                                            onDragEnd = { draggedExerciseId = null },
+                                            onDragCancel = { draggedExerciseId = null },
+                                        )
+                                    }
+                                    .semantics { contentDescription = "$name、長押しして並べ替え" },
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(
+                                    "☷",
+                                    style = MaterialTheme.typography.headlineSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        } else {
+                            Text(
+                                if (isCurrent) "●" else "✓",
+                                Modifier.size(width = 56.dp, height = 68.dp),
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                color = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.titleMedium,
+                            )
+                        }
+                        Text(
+                            name,
+                            Modifier.weight(1f),
+                            style = MaterialTheme.typography.titleMedium,
+                            color = if (isCompleted) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+                        )
+                        if (isCurrent) {
+                            Text(
+                                "進行中",
+                                Modifier.padding(horizontal = 14.dp),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        } else if (isCompleted) {
+                            Text(
+                                "完了",
+                                Modifier.padding(horizontal = 14.dp),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+            }
+            if (upcomingExerciseIds.isEmpty()) {
+                Text(
+                    "並べ替えできる種目はありません",
+                    Modifier.fillMaxWidth().padding(vertical = 16.dp),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                )
             }
         }
     }
@@ -1914,7 +2075,6 @@ private fun adjustWeight(weightKg: Double?, stepKg: Double, increase: Boolean): 
 @Composable
 private fun RestTimerCard(
     restEndsAtMillis: Long,
-    onSkipRestStarted: () -> Unit,
     onSkipRest: () -> Unit,
 ) {
     val remainingSeconds by produceState(
@@ -1937,10 +2097,9 @@ private fun RestTimerCard(
         androidx.compose.runtime.mutableStateOf(false)
     }
     val animationScope = rememberCoroutineScope()
-    fun dismissTo(targetX: Float, targetY: Float, dismissStack: Boolean) {
+    fun dismissTo(targetX: Float, targetY: Float) {
         if (isDismissing) return
         isDismissing = true
-        if (dismissStack) onSkipRestStarted()
         animationScope.launch {
             coroutineScope {
                 launch {
@@ -1979,7 +2138,7 @@ private fun RestTimerCard(
                             val scale = exitDistance / distance.coerceAtLeast(1f)
                             val targetX = dragX * scale
                             val targetY = dragY * scale
-                            dismissTo(targetX, targetY, dismissStack = false)
+                            dismissTo(targetX, targetY)
                         } else {
                             animationScope.launch {
                                 coroutineScope {
@@ -2110,7 +2269,7 @@ private fun RestTimerCard(
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             )
             TextButton(onClick = {
-                dismissTo(-cardWidthPx * 1.25f, 0f, dismissStack = true)
+                dismissTo(-cardWidthPx * 1.25f, 0f)
             }) {
                 Text("スキップ", color = Color.White)
             }
