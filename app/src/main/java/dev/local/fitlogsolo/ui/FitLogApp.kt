@@ -258,7 +258,7 @@ private val FitLogColors = lightColorScheme(
     onTertiary = Color(0xFF193039),
     tertiaryContainer = Color(0xFFDCEFEA),
     onTertiaryContainer = Color(0xFF193039),
-    background = Color(0xFFF7FAF9),
+    background = Color(0xFFFAF7F0),
     surface = Color.White,
     surfaceVariant = Color(0xFFEEF4F2),
     onSurface = Color(0xFF193039),
@@ -1202,6 +1202,9 @@ private fun WorkoutCalendar(
                     },
                 )
             },
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFFEFA)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        border = BorderStroke(1.dp, Color(0xFFF0E9DE)),
     ) {
         AnimatedContent(
             targetState = yearMonth,
