@@ -206,21 +206,24 @@ private fun Modifier.pressMotionClickable(enabled: Boolean = true, onClick: () -
         .clickable(enabled = enabled, interactionSource = interactionSource, onClick = onClick)
 }
 
-private val FitLogRedColors = lightColorScheme(
-    primary = Color(0xFFB3261E),
+private val FitLogColors = lightColorScheme(
+    primary = Color(0xFF147A72),
     onPrimary = Color.White,
-    primaryContainer = Color(0xFFFFDAD5),
-    onPrimaryContainer = Color(0xFF410001),
-    secondary = Color(0xFF8C1D18),
+    primaryContainer = Color(0xFFD8EFEB),
+    onPrimaryContainer = Color(0xFF123F3B),
+    secondary = Color(0xFF526C68),
     onSecondary = Color.White,
-    secondaryContainer = Color(0xFFFFDAD5),
-    onSecondaryContainer = Color(0xFF410001),
-    tertiary = Color(0xFF775652),
-    background = Color(0xFFF4E9E7),
+    secondaryContainer = Color(0xFFE3ECE9),
+    onSecondaryContainer = Color(0xFF263B38),
+    tertiary = Color(0xFF789620),
+    onTertiary = Color.White,
+    tertiaryContainer = Color(0xFFE6F0B9),
+    onTertiaryContainer = Color(0xFF293500),
+    background = Color(0xFFF7F8F2),
     surface = Color.White,
-    surfaceVariant = Color(0xFFF4DDDA),
-    onSurface = Color(0xFF201A19),
-    onSurfaceVariant = Color(0xFF534341),
+    surfaceVariant = Color(0xFFEBEFE9),
+    onSurface = Color(0xFF1C2927),
+    onSurfaceVariant = Color(0xFF566763),
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -228,7 +231,7 @@ private val FitLogRedColors = lightColorScheme(
 fun FitLogApp(
     viewModel: FitLogViewModel,
 ) {
-    MaterialTheme(colorScheme = FitLogRedColors) {
+    MaterialTheme(colorScheme = FitLogColors) {
         FitLogAppContent(viewModel)
     }
 }
@@ -705,10 +708,10 @@ private fun WorkoutCompleteScreen() {
         Box(
             Modifier.size(112.dp)
                 .graphicsLayer { scaleX = progress; scaleY = progress; alpha = progress }
-                .background(MaterialTheme.colorScheme.primary, CircleShape),
+                .background(MaterialTheme.colorScheme.tertiaryContainer, CircleShape),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(Icons.Default.Check, contentDescription = "完了", modifier = Modifier.size(72.dp), tint = Color.White)
+            Icon(Icons.Default.Check, contentDescription = "完了", modifier = Modifier.size(72.dp), tint = MaterialTheme.colorScheme.onTertiaryContainer)
         }
         Text(
             "ワークアウト完了",
@@ -1472,11 +1475,11 @@ private fun RestTimerPreviewCard(restSeconds: Long, swipeOffset: Offset) {
                     }
                 },
             elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF1976D2)),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFFEAF3F0)),
         ) {
             Column(Modifier.fillMaxSize()) {
                 Row(
-                    Modifier.fillMaxWidth().background(Color(0xFF0D47A1)).padding(horizontal = 20.dp, vertical = 16.dp),
+                    Modifier.fillMaxWidth().background(Color(0xFF24665F)).padding(horizontal = 20.dp, vertical = 16.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
@@ -1493,12 +1496,12 @@ private fun RestTimerPreviewCard(restSeconds: Long, swipeOffset: Offset) {
                     Text(
                         "次のセットまで",
                         style = MaterialTheme.typography.titleLarge,
-                        color = Color.White.copy(alpha = 0.88f),
+                        color = Color(0xFF526C68),
                     )
                     Text(
                         "${restSeconds / 60}:${(restSeconds % 60).toString().padStart(2, '0')}",
                         style = MaterialTheme.typography.displayLarge.copy(fontSize = 76.sp, fontWeight = FontWeight.ExtraBold),
-                        color = Color.White,
+                        color = Color(0xFF1C3F3B),
                         maxLines = 1,
                     )
                 }
@@ -1506,13 +1509,13 @@ private fun RestTimerPreviewCard(restSeconds: Long, swipeOffset: Offset) {
                     "スライドして休憩を終了",
                     Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 18.dp),
                     style = MaterialTheme.typography.titleMedium,
-                    color = Color.White.copy(alpha = 0.92f),
+                    color = Color(0xFF526C68),
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                 )
                 Text(
                     "スキップ",
                     Modifier.align(Alignment.CenterHorizontally).padding(vertical = 8.dp),
-                    color = Color.White,
+                    color = Color(0xFF24665F),
                 )
             }
         }
@@ -1528,7 +1531,7 @@ private fun UpcomingSetPreviewCard(
     restCardActive: Boolean,
     dismissWithRest: Boolean,
 ) {
-    val palette = exerciseCardPalette(exercise.name)
+    val palette = exerciseCardPalette()
     val density = LocalDensity.current
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val widthPx = with(density) { maxWidth.toPx() }
@@ -1621,25 +1624,12 @@ private data class ExerciseCardPalette(
     val surfaceEnd: Color,
 )
 
-private fun exerciseCardPalette(exerciseName: String): ExerciseCardPalette {
-    val key = exerciseName.trim().lowercase()
-    val hue = when {
-        "ベンチ" in key || "bench" in key -> 212f
-        "ラット" in key || "lat" in key -> 164f
-        "レッグ" in key || "leg" in key -> 36f
-        "スクワット" in key || "squat" in key -> 276f
-        "腕立て" in key || "push" in key -> 194f
-        "プランク" in key || "plank" in key -> 340f
-        else -> (key.hashCode().and(0x7fffffff) % 360).toFloat()
-    }
-    val endHue = (hue + 18f) % 360f
-    return ExerciseCardPalette(
-        headerStart = Color.hsv(hue, saturation = 0.76f, value = 0.42f),
-        headerEnd = Color.hsv(endHue, saturation = 0.78f, value = 0.35f),
-        surfaceStart = Color.hsv(hue, saturation = 0.12f, value = 0.99f),
-        surfaceEnd = Color.hsv(endHue, saturation = 0.24f, value = 0.91f),
-    )
-}
+private fun exerciseCardPalette(): ExerciseCardPalette = ExerciseCardPalette(
+    headerStart = Color(0xFF24665F),
+    headerEnd = Color(0xFF194F4A),
+    surfaceStart = Color(0xFFFFFEFA),
+    surfaceEnd = Color(0xFFEEF3ED),
+)
 
 @Composable
 private fun PreviewSideValue(label: String, weightKg: Double?, reps: Int?, modifier: Modifier = Modifier) {
@@ -1666,7 +1656,9 @@ private fun SetEditorCard(
     onSkip: () -> Unit,
     onSwipeOffsetChanged: (Offset, Boolean?) -> Unit,
 ) {
-    val palette = exerciseCardPalette(exercise.name)
+    val palette = exerciseCardPalette()
+    val primaryActionColor = MaterialTheme.colorScheme.primary
+    val skipActionColor = MaterialTheme.colorScheme.error
     var swipeOffsetX by androidx.compose.runtime.remember(set.id, side) { androidx.compose.runtime.mutableFloatStateOf(0f) }
     var swipeOffsetY by androidx.compose.runtime.remember(set.id, side) { androidx.compose.runtime.mutableFloatStateOf(0f) }
     var swipeSkips by remember(set.id, side) { mutableStateOf<Boolean?>(null) }
@@ -1830,7 +1822,7 @@ private fun SetEditorCard(
         val swipeDistance = hypot(swipeOffsetX.toDouble(), swipeOffsetY.toDouble()).toFloat()
         val swipeProgress = if (swipeEdgePx > 0f) (swipeDistance / (swipeEdgePx * 0.45f)).coerceIn(0f, 1f) else 0f
         val advancing = swipeSkips?.not() ?: if (horizontalSwipe) swipeOffsetX > 0f else swipeOffsetY < 0f
-        val swipeColor = if (!advancing) Color(0xFF201A19) else Color(0xFFF0442E)
+        val swipeColor = if (!advancing) skipActionColor else primaryActionColor
         Card(
         Modifier.align(Alignment.Center).fillMaxWidth().fillMaxHeight(WORKOUT_CARD_HEIGHT_FRACTION)
             .graphicsLayer {
@@ -1847,7 +1839,7 @@ private fun SetEditorCard(
                 if (progress > 0f) {
                     val swipeAdvances = swipeSkips?.not()
                         ?: if (horizontal) swipeOffsetX > 0f else swipeOffsetY < 0f
-                    val color = if (swipeAdvances) Color(0xFFF0442E) else Color(0xFF201A19)
+                    val color = if (swipeAdvances) primaryActionColor else skipActionColor
                     val tint = color.copy(alpha = progress * 0.2f)
                     val softTint = tint.copy(alpha = tint.alpha * 0.58f)
                     val clear = Color.Transparent
@@ -2155,6 +2147,7 @@ private fun RestTimerCard(
     restStartedAtMillis: Long,
     onSkipRest: () -> Unit,
 ) {
+    val primaryColor = MaterialTheme.colorScheme.primary
     val remainingSeconds by produceState(
         initialValue = ((restEndsAtMillis - System.currentTimeMillis()).coerceAtLeast(0L) + 999L) / 1_000L,
         key1 = restEndsAtMillis,
@@ -2296,7 +2289,7 @@ private fun RestTimerCard(
                         0f
                     }
                     if (progress > 0f) {
-                        val tint = Color(0xFF0D47A1).copy(alpha = progress * 0.24f)
+                        val tint = primaryColor.copy(alpha = progress * 0.18f)
                         val softTint = tint.copy(alpha = tint.alpha * 0.58f)
                         val spread = 0.12f + progress * 0.62f
                         val gradientStart = when {
@@ -2326,11 +2319,11 @@ private fun RestTimerCard(
                     }
                 },
             elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF1976D2)),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFFEAF3F0)),
         ) {
           Column(Modifier.fillMaxSize()) {
             Row(
-                Modifier.fillMaxWidth().background(Color(0xFF0D47A1)).padding(horizontal = 20.dp, vertical = 16.dp),
+                Modifier.fillMaxWidth().background(Color(0xFF24665F)).padding(horizontal = 20.dp, vertical = 16.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text("休憩", style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.ExtraBold), color = Color.White)
@@ -2353,7 +2346,7 @@ private fun RestTimerCard(
                     Canvas(Modifier.fillMaxSize().padding(8.dp)) {
                         val strokeWidth = 11.dp.toPx()
                         drawArc(
-                            color = Color.White.copy(alpha = 0.22f),
+                            color = Color(0xFF9CBDB5).copy(alpha = 0.48f),
                             startAngle = -90f,
                             sweepAngle = 360f,
                             useCenter = false,
@@ -2361,7 +2354,7 @@ private fun RestTimerCard(
                         )
                         if (timerProgress > 0f) {
                             drawArc(
-                                color = Color(0xFFFFE66D),
+                                color = primaryColor,
                                 startAngle = -90f,
                                 sweepAngle = 360f * timerProgress,
                                 useCenter = false,
@@ -2373,12 +2366,12 @@ private fun RestTimerCard(
                         Text(
                             if (remainingSeconds > 0L) "次のセットまで" else "休憩終了",
                             style = MaterialTheme.typography.titleLarge,
-                            color = Color.White.copy(alpha = 0.88f),
+                            color = Color(0xFF526C68),
                         )
                         Text(
                             "${remainingSeconds / 60}:${(remainingSeconds % 60).toString().padStart(2, '0')}",
                             style = MaterialTheme.typography.displayLarge.copy(fontSize = 64.sp, fontWeight = FontWeight.ExtraBold),
-                            color = Color.White,
+                            color = Color(0xFF1C3F3B),
                             maxLines = 1,
                         )
                     }
@@ -2388,13 +2381,13 @@ private fun RestTimerCard(
                 "スライドして休憩を終了",
                 Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 18.dp),
                 style = MaterialTheme.typography.titleMedium,
-                color = Color.White.copy(alpha = 0.92f),
+                color = Color(0xFF526C68),
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             )
             TextButton(onClick = {
                 dismissTo(-cardWidthPx * 1.25f, 0f)
             }) {
-                Text("スキップ", color = Color.White)
+                Text("スキップ", color = MaterialTheme.colorScheme.error)
             }
           }
         }
