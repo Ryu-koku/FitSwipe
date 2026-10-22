@@ -716,9 +716,9 @@ private fun RecordScreen(
                                 )
                             }
                             if (resumableExercise != null) {
-                                TextButton(onClick = { onSelectExercise(resumableExercise) }) { Text("再開") }
+                                TextButton(onClick = hapticClick { onSelectExercise(resumableExercise) }) { Text("再開") }
                             }
-                            TextButton(onClick = onFinishSession) { Text("終了") }
+                            TextButton(onClick = hapticClick(onFinishSession)) { Text("終了") }
                         }
                     }
                 }
@@ -753,14 +753,14 @@ private fun RecordScreen(
                     Modifier.fillMaxWidth().height(64.dp).padding(bottom = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    TextButton(onClick = onOpenRecords, modifier = Modifier.height(52.dp)) {
+                    TextButton(onClick = hapticClick(onOpenRecords), modifier = Modifier.height(52.dp)) {
                         Icon(Icons.Default.FitnessCenter, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
                         Text("記録", fontWeight = FontWeight.Bold)
                     }
                     Spacer(Modifier.weight(1f))
                     FloatingActionButton(
-                        onClick = onOpenSettingsMenu,
+                        onClick = hapticClick(onOpenSettingsMenu),
                         modifier = Modifier.size(52.dp),
                         shape = CircleShape,
                     ) {
@@ -1251,7 +1251,7 @@ private fun WorkoutCalendar(
                                     val isToday = day == today
                                     Surface(
                                         modifier = Modifier.size(28.dp)
-                                            .clickable(enabled = hasWorkout) { selectedDateText = day.toString() }
+                                            .clickable(enabled = hasWorkout, onClick = hapticClick { selectedDateText = day.toString() })
                                             .semantics {
                                                 contentDescription = buildString {
                                                     append(day.format(DateTimeFormatter.ofPattern("M月d日", Locale.JAPAN)))
