@@ -1166,18 +1166,20 @@ private fun ExerciseCard(
 ) {
     Card(Modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            val pictogram = exercise.name.pictogramResource()
-            if (pictogram != null) {
-                Image(
-                    painter = painterResource(pictogram),
-                    contentDescription = "${exercise.name}のピクトグラム",
-                    contentScale = ContentScale.Fit,
-                    modifier = Modifier.size(width = 88.dp, height = 64.dp).padding(end = 12.dp),
-                )
-            }
-            Column(Modifier.weight(1f).pressMotionClickable(onClick = onClick)) {
-                Text(exercise.name, style = MaterialTheme.typography.titleMedium)
-                Text(if (exercise.mode == ExerciseMode.NORMAL) "通常" else "左右別", style = MaterialTheme.typography.bodySmall)
+            Row(
+                Modifier.weight(1f).pressMotionClickable(onClick = onClick),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (exercise.name.pictogramResource() != null) {
+                    ExercisePictogramThumbnail(
+                        exerciseName = exercise.name,
+                        modifier = Modifier.padding(end = 12.dp).size(width = 88.dp, height = 64.dp),
+                    )
+                }
+                Column(Modifier.weight(1f)) {
+                    Text(exercise.name, style = MaterialTheme.typography.titleMedium)
+                    Text(if (exercise.mode == ExerciseMode.NORMAL) "通常" else "左右別", style = MaterialTheme.typography.bodySmall)
+                }
             }
             IconButton(onClick = onToggleRoutine) {
                 Text(
@@ -1187,6 +1189,23 @@ private fun ExerciseCard(
             }
             Icon(Icons.Default.FitnessCenter, contentDescription = "記録する")
         }
+    }
+}
+
+@Composable
+private fun ExercisePictogramThumbnail(exerciseName: String, modifier: Modifier = Modifier) {
+    val pictogram = exerciseName.pictogramResource() ?: return
+    Surface(
+        modifier = modifier,
+        shape = MaterialTheme.shapes.medium,
+        color = Color(0xFFFFF6F2),
+    ) {
+        Image(
+            painter = painterResource(pictogram),
+            contentDescription = "$exerciseNameのピクトグラム",
+            contentScale = ContentScale.Fit,
+            modifier = Modifier.fillMaxSize().padding(4.dp),
+        )
     }
 }
 
@@ -1799,6 +1818,12 @@ private fun UpcomingSetPreviewCard(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
+                if (exercise.name.pictogramResource() != null) {
+                    ExercisePictogramThumbnail(
+                        exerciseName = exercise.name,
+                        modifier = Modifier.size(width = 72.dp, height = 52.dp),
+                    )
+                }
                 Text(
                     exercise.name,
                     style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.ExtraBold, color = Color.White),
@@ -2120,6 +2145,12 @@ private fun SetEditorCard(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
+                if (exercise.name.pictogramResource() != null) {
+                    ExercisePictogramThumbnail(
+                        exerciseName = exercise.name,
+                        modifier = Modifier.size(width = 72.dp, height = 52.dp),
+                    )
+                }
                 Text(
                     exercise.name,
                     style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.ExtraBold, color = Color.White),
