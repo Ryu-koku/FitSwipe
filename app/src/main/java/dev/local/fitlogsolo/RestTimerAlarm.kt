@@ -90,10 +90,19 @@ class RestTimerAlarmReceiver : BroadcastReceiver() {
         preferences.edit().remove(KEY_SCHEDULED_END_TIME).apply()
 
         val receiverResult = goAsync()
-        val tone = runCatching { ToneGenerator(AudioManager.STREAM_ALARM, 80) }.getOrNull()
+        val tone = runCatching { ToneGenerator(AudioManager.STREAM_ALARM, 90) }.getOrNull()
+        val handler = Handler(Looper.getMainLooper())
         val toneStarted = runCatching {
-            tone?.startTone(ToneGenerator.TONE_PROP_PROMPT, 200) == true
+            tone?.startTone(ToneGenerator.TONE_PROP_BEEP2, 130) == true
         }.getOrDefault(false)
+        if (toneStarted && tone != null) {
+            handler.postDelayed({
+                runCatching { tone.startTone(ToneGenerator.TONE_PROP_BEEP2, 130) }
+            }, 185L)
+            handler.postDelayed({
+                runCatching { tone.startTone(ToneGenerator.TONE_PROP_ACK, 320) }
+            }, 365L)
+        }
         runCatching {
             val vibrator = context.getSystemService(Vibrator::class.java)
             if (vibrator?.hasVibrator() == true) {
@@ -101,9 +110,9 @@ class RestTimerAlarmReceiver : BroadcastReceiver() {
             }
         }
 
-        Handler(Looper.getMainLooper()).postDelayed({
+        handler.postDelayed({
             runCatching { tone?.release() }
             receiverResult.finish()
-        }, if (toneStarted) 250L else 50L)
+        }, if (toneStarted) 760L else 50L)
     }
 }

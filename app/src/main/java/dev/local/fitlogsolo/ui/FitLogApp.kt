@@ -35,10 +35,13 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -120,6 +123,8 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
@@ -185,6 +190,7 @@ private data class EditorCardScene(
     val totalSets: Int = 0,
     val enabled: Boolean = true,
     val restEndsAtMillis: Long = 0L,
+    val restStartedAtMillis: Long = 0L,
 )
 
 @Composable
@@ -238,6 +244,7 @@ private fun FitLogAppContent(
     var showWorkoutComplete by rememberSaveable { mutableStateOf(false) }
     var workoutCompletionSaved by rememberSaveable { mutableStateOf(false) }
     var restEndsAtMillis by rememberSaveable { mutableLongStateOf(0L) }
+    var restStartedAtMillis by rememberSaveable { mutableLongStateOf(0L) }
     var pendingWorkoutStart by remember { mutableStateOf<(() -> Unit)?>(null) }
     var showExactAlarmPermissionDialog by rememberSaveable { mutableStateOf(false) }
     var presetExerciseOrder by rememberSaveable { mutableStateOf("") }
@@ -437,6 +444,7 @@ private fun FitLogAppContent(
                         selectedExercise = selectedExercise,
                         onExerciseOrderChange = { ids -> presetExerciseOrder = ids.joinToString(",") },
                         restEndsAtMillis = restEndsAtMillis,
+                        restStartedAtMillis = restStartedAtMillis,
                         weightStepKg = weightStepKg,
                         exerciseWeightSteps = exerciseWeightSteps,
                         restDurationSeconds = restDurationSeconds,
@@ -461,19 +469,23 @@ private fun FitLogAppContent(
                         onToggleRoutineExercise = viewModel::toggleRoutineExercise,
                         onSetCompleted = { durationSeconds ->
                             if (durationSeconds > 0L) {
-                                val restEndTime = System.currentTimeMillis() + durationSeconds * 1_000L
+                                val restStartTime = System.currentTimeMillis()
+                                val restEndTime = restStartTime + durationSeconds * 1_000L
                                 RestTimerAlarm.schedule(context, restEndTime)
+                                restStartedAtMillis = restStartTime
                                 restEndsAtMillis = restEndTime
                             }
                         },
                         onSkipRest = {
                             RestTimerAlarm.cancel(context)
+                            restStartedAtMillis = 0L
                             restEndsAtMillis = 0L
                         },
                         onFinishSession = {
                             activeSession?.id?.let { viewModel.finishSession(it) }
                             selectedExerciseId = null
                             RestTimerAlarm.cancel(context)
+                            restStartedAtMillis = 0L
                             restEndsAtMillis = 0L
                             presetExerciseOrder = ""
                         },
@@ -484,6 +496,7 @@ private fun FitLogAppContent(
                             } ?: run { workoutCompletionSaved = true }
                             selectedExerciseId = null
                             RestTimerAlarm.cancel(context)
+                            restStartedAtMillis = 0L
                             restEndsAtMillis = 0L
                             presetExerciseOrder = ""
                             showWorkoutComplete = true
@@ -546,6 +559,7 @@ private fun RecordScreen(
     selectedExercise: ExerciseEntity?,
     onExerciseOrderChange: (List<Long>) -> Unit,
     restEndsAtMillis: Long,
+    restStartedAtMillis: Long,
     weightStepKg: Double,
     exerciseWeightSteps: Map<Long, Double>,
     restDurationSeconds: Long,
@@ -596,6 +610,7 @@ private fun RecordScreen(
                 exerciseOrderIds = presetExerciseOrder,
                 onExerciseOrderChange = onExerciseOrderChange,
                 restEndsAtMillis = restEndsAtMillis,
+                restStartedAtMillis = restStartedAtMillis,
                 weightStepKg = weightStepKg,
                 exerciseWeightSteps = exerciseWeightSteps,
                 restDurationSeconds = restDurationSeconds,
@@ -953,10 +968,11 @@ private fun ExerciseCard(
 ) {
     Card(Modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            if (exercise.name.isDumbbellCurl()) {
+            val pictogram = exercise.name.pictogramResource()
+            if (pictogram != null) {
                 Image(
-                    painter = painterResource(R.drawable.dumbbell_curl),
-                    contentDescription = "ダンベルカールのピクトグラム",
+                    painter = painterResource(pictogram),
+                    contentDescription = "${exercise.name}のピクトグラム",
                     contentScale = ContentScale.Fit,
                     modifier = Modifier.size(width = 88.dp, height = 64.dp).padding(end = 12.dp),
                 )
@@ -976,14 +992,17 @@ private fun ExerciseCard(
     }
 }
 
-private fun String.isDumbbellCurl(): Boolean = trim().lowercase() in setOf(
-    "ダンベルカール",
-    "ダンベル・カール",
-    "dumbbell curl",
-    "dumbbell curls",
-    "dumbbell bicep curl",
-    "dumbbell biceps curl",
-)
+private fun String.pictogramResource(): Int? = when (trim().lowercase()) {
+    "ダンベルカール", "ダンベル・カール", "dumbbell curl", "dumbbell curls",
+    "dumbbell bicep curl", "dumbbell biceps curl" -> R.drawable.dumbbell_curl
+    "インクラインダンベルプレス", "インクライン・ダンベルプレス",
+    "incline dumbbell press", "incline db press" -> R.drawable.incline_dumbbell_press
+    "サイドレイズ", "サイド・レイズ", "ダンベルサイドレイズ",
+    "lateral raise", "dumbbell lateral raise", "side lateral raise" -> R.drawable.dumbbell_lateral_raise
+    "ペクトラルフライ", "ペックフライ", "ペクトラルフライ（マシン）",
+    "pec fly", "pectoral fly", "pec deck", "machine fly" -> R.drawable.pectoral_fly
+    else -> null
+}
 
 @Composable
 private fun ExerciseEditor(
@@ -995,6 +1014,7 @@ private fun ExerciseEditor(
     exerciseOrderIds: List<Long>,
     onExerciseOrderChange: (List<Long>) -> Unit,
     restEndsAtMillis: Long,
+    restStartedAtMillis: Long,
     weightStepKg: Double,
     exerciseWeightSteps: Map<Long, Double>,
     restDurationSeconds: Long,
@@ -1110,6 +1130,7 @@ private fun ExerciseEditor(
         restEndsAtMillis > 0L && currentSet != null -> EditorCardScene(
             key = "rest:$restEndsAtMillis",
             restEndsAtMillis = restEndsAtMillis,
+            restStartedAtMillis = restStartedAtMillis,
         )
         displayedCard != null -> {
             val displayedExercise = displayedCard.exercise
@@ -1225,6 +1246,7 @@ private fun ExerciseEditor(
                             scene == null -> Unit
                             scene.restEndsAtMillis > 0L -> RestTimerCard(
                                 restEndsAtMillis = scene.restEndsAtMillis,
+                                restStartedAtMillis = scene.restStartedAtMillis,
                                 onSkipRest = { onSkipRest() },
                             )
                             scene.exercise != null && scene.set != null -> SetEditorCard(
@@ -1661,7 +1683,146 @@ private fun SetEditorCard(
     }
     val animationScope = rememberCoroutineScope()
     val density = LocalDensity.current
-    BoxWithConstraints(Modifier.fillMaxSize()) {
+    BoxWithConstraints(
+        Modifier.fillMaxSize().pointerInput(set.id, enabled, side, swipeAnimating) {
+            if (!enabled || swipeAnimating) return@pointerInput
+
+            val cardWidthPx = size.width.toFloat()
+            val cardHeightPx = size.height * WORKOUT_CARD_HEIGHT_FRACTION
+            val cardTopPx = (size.height - cardHeightPx) / 2f
+            val swipeThreshold = minOf(cardWidthPx, cardHeightPx) * 0.08f
+            val minFlingVelocity = with(density) { 700.dp.toPx() }
+
+            fun updateDrag(offset: Offset) {
+                swipeOffsetX = offset.x
+                swipeOffsetY = offset.y
+                if (swipeSkips == null && offset.getDistance() >= swipeThreshold) {
+                    val horizontal = abs(offset.x) >= abs(offset.y)
+                    swipeHorizontalLock = horizontal
+                    swipeSkips = if (horizontal) offset.x < 0f else offset.y > 0f
+                }
+                onSwipeOffsetChanged(offset, swipeSkips)
+            }
+
+            fun settleBack() {
+                swipeAnimating = true
+                animationScope.launch {
+                    coroutineScope {
+                        launch {
+                            Animatable(swipeOffsetX).animateTo(0f, spring(dampingRatio = 0.62f, stiffness = 220f)) {
+                                swipeOffsetX = value
+                                onSwipeOffsetChanged(Offset(value, swipeOffsetY), swipeSkips)
+                            }
+                        }
+                        launch {
+                            Animatable(swipeOffsetY).animateTo(0f, spring(dampingRatio = 0.62f, stiffness = 220f)) {
+                                swipeOffsetY = value
+                                onSwipeOffsetChanged(Offset(swipeOffsetX, value), swipeSkips)
+                            }
+                        }
+                    }
+                    swipeSkips = null
+                    swipeHorizontalLock = null
+                    onSwipeOffsetChanged(Offset.Zero, null)
+                    swipeAnimating = false
+                }
+            }
+
+            fun finishDrag(offset: Offset, velocity: androidx.compose.ui.unit.Velocity) {
+                updateDrag(offset)
+                val distance = offset.getDistance()
+                val velocityIsHorizontal = abs(velocity.x) >= abs(velocity.y)
+                val horizontal = swipeHorizontalLock ?: if (
+                    distance < swipeThreshold && maxOf(abs(velocity.x), abs(velocity.y)) >= minFlingVelocity
+                ) {
+                    velocityIsHorizontal
+                } else {
+                    abs(offset.x) >= abs(offset.y)
+                }
+                val axisDistance = if (horizontal) abs(offset.x) else abs(offset.y)
+                val axisVelocity = if (horizontal) abs(velocity.x) else abs(velocity.y)
+                val crossAxisVelocity = if (horizontal) abs(velocity.y) else abs(velocity.x)
+                val fastFling = axisVelocity >= minFlingVelocity && axisVelocity >= crossAxisVelocity * 1.2f
+                if (axisDistance < swipeThreshold && !fastFling) {
+                    settleBack()
+                    return
+                }
+
+                val useVelocityDirection = axisDistance < swipeThreshold && fastFling
+                val direction = when {
+                    horizontal && useVelocityDirection -> velocity.x
+                    !horizontal && useVelocityDirection -> velocity.y
+                    horizontal -> offset.x
+                    else -> offset.y
+                }
+                swipeHorizontalLock = horizontal
+                swipeSkips = if (horizontal) direction < 0f else direction > 0f
+                swipeAnimating = true
+                val advance = !swipeSkips!!
+                val exitDistance = hypot(cardWidthPx.toDouble(), cardHeightPx.toDouble()).toFloat() * 1.25f
+                val target = if (useVelocityDirection) {
+                    if (horizontal) Offset(if (direction < 0f) -exitDistance else exitDistance, 0f)
+                    else Offset(0f, if (direction < 0f) -exitDistance else exitDistance)
+                } else {
+                    val scale = exitDistance / distance.coerceAtLeast(1f)
+                    Offset(offset.x * scale, offset.y * scale)
+                }
+                animationScope.launch {
+                    coroutineScope {
+                        launch {
+                            Animatable(swipeOffsetX).animateTo(target.x, tween(160)) {
+                                swipeOffsetX = value
+                                onSwipeOffsetChanged(Offset(value, swipeOffsetY), swipeSkips)
+                            }
+                        }
+                        launch {
+                            Animatable(swipeOffsetY).animateTo(target.y, tween(160)) {
+                                swipeOffsetY = value
+                                onSwipeOffsetChanged(Offset(swipeOffsetX, value), swipeSkips)
+                            }
+                        }
+                    }
+                    if (advance) onAdvance() else onSkip()
+                }
+            }
+
+            awaitEachGesture {
+                val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                if (down.position.y !in cardTopPx..(cardTopPx + cardHeightPx)) return@awaitEachGesture
+
+                val velocityTracker = androidx.compose.ui.input.pointer.util.VelocityTracker()
+                velocityTracker.addPosition(down.uptimeMillis, down.position)
+                var dragStarted = false
+                while (true) {
+                    val event = awaitPointerEvent(PointerEventPass.Initial)
+                    val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                    velocityTracker.addPosition(change.uptimeMillis, change.position)
+                    val offset = change.position - down.position
+                    if (change.pressed) {
+                        if (!dragStarted && offset.getDistance() > viewConfiguration.touchSlop) {
+                            dragStarted = true
+                            swipeOffsetX = 0f
+                            swipeOffsetY = 0f
+                            swipeSkips = null
+                            swipeHorizontalLock = null
+                            onSwipeOffsetChanged(Offset.Zero, null)
+                        }
+                        if (dragStarted) {
+                            change.consume()
+                            updateDrag(offset)
+                        }
+                    } else {
+                        if (dragStarted) {
+                            change.consume()
+                            finishDrag(offset, velocityTracker.calculateVelocity())
+                        }
+                        break
+                    }
+                }
+            }
+        },
+    ) {
+
         val horizontalSwipe = swipeHorizontalLock ?: (abs(swipeOffsetX) >= abs(swipeOffsetY))
         val cardWidthPx = with(density) { maxWidth.toPx() }
         val cardHeightPx = with(density) { (maxHeight * WORKOUT_CARD_HEIGHT_FRACTION).toPx() }
@@ -1711,138 +1872,6 @@ private fun SetEditorCard(
                     }
                     drawRect(brush = brush)
                 }
-            }
-            .pointerInput(set.id, enabled, side, swipeAnimating) {
-                if (!enabled || swipeAnimating) return@pointerInput
-                var dragX = 0f
-                var dragY = 0f
-                var skipGesture: Boolean? = null
-                var horizontalGesture: Boolean? = null
-                var velocityTracker = androidx.compose.ui.input.pointer.util.VelocityTracker()
-                detectDragGestures(
-                    onDragStart = {
-                        dragX = 0f
-                        dragY = 0f
-                        velocityTracker = androidx.compose.ui.input.pointer.util.VelocityTracker()
-                        skipGesture = null
-                        horizontalGesture = null
-                        swipeSkips = null
-                        swipeHorizontalLock = null
-                        onSwipeOffsetChanged(Offset.Zero, null)
-                    },
-                    onDrag = { change, dragAmount ->
-                        change.consume()
-                        velocityTracker.addPosition(change.uptimeMillis, change.position)
-                        dragX += dragAmount.x
-                        dragY += dragAmount.y
-                        swipeOffsetX = dragX
-                        swipeOffsetY = dragY
-                        val directionLockDistance = minOf(size.width, size.height) * 0.08f
-                        if (skipGesture == null && hypot(dragX.toDouble(), dragY.toDouble()) >= directionLockDistance) {
-                            horizontalGesture = abs(dragX) >= abs(dragY)
-                            skipGesture = if (horizontalGesture == true) dragX < 0f else dragY > 0f
-                            swipeSkips = skipGesture
-                            swipeHorizontalLock = horizontalGesture
-                        }
-                        onSwipeOffsetChanged(Offset(swipeOffsetX, swipeOffsetY), skipGesture)
-                    },
-                    onDragEnd = {
-                        val distance = hypot(dragX.toDouble(), dragY.toDouble()).toFloat()
-                        val velocity = velocityTracker.calculateVelocity()
-                        val minFlingVelocity = with(density) { 700.dp.toPx() }
-                        val threshold = minOf(size.width, size.height) * 0.08f
-                        val velocityIsHorizontal = abs(velocity.x) >= abs(velocity.y)
-                        val horizontal = if (
-                            distance < threshold && maxOf(abs(velocity.x), abs(velocity.y)) >= minFlingVelocity
-                        ) {
-                            velocityIsHorizontal
-                        } else {
-                            horizontalGesture ?: (abs(dragX) >= abs(dragY))
-                        }
-                        val axisDistance = if (horizontal) abs(dragX) else abs(dragY)
-                        val axisVelocity = if (horizontal) abs(velocity.x) else abs(velocity.y)
-                        val crossAxisVelocity = if (horizontal) abs(velocity.y) else abs(velocity.x)
-                        val fastFling = axisVelocity >= minFlingVelocity && axisVelocity >= crossAxisVelocity * 1.2f
-                        if (axisDistance >= threshold || fastFling) {
-                            val useVelocityDirection = axisDistance < threshold && fastFling
-                            val direction = when {
-                                horizontal && useVelocityDirection -> velocity.x
-                                !horizontal && useVelocityDirection -> velocity.y
-                                horizontal -> dragX
-                                else -> dragY
-                            }
-                            horizontalGesture = horizontal
-                            skipGesture = if (horizontal) direction < 0f else direction > 0f
-                            swipeHorizontalLock = horizontal
-                            swipeSkips = skipGesture
-                            swipeAnimating = true
-                            val advance = !skipGesture!!
-                            onSwipeOffsetChanged(Offset(swipeOffsetX, swipeOffsetY), skipGesture)
-                            animationScope.launch {
-                                val scale = (hypot(size.width.toDouble(), size.height.toDouble()).toFloat() * 1.25f) /
-                                    distance.coerceAtLeast(1f)
-                                val targetX = dragX * scale
-                                val targetY = dragY * scale
-                                coroutineScope {
-                                    launch {
-                                        Animatable(swipeOffsetX).animateTo(targetX, tween(160)) {
-                                            swipeOffsetX = value
-                                            onSwipeOffsetChanged(Offset(value, swipeOffsetY), skipGesture)
-                                        }
-                                    }
-                                    launch {
-                                        Animatable(swipeOffsetY).animateTo(targetY, tween(160)) {
-                                            swipeOffsetY = value
-                                            onSwipeOffsetChanged(Offset(swipeOffsetX, value), skipGesture)
-                                        }
-                                    }
-                                }
-                                if (advance) onAdvance() else onSkip()
-                            }
-                        } else {
-                            animationScope.launch {
-                                coroutineScope {
-                                    launch {
-                                        Animatable(swipeOffsetX).animateTo(0f, spring(dampingRatio = 0.62f, stiffness = 220f)) {
-                                            swipeOffsetX = value
-                                            onSwipeOffsetChanged(Offset(value, swipeOffsetY), skipGesture)
-                                        }
-                                    }
-                                    launch {
-                                        Animatable(swipeOffsetY).animateTo(0f, spring(dampingRatio = 0.62f, stiffness = 220f)) {
-                                            swipeOffsetY = value
-                                            onSwipeOffsetChanged(Offset(swipeOffsetX, value), skipGesture)
-                                        }
-                                    }
-                                }
-                                swipeSkips = null
-                                swipeHorizontalLock = null
-                                onSwipeOffsetChanged(Offset.Zero, null)
-                            }
-                        }
-                    },
-                    onDragCancel = {
-                        animationScope.launch {
-                            coroutineScope {
-                                launch {
-                                    Animatable(swipeOffsetX).animateTo(0f, spring(dampingRatio = 0.62f, stiffness = 220f)) {
-                                        swipeOffsetX = value
-                                        onSwipeOffsetChanged(Offset(value, swipeOffsetY), skipGesture)
-                                    }
-                                }
-                                launch {
-                                    Animatable(swipeOffsetY).animateTo(0f, spring(dampingRatio = 0.62f, stiffness = 220f)) {
-                                        swipeOffsetY = value
-                                        onSwipeOffsetChanged(Offset(swipeOffsetX, value), skipGesture)
-                                    }
-                                }
-                            }
-                            swipeSkips = null
-                            swipeHorizontalLock = null
-                            onSwipeOffsetChanged(Offset.Zero, null)
-                        }
-                    },
-                )
             },
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         colors = CardDefaults.cardColors(containerColor = palette.surfaceStart),
@@ -2123,6 +2152,7 @@ private fun adjustWeight(weightKg: Double?, stepKg: Double, increase: Boolean): 
 @Composable
 private fun RestTimerCard(
     restEndsAtMillis: Long,
+    restStartedAtMillis: Long,
     onSkipRest: () -> Unit,
 ) {
     val remainingSeconds by produceState(
@@ -2225,6 +2255,19 @@ private fun RestTimerCard(
         },
     ) {
         val cardWidthPx = with(LocalDensity.current) { maxWidth.toPx() }
+        val effectiveRestStart = remember(restEndsAtMillis, restStartedAtMillis) {
+            restStartedAtMillis.takeIf { it in 1 until restEndsAtMillis }
+                ?: (restEndsAtMillis - remainingSeconds * 1_000L).coerceAtLeast(0L)
+        }
+        val totalDurationMillis = (restEndsAtMillis - effectiveRestStart).coerceAtLeast(1L)
+        val timerProgress by animateFloatAsState(
+            targetValue = (
+                1f - (restEndsAtMillis - System.currentTimeMillis()).coerceAtLeast(0L).toFloat() /
+                    totalDurationMillis
+                ).coerceIn(0f, 1f),
+            animationSpec = tween(durationMillis = 900),
+            label = "rest timer progress",
+        )
         LaunchedEffect(restEndsAtMillis, remainingSeconds) {
             if (remainingSeconds == 0L && !isDismissing) {
                 delay(3_000L)
@@ -2297,17 +2340,49 @@ private fun RestTimerCard(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
             ) {
-                Text(
-                    if (remainingSeconds > 0L) "次のセットまで" else "休憩終了",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = Color.White.copy(alpha = 0.88f),
-                )
-                Text(
-                    "${remainingSeconds / 60}:${(remainingSeconds % 60).toString().padStart(2, '0')}",
-                    style = MaterialTheme.typography.displayLarge.copy(fontSize = 76.sp, fontWeight = FontWeight.ExtraBold),
-                    color = Color.White,
-                    maxLines = 1,
-                )
+                Box(
+                    Modifier.size(248.dp).semantics {
+                        contentDescription = if (remainingSeconds > 0L) {
+                            "次のセットまで残り ${remainingSeconds / 60}分 ${remainingSeconds % 60}秒"
+                        } else {
+                            "休憩終了"
+                        }
+                    },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Canvas(Modifier.fillMaxSize().padding(8.dp)) {
+                        val strokeWidth = 11.dp.toPx()
+                        drawArc(
+                            color = Color.White.copy(alpha = 0.22f),
+                            startAngle = -90f,
+                            sweepAngle = 360f,
+                            useCenter = false,
+                            style = Stroke(width = strokeWidth, cap = StrokeCap.Round),
+                        )
+                        if (timerProgress > 0f) {
+                            drawArc(
+                                color = Color(0xFFFFE66D),
+                                startAngle = -90f,
+                                sweepAngle = 360f * timerProgress,
+                                useCenter = false,
+                                style = Stroke(width = strokeWidth, cap = StrokeCap.Round),
+                            )
+                        }
+                    }
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            if (remainingSeconds > 0L) "次のセットまで" else "休憩終了",
+                            style = MaterialTheme.typography.titleLarge,
+                            color = Color.White.copy(alpha = 0.88f),
+                        )
+                        Text(
+                            "${remainingSeconds / 60}:${(remainingSeconds % 60).toString().padStart(2, '0')}",
+                            style = MaterialTheme.typography.displayLarge.copy(fontSize = 64.sp, fontWeight = FontWeight.ExtraBold),
+                            color = Color.White,
+                            maxLines = 1,
+                        )
+                    }
+                }
             }
             Text(
                 "スライドして休憩を終了",
@@ -2359,14 +2434,14 @@ private fun rememberFlatDeviceCandidate(
 ): Boolean {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+    val latestLastUserInteractionAtMillis by rememberUpdatedState(lastUserInteractionAtMillis)
+    val latestUserInteractionActive by rememberUpdatedState(userInteractionActive)
     val isFlat = androidx.compose.runtime.remember { mutableStateOf(false) }
     DisposableEffect(
         context,
         lifecycleOwner,
         enabled,
         workoutActive,
-        lastUserInteractionAtMillis,
-        userInteractionActive,
     ) {
         isFlat.value = false
         if (!enabled || !workoutActive) {
@@ -2388,8 +2463,8 @@ private fun rememberFlatDeviceCandidate(
                         val y = abs(event.values[1])
                         val z = event.values[2]
                         if (!isCurrentlyFlat) {
-                            val interactionCooldownActive = userInteractionActive ||
-                                (lastUserInteractionAtMillis > 0L && now - lastUserInteractionAtMillis < 5_000L)
+                            val interactionCooldownActive = latestUserInteractionActive ||
+                                (latestLastUserInteractionAtMillis > 0L && now - latestLastUserInteractionAtMillis < 5_000L)
                             if (interactionCooldownActive) {
                                 flatSinceMillis = 0L
                                 return
