@@ -1,0 +1,43 @@
+name: fitswipe-rooms
+services:
+  rooms:
+    build: .
+    restart: unless-stopped
+    init: true
+    ports:
+      - "127.0.0.1:8787:8000"
+    volumes:
+      - rooms-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 256m
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5)"]
+      interval: 30s
+      timeout: 6s
+      retries: 3
+  https:
+    image: caddy:2
+    profiles: [public]
+    restart: unless-stopped
+    environment:
+      ROOMS_DOMAIN: ${ROOMS_DOMAIN:-localhost}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      rooms:
+        condition: service_healthy
+volumes:
+  rooms-data:
+  caddy-data:
+  caddy-config:

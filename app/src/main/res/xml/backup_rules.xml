@@ -1,0 +1,4 @@
+<full-backup-content>
+    <exclude domain="sharedpref" path="fitlog_rooms_identity.xml" />
+    <exclude domain="sharedpref" path="fitlog_rooms_cache.xml" />
+</full-backup-content>

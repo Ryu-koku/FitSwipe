@@ -7,6 +7,9 @@ import dev.local.fitlogsolo.data.ExerciseEntity
 import dev.local.fitlogsolo.data.ExerciseMode
 import dev.local.fitlogsolo.data.FitLogRepository
 import dev.local.fitlogsolo.data.SessionStatus
+import dev.local.fitlogsolo.data.RoomsRepository
+import org.json.JSONArray
+import org.json.JSONObject
 import dev.local.fitlogsolo.data.WorkoutPreferences
 import dev.local.fitlogsolo.data.WorkoutPreset
 import dev.local.fitlogsolo.data.WorkoutSetEntity
@@ -18,6 +21,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withLock
 
 enum class WorkoutPlace(val label: String, val presetExerciseNames: List<String>) {
     GYM("ジム", listOf("ベンチプレス", "ラットプルダウン", "レッグプレス")),
@@ -27,6 +31,7 @@ enum class WorkoutPlace(val label: String, val presetExerciseNames: List<String>
 class FitLogViewModel(
     private val repository: FitLogRepository,
     private val workoutPreferences: WorkoutPreferences,
+    val rooms: RoomsRepository,
 ) : ViewModel() {
     val exercises = repository.observeExercises().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     val allExercises = repository.observeAllExercises().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
@@ -42,6 +47,9 @@ class FitLogViewModel(
     val gymPresetExerciseIds = workoutPreferences.gymPresetExerciseIds
     val homePresetExerciseIds = workoutPreferences.homePresetExerciseIds
     val presets = workoutPreferences.presets
+    val selectedPresetId = workoutPreferences.selectedPresetId
+    fun selectPreset(id: String) = workoutPreferences.selectPreset(id)
+    private val startMutex = kotlinx.coroutines.sync.Mutex()
 
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message.asStateFlow()
@@ -65,9 +73,37 @@ class FitLogViewModel(
         onReady(sessionId)
     }
 
-    fun startPreset(preset: WorkoutPreset, onReady: (Long, List<Long>) -> Unit = { _, _ -> }) = viewModelScope.launch {
-        val (sessionId, exerciseIds) = repository.startPresetSession(preset)
-        onReady(sessionId, exerciseIds)
+    fun startPreset(
+        preset: WorkoutPreset,
+        onFailed: () -> Unit = {},
+        onReady: (Long, List<Long>) -> Unit = { _, _ -> },
+    ) = viewModelScope.launch {
+        startMutex.withLock {
+            runCatching {
+                val (sessionId, exerciseIds) = repository.startPresetSession(preset)
+                workoutPreferences.selectPreset(repository.observeSession(sessionId).first()?.presetId ?: preset.id)
+                onReady(sessionId, exerciseIds)
+            }.onFailure {
+                if (it is kotlinx.coroutines.CancellationException) throw it
+                _message.value = it.message ?: "開始できませんでした"
+                onFailed()
+            }
+        }
+    }
+
+    fun resumeWorkout(onFailed: () -> Unit, onReady: (Long, List<Long>) -> Unit) = viewModelScope.launch {
+        startMutex.withLock {
+            runCatching {
+                val session = repository.observeInProgressSession().first() ?: error("進行中のトレーニングがありません")
+                val ids = repository.observeSets(session.id).first().sortedBy { it.createdAt }.map { it.exerciseId }.distinct()
+                check(ids.isNotEmpty()) { "再開できる種目がありません" }
+                session.presetId?.let(workoutPreferences::selectPreset)
+                onReady(session.id, ids)
+            }.onFailure {
+                if (it is kotlinx.coroutines.CancellationException) throw it
+                _message.value = it.message ?: "再開できませんでした"; onFailed()
+            }
+        }
     }
 
     fun initializeDefaultPresets() = viewModelScope.launch {
@@ -147,13 +183,49 @@ class FitLogViewModel(
         onFinished()
     }
 
+    fun shareSession(roomId: String, sessionId: Long) = viewModelScope.launch {
+        runCatching {
+            val session = repository.observeSession(sessionId).first() ?: error("記録が見つかりません")
+            check(session.status == SessionStatus.COMPLETED) { "完了したトレーニングだけを共有できます" }
+            val exerciseNames = repository.observeAllExercises().first().associateBy { it.id }
+            val recorded = repository.observeSets(sessionId).first().groupBy { it.exerciseId }
+            val exercises = JSONArray()
+            recorded.forEach { (id, rows) ->
+                val exercise = exerciseNames[id] ?: return@forEach
+                val sets = JSONArray()
+                rows.sortedBy { it.setOrder }.forEach { set ->
+                    fun add(side: String?, weight: Double?, reps: Int?) {
+                        if (reps == null || reps <= 0) return
+                        sets.put(JSONObject().put("order", set.setOrder + 1)
+                            .put("side", side ?: JSONObject.NULL).put("weightKg", weight ?: JSONObject.NULL).put("reps", reps))
+                    }
+                    if (exercise.mode == ExerciseMode.NORMAL && set.isCompleted) add(null, set.normalWeightKg, set.normalReps)
+                    if (exercise.mode == ExerciseMode.BILATERAL) {
+                        if (set.leftCompleted) add("左", set.leftWeightKg, set.leftReps)
+                        if (set.rightCompleted) add("右", set.rightWeightKg, set.rightReps)
+                    }
+                }
+                if (sets.length() > 0) exercises.put(JSONObject().put("name", exercise.name).put("sets", sets))
+            }
+            check(exercises.length() > 0) { "共有できる完了セットがありません" }
+            val title = presets.value.firstOrNull { it.id == session.presetId }?.name ?: "トレーニング"
+            rooms.share(roomId, JSONObject().put("clientId", rooms.clientId(sessionId)).put("presetName", title)
+                .put("startedAt", session.startedAt.toString()).put("endedAt", session.endedAt?.toString() ?: session.startedAt.toString())
+                .put("exercises", exercises))
+        }.onFailure {
+            if (it is kotlinx.coroutines.CancellationException) throw it
+            _message.value = it.message ?: "共有できませんでした"
+        }
+    }
+
     fun clearMessage() { _message.value = null }
 
     class Factory(
         private val repository: FitLogRepository,
         private val workoutPreferences: WorkoutPreferences,
+        private val rooms: RoomsRepository,
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
-        override fun <T : ViewModel> create(modelClass: Class<T>): T = FitLogViewModel(repository, workoutPreferences) as T
+        override fun <T : ViewModel> create(modelClass: Class<T>): T = FitLogViewModel(repository, workoutPreferences, rooms) as T
     }
 }

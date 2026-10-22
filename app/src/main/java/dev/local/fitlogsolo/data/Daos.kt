@@ -12,6 +12,9 @@ interface ExerciseDao {
     @Query("SELECT * FROM exercises WHERE archived = 0 ORDER BY sortOrder, name")
     fun observeActive(): Flow<List<ExerciseEntity>>
 
+    @Query("SELECT * FROM exercises WHERE archived = 0 ORDER BY sortOrder, name")
+    suspend fun findActive(): List<ExerciseEntity>
+
     @Query("SELECT * FROM exercises ORDER BY sortOrder, name")
     fun observeAll(): Flow<List<ExerciseEntity>>
 
@@ -32,6 +35,9 @@ interface ExerciseDao {
 interface SessionDao {
     @Query("SELECT * FROM workout_sessions WHERE status = 'IN_PROGRESS' ORDER BY startedAt DESC LIMIT 1")
     fun observeInProgress(): Flow<WorkoutSessionEntity?>
+
+    @Query("SELECT * FROM workout_sessions WHERE status = 'IN_PROGRESS' ORDER BY startedAt DESC LIMIT 1")
+    suspend fun findInProgress(): WorkoutSessionEntity?
 
     @Query("SELECT * FROM workout_sessions WHERE status = 'COMPLETED' ORDER BY startedAt DESC")
     fun observeCompleted(): Flow<List<WorkoutSessionEntity>>

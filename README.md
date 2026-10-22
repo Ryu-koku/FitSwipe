@@ -1,25 +1,28 @@
 # FitSwipe
 
-本人用・オフライン優先の筋トレ記録アプリです。ログイン、広告、クラウド同期、外部サーバー通信はありません。
+オフライン優先の筋トレ記録アプリです。トレーニング記録は端末内に保存し、ルームに投稿した記録だけをメンバーに共有します。
 
-## 実装済み
+## 画面と操作
 
-- 通常種目と左右別種目の登録
-- 下書きセッションの自動保存と再起動後の復元
-- 前回値を候補にしたセット入力、セット複製、完了管理
-- 左右それぞれの重量・回数の保存、編集、再表示
-- 前回の完了セットから重量・回数を自動入力し、ワンタップまたは右スワイプでセット完了
-- プリセットを作成し、1タップでワークアウトを開始
-- 月間カレンダーでトレーニング日を表示
-- セット完了後の90秒休憩タイマー（15秒延長・手動終了）
-- ライト/ダークテーマ、Compose Preview、単体テスト、Room instrumentation test
+- ホームはカレンダーを中心に表示し、設定は右上の丸い歯車から開きます。
+- フッターは「ホーム・＋・ルーム」の3つです。
+- 中央の＋を押すとプリセット選択・編集画面が開き、フッターが消えて同じ位置に再生ボタンが現れます。
+- 前回選んだプリセットはアプリを閉じても記憶します。再生ボタンで開始し、進行中のトレーニングがある場合は再開します。
+- 通常種目と左右別種目に対応し、重量・回数・セット数・休憩・種目順を編集できます。
+- トレーニングカードと休憩カードはスワイプ操作で進めます。休憩終了は音と振動で知らせます。
+- ルームでは招待した友だちとトレーニング記録を共有できます。メンバーだけに表示し、送信失敗時は端末内に送信待ちを残します。
+- トレーニング終了画面またはルーム内の「記録を共有」から、共有する記録を選べます。
+
+## 共有サーバー
+
+[rooms-server/README.md](rooms-server/README.md) に起動・HTTPS公開・バックアップの手順があります。接続先は `FITSWIPE_ROOMS_URL` 環境変数または `-PfitSwipeRoomsUrl=...` でビルド時に指定します。未設定のビルドではルームは準備中になります。
 
 ## ビルド環境
 
 - Kotlin 2.1.21
 - Android Gradle Plugin 8.9.2
 - Gradle 8.11.1
-- compileSdk / targetSdk 35
+- compileSdk / targetSdk 36
 - minSdk 28
 - Java 17向けにコンパイル（ビルドホストではJava 21でも検証）
 - Room 2.7.2
@@ -48,15 +51,11 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 このリポジトリは筋トレ記録専用です。Health Connect上の健康データの閲覧・グラフ化は、別リポジトリのHealth Connect Dashboardで行います。
 
-## テスト状況
+## 確認コマンド
 
-- `./gradlew testDebugUnitTest`: 成功
-- `./gradlew assembleDebug`: 成功
-- `./gradlew assembleDebugAndroidTest`: 成功（Room/UI instrumentation APKのコンパイルまで）
-- 実機/エミュレータ上のinstrumentation test: 未実施
+```sh
+./gradlew :app:assembleDebug :app:testDebugUnitTest :app:assembleDebugAndroidTest
+python3 -m unittest discover -s rooms-server -v
+```
 
-この環境ではADBサーバーが権限制限で起動できないため、実機での片手操作、画面回転、TalkBackの目視確認は未検証です。
-
-## 今後の候補（P1）
-
-種目の並び替え・アーカイブ一覧、重量増減ボタンは今後追加できる項目です。
+Android instrumentationテストには端末またはエミュレータが必要です。ホームからプリセットを移動したこと、＋と再生の中心位置、選択状態の永続化、同時開始・既存セッションの再開を検証します。

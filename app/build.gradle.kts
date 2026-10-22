@@ -15,6 +15,10 @@ android {
         targetSdk = 36
         versionCode = 19
         versionName = "2.6"
+        val roomsUrl = providers.gradleProperty("fitSwipeRoomsUrl")
+            .orElse(providers.environmentVariable("FITSWIPE_ROOMS_URL")).getOrElse("")
+        require(roomsUrl.isEmpty() || roomsUrl.startsWith("https://") || roomsUrl.startsWith("http://10.0.2.2:") || roomsUrl.startsWith("http://127.0.0.1:"))
+        buildConfigField("String", "ROOMS_BASE_URL", "\"${roomsUrl.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true

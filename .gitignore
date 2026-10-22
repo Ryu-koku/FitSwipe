@@ -11,3 +11,9 @@ captures/
 *.keystore
 *.p12
 signing/
+
+# Room server runtime data and credentials
+rooms-server/__pycache__/
+rooms-server/.venv/
+rooms-server/.env
+rooms-server/*.sqlite3*

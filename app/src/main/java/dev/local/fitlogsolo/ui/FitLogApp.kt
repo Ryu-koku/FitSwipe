@@ -89,6 +89,7 @@ import androidx.compose.material3.Divider
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -177,7 +178,7 @@ import kotlinx.coroutines.launch
 
 private const val WORKOUT_CARD_HEIGHT_FRACTION = 0.84f
 
-private enum class MainScreen { HOME, SETTINGS, RECORDS, WORKOUT_COMPLETE }
+private enum class MainScreen { HOME, PREPARE, ROOMS, WORKOUT, SETTINGS, RECORDS, WORKOUT_COMPLETE }
 private enum class SettingsPage { MENU, BASIC, PRESETS, EXERCISES }
 private enum class ExerciseSide { RIGHT, LEFT }
 private val ExerciseSide.label: String
@@ -208,7 +209,7 @@ private data class WorkoutCompletionStats(
 )
 
 @Composable
-private fun Modifier.pressMotionClickable(enabled: Boolean = true, onClick: () -> Unit): Modifier {
+internal fun Modifier.pressMotionClickable(enabled: Boolean = true, onClick: () -> Unit): Modifier {
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
     val clickWithHaptic = hapticClick(onClick)
@@ -222,7 +223,7 @@ private fun Modifier.pressMotionClickable(enabled: Boolean = true, onClick: () -
 }
 
 @Composable
-private fun hapticClick(onClick: () -> Unit): () -> Unit {
+internal fun hapticClick(onClick: () -> Unit): () -> Unit {
     val view = LocalView.current
     val latestOnClick = rememberUpdatedState(onClick)
     return remember(view) {
@@ -279,9 +280,11 @@ private val FitLogColors = lightColorScheme(
 @Composable
 fun FitLogApp(
     viewModel: FitLogViewModel,
+    inviteCode: String? = null,
+    onInviteConsumed: () -> Unit = {},
 ) {
     MaterialTheme(colorScheme = FitLogColors) {
-        FitLogAppContent(viewModel)
+        FitLogAppContent(viewModel, inviteCode, onInviteConsumed)
     }
 }
 
@@ -289,10 +292,18 @@ fun FitLogApp(
 @Composable
 private fun FitLogAppContent(
     viewModel: FitLogViewModel,
+    inviteCode: String?,
+    onInviteConsumed: () -> Unit,
 ) {
     var settings by rememberSaveable { mutableStateOf(false) }
     var settingsPage by rememberSaveable { mutableStateOf(SettingsPage.MENU) }
     var showRecords by rememberSaveable { mutableStateOf(false) }
+    var roomsSelected by rememberSaveable { mutableStateOf(false) }
+    var preparing by rememberSaveable { mutableStateOf(false) }
+    var startingWorkout by remember { mutableStateOf(false) }
+    var completedSessionId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var sharePicker by rememberSaveable { mutableStateOf(false) }
+    var pendingRoomInvite by rememberSaveable { mutableStateOf<String?>(null) }
     var activePresetId by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedExerciseId by rememberSaveable { mutableStateOf<Long?>(null) }
     var showAddExercise by rememberSaveable { mutableStateOf(false) }
@@ -310,7 +321,7 @@ private fun FitLogAppContent(
     val activeSession by viewModel.activeSession.collectAsStateWithLifecycle()
     val sessions by viewModel.completedSessions.collectAsStateWithLifecycle()
     val weekStartsMonday by viewModel.weekStartsMonday.collectAsStateWithLifecycle()
-    val selectedExercise = exercises.firstOrNull { it.id == selectedExerciseId }
+    val selectedExercise = allExercises.firstOrNull { it.id == selectedExerciseId }
     val workoutFullscreen = activeSession != null && selectedExercise != null
     val weightStepKg by viewModel.weightStepKg.collectAsStateWithLifecycle()
     val exerciseWeightSteps by viewModel.exerciseWeightSteps.collectAsStateWithLifecycle()
@@ -319,8 +330,12 @@ private fun FitLogAppContent(
     val sideSwitchRestExerciseIds by viewModel.sideSwitchRestExerciseIds.collectAsStateWithLifecycle()
     val leftFirstExerciseIds by viewModel.leftFirstExerciseIds.collectAsStateWithLifecycle()
     val presets by viewModel.presets.collectAsStateWithLifecycle()
+    val storedPresetId by viewModel.selectedPresetId.collectAsStateWithLifecycle()
+    val selectedPreset = presets.firstOrNull { it.id == storedPresetId } ?: presets.firstOrNull()
+    val canStartPreset = selectedPreset?.exercises?.any { config -> exercises.any { it.id == config.exerciseId } } == true
     val message by viewModel.message.collectAsStateWithLifecycle()
-    val snackbar = SnackbarHostState()
+    val roomsState by viewModel.rooms.state.collectAsStateWithLifecycle()
+    val snackbar = remember { SnackbarHostState() }
     val context = LocalContext.current
     val permissionScope = rememberCoroutineScope()
 
@@ -365,23 +380,68 @@ private fun FitLogAppContent(
         }
     }
 
+    LaunchedEffect(inviteCode) {
+        if (inviteCode != null) { pendingRoomInvite = inviteCode; roomsSelected = true; preparing = false; onInviteConsumed() }
+    }
+    LaunchedEffect(roomsState.notice) {
+        roomsState.notice?.let { snackbar.showSnackbar(it); viewModel.rooms.acknowledgeNotice() }
+    }
+    LaunchedEffect(roomsState.error) {
+        if (showWorkoutComplete) roomsState.error?.let { snackbar.showSnackbar(it) }
+    }
+
+    fun beginSelectedWorkout() {
+        if (startingWorkout || (activeSession == null && !canStartPreset)) return
+        val clickedSession = activeSession
+        val clickedPreset = selectedPreset
+        startWorkoutWithBackgroundAlerts {
+            startingWorkout = true
+            val onStarted: (Long, List<Long>) -> Unit = { sessionId, exerciseIds ->
+                permissionScope.launch {
+                    try {
+                        val savedSets = viewModel.historySets(listOf(sessionId))
+                        val sessionPreset = presets.firstOrNull { it.id == clickedSession?.presetId } ?: clickedPreset
+                        activePresetId = sessionPreset?.id
+                        activePresetName = sessionPreset?.name ?: "トレーニング"
+                        val savedOrder = presetExerciseOrder.split(',').mapNotNull(String::toLongOrNull)
+                        val preferred = if (savedOrder.isNotEmpty() && clickedSession != null) savedOrder else sessionPreset?.exercises?.map { it.exerciseId }.orEmpty()
+                        val order = (preferred.filter { it in exerciseIds } + exerciseIds).distinct()
+                        presetExerciseOrder = order.joinToString(",")
+                        selectedExerciseId = order.firstOrNull { id -> savedSets.any { it.exerciseId == id && !it.isCompleted } } ?: order.firstOrNull()
+                        preparing = false
+                    } finally { startingWorkout = false }
+                }
+            }
+            if (clickedSession != null) viewModel.resumeWorkout(onFailed = { startingWorkout = false }, onReady = onStarted)
+            else if (clickedPreset != null) viewModel.startPreset(clickedPreset, onFailed = { startingWorkout = false }, onReady = onStarted)
+            else startingWorkout = false
+        }
+    }
+
     val mainScreen = when {
         showWorkoutComplete -> MainScreen.WORKOUT_COMPLETE
         settings -> MainScreen.SETTINGS
         showRecords -> MainScreen.RECORDS
+        workoutFullscreen -> MainScreen.WORKOUT
+        preparing -> MainScreen.PREPARE
+        roomsSelected -> MainScreen.ROOMS
         else -> MainScreen.HOME
     }
     BackHandler(
-        enabled = showAddExercise || settings || showRecords || workoutFullscreen,
+        enabled = showAddExercise || showWorkoutComplete || settings || showRecords || workoutFullscreen || preparing || roomsSelected,
     ) {
         when {
             showAddExercise -> showAddExercise = false
+            showWorkoutComplete -> { showWorkoutComplete = false; workoutCompletionSaved = false; roomsSelected = false }
             settings && settingsPage != SettingsPage.MENU -> settingsPage = SettingsPage.MENU
             settings -> settings = false
             showRecords -> showRecords = false
-            workoutFullscreen -> selectedExerciseId = null
+            workoutFullscreen -> { selectedExerciseId = null; preparing = true }
+            preparing -> preparing = false
+            roomsSelected -> roomsSelected = false
         }
     }
+    val showDock = mainScreen in setOf(MainScreen.HOME, MainScreen.ROOMS, MainScreen.PREPARE)
     Scaffold(
         modifier = Modifier.safeDrawingPadding(),
         topBar = {},
@@ -393,28 +453,37 @@ private fun FitLogAppContent(
                 .animateContentSize(spring(stiffness = 500f)),
             color = MaterialTheme.colorScheme.background,
         ) {
+          Box(Modifier.fillMaxSize()) {
             AnimatedContent(
+                modifier = Modifier.fillMaxSize(),
                 targetState = mainScreen,
                 transitionSpec = {
                     if (targetState == MainScreen.WORKOUT_COMPLETE) {
                         (fadeIn(tween(280)) + scaleIn(tween(320), initialScale = 0.94f)) togetherWith
                             (fadeOut(tween(180)) + scaleOut(tween(220), targetScale = 1.03f))
+                    } else if (targetState == MainScreen.PREPARE) {
+                        (slideInVertically(tween(300)) { it / 12 } + fadeIn(tween(240))) togetherWith fadeOut(tween(180))
+                    } else if (initialState == MainScreen.PREPARE && targetState != MainScreen.WORKOUT) {
+                        fadeIn(tween(240)) togetherWith (slideOutVertically(tween(280)) { it / 12 } + fadeOut(tween(180)))
                     } else {
-                        (slideInHorizontally(tween(320)) { width -> width / 5 } + fadeIn(tween(240))) togetherWith
-                            (slideOutHorizontally(tween(280)) { width -> -width / 5 } + fadeOut(tween(180)))
+                        val direction = if (targetState == MainScreen.HOME) -1 else 1
+                        (slideInHorizontally(tween(320)) { width -> direction * width / 5 } + fadeIn(tween(240))) togetherWith
+                            (slideOutHorizontally(tween(280)) { width -> -direction * width / 5 } + fadeOut(tween(180)))
                     }
                 },
                 label = "main screen transition",
             ) { screen ->
+              Box(Modifier.fillMaxSize().padding(bottom = if (screen in setOf(MainScreen.HOME, MainScreen.ROOMS, MainScreen.PREPARE)) 112.dp else 0.dp)) {
                 when (screen) {
                     MainScreen.WORKOUT_COMPLETE -> WorkoutCompleteScreen(
                         stats = completionStats,
                         saving = !workoutCompletionSaved,
-                        onOpenRecords = {
+                        onHome = {
                             showWorkoutComplete = false
                             workoutCompletionSaved = false
-                            showRecords = true
+                            roomsSelected = false
                         },
+                        onShare = { sharePicker = true },
                     )
                     MainScreen.SETTINGS -> SettingsScreen(
                         viewModel = viewModel,
@@ -448,21 +517,31 @@ private fun FitLogAppContent(
                         onPresetSelected = { activePresetId = it },
                         onBack = { showRecords = false },
                     )
-                    MainScreen.HOME -> RecordScreen(
+                    MainScreen.PREPARE -> TrainingPreparationScreen(
+                        presets = presets, exercises = exercises, selectedId = selectedPreset?.id,
+                        exerciseRestDurations = exerciseRestDurations,
+                        onExerciseRestDurationChange = viewModel::setExerciseRestDurationSeconds,
+                        onSelect = viewModel::selectPreset, onPresetsChange = viewModel::setPresets,
+                        onAddExercise = { showAddExercise = true }, onBack = { preparing = false },
+                    )
+                    MainScreen.ROOMS -> RoomsScreen(
+                        repository = viewModel.rooms, sessions = sessions, presets = presets,
+                        inviteCode = pendingRoomInvite, onInviteConsumed = { pendingRoomInvite = null },
+                        onShareSession = { roomId, sessionId -> viewModel.shareSession(roomId, sessionId) },
+                    )
+                    MainScreen.HOME, MainScreen.WORKOUT -> RecordScreen(
                         viewModel = viewModel,
-                        exercises = exercises,
+                        exercises = if (screen == MainScreen.WORKOUT) allExercises else exercises,
                         allExercises = allExercises,
-                        presets = presets,
                         activePresetName = activePresetName,
                         onOpenSettingsMenu = {
                             settingsPage = SettingsPage.MENU
                             settings = true
                         },
-                        onOpenRecords = { showRecords = true },
                         activeSessionId = activeSession?.id,
                         completedSessions = sessions,
                         presetExerciseOrder = presetExerciseOrder.split(',').mapNotNull(String::toLongOrNull),
-                        selectedExercise = selectedExercise,
+                        selectedExercise = if (screen == MainScreen.WORKOUT) selectedExercise else null,
                         onExerciseOrderChange = { ids -> presetExerciseOrder = ids.joinToString(",") },
                         weekStartsMonday = weekStartsMonday,
                         restEndsAtMillis = restEndsAtMillis,
@@ -473,16 +552,6 @@ private fun FitLogAppContent(
                         exerciseRestDurations = exerciseRestDurations,
                         sideSwitchRestExerciseIds = sideSwitchRestExerciseIds,
                         leftFirstExerciseIds = leftFirstExerciseIds,
-                        onStartPreset = { preset ->
-                            startWorkoutWithBackgroundAlerts {
-                                activePresetId = preset.id
-                                activePresetName = preset.name
-                                viewModel.startPreset(preset) { _, exerciseIds ->
-                                    selectedExerciseId = exerciseIds.firstOrNull()
-                                    presetExerciseOrder = exerciseIds.joinToString(",")
-                                }
-                            }
-                        },
                         onSelectExercise = { exercise ->
                             startWorkoutWithBackgroundAlerts {
                                 viewModel.startExercise(exercise) {
@@ -514,6 +583,7 @@ private fun FitLogAppContent(
                             activePresetName = null
                         },
                         onWorkoutComplete = { stats ->
+                            completedSessionId = activeSession?.id
                             completionStats = stats
                             workoutCompletionSaved = false
                             activeSession?.id?.let { sessionId ->
@@ -527,11 +597,34 @@ private fun FitLogAppContent(
                             activePresetName = null
                             showWorkoutComplete = true
                         },
-                        onBack = { selectedExerciseId = null },
+                        onBack = { selectedExerciseId = null; preparing = true },
                     )
                 }
+              }
             }
+            AnimatedVisibility(
+                visible = showDock,
+                modifier = Modifier.align(Alignment.BottomCenter),
+                enter = fadeIn(tween(220)) + slideInVertically(tween(260)) { it / 3 },
+                exit = fadeOut(tween(180)) + slideOutVertically(tween(220)) { it / 3 },
+            ) {
+                TrainingDock(
+                    preparing = preparing, roomsSelected = roomsSelected,
+                    selectedPresetName = selectedPreset?.name, resuming = activeSession != null,
+                    canStart = canStartPreset || activeSession != null,
+                    starting = startingWorkout,
+                    onHome = { roomsSelected = false }, onRooms = { roomsSelected = true },
+                    onCenter = { if (preparing) beginSelectedWorkout() else preparing = true },
+                )
+            }
+          }
         }
+    }
+
+    if (sharePicker && completedSessionId != null) {
+        RoomShareSheet(repository = viewModel.rooms, onDismiss = { sharePicker = false },
+            onOpenRooms = { sharePicker = false; showWorkoutComplete = false; roomsSelected = true },
+            onShare = { roomId -> viewModel.shareSession(roomId, completedSessionId!!); sharePicker = false })
     }
 
     if (showAddExercise) {
@@ -577,10 +670,8 @@ private fun RecordScreen(
     viewModel: FitLogViewModel,
     exercises: List<ExerciseEntity>,
     allExercises: List<ExerciseEntity>,
-    presets: List<WorkoutPreset>,
     activePresetName: String?,
     onOpenSettingsMenu: () -> Unit,
-    onOpenRecords: () -> Unit,
     activeSessionId: Long?,
     completedSessions: List<dev.local.fitlogsolo.data.WorkoutSessionEntity>,
     presetExerciseOrder: List<Long>,
@@ -595,7 +686,6 @@ private fun RecordScreen(
     exerciseRestDurations: Map<Long, Long>,
     sideSwitchRestExerciseIds: Set<Long>,
     leftFirstExerciseIds: Set<Long>,
-    onStartPreset: (WorkoutPreset) -> Unit,
     onSelectExercise: (ExerciseEntity) -> Unit,
     onSetCompleted: (Long) -> Unit,
     onSkipRest: () -> Unit,
@@ -603,8 +693,10 @@ private fun RecordScreen(
     onWorkoutComplete: (WorkoutCompletionStats) -> Unit,
     onBack: () -> Unit,
 ) {
-    val sessionSetsFlow = remember(viewModel, activeSessionId) {
-        activeSessionId?.let(viewModel::sessionSets) ?: kotlinx.coroutines.flow.flowOf(emptyList())
+    val initialSessionId = remember { activeSessionId }
+    val displayedSessionId = activeSessionId ?: initialSessionId
+    val sessionSetsFlow = remember(viewModel, displayedSessionId) {
+        displayedSessionId?.let(viewModel::sessionSets) ?: kotlinx.coroutines.flow.flowOf(emptyList())
     }
     val sessionSets by sessionSetsFlow
         .collectAsStateWithLifecycle(emptyList())
@@ -625,8 +717,11 @@ private fun RecordScreen(
         .firstOrNull { exerciseId -> sessionSets.any { it.exerciseId == exerciseId && !it.isCompleted } }
         ?.let { exerciseId -> exercises.firstOrNull { it.id == exerciseId } }
         ?: sessionExerciseIds.firstOrNull()?.let { exerciseId -> exercises.firstOrNull { it.id == exerciseId } }
+    var lastEditorExercise by remember { mutableStateOf(selectedExercise) }
+    if (selectedExercise != null) lastEditorExercise = selectedExercise
+    val editorSelection = selectedExercise ?: lastEditorExercise
     AnimatedContent(
-        targetState = selectedExercise?.let { exercise -> activeSessionId?.let { sessionId -> sessionId to exercise.id } },
+        targetState = editorSelection?.let { exercise -> displayedSessionId?.let { sessionId -> sessionId to exercise.id } },
         transitionSpec = {
             when {
                 initialState == null && targetState != null ->
@@ -686,7 +781,7 @@ private fun RecordScreen(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Row(
-                    Modifier.fillMaxWidth().height(38.dp),
+                    Modifier.fillMaxWidth().height(56.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
@@ -698,6 +793,10 @@ private fun RecordScreen(
                         ),
                         color = MaterialTheme.colorScheme.primary,
                     )
+                    Spacer(Modifier.weight(1f))
+                    FilledTonalIconButton(onClick = hapticClick(onOpenSettingsMenu), modifier = Modifier.size(44.dp), shape = CircleShape) {
+                        Icon(Icons.Default.Settings, "設定")
+                    }
                 }
                 if (activeSessionId != null) {
                     Card(Modifier.fillMaxWidth()) {
@@ -722,70 +821,11 @@ private fun RecordScreen(
                         }
                     }
                 }
+                Text("カレンダー", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(top = 8.dp, bottom = 2.dp))
                 WorkoutCalendar(completedSessions, allExercises, viewModel, weekStartsMonday)
-                Row(
-                    Modifier.fillMaxWidth().height(28.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text("プリセット", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                }
-                if (presets.isEmpty()) {
-                    Text("プリセットがありません。設定から追加できます。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                } else {
-                    presets.chunked(2).forEach { rowPresets ->
-                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-                            rowPresets.forEachIndexed { index, preset ->
-                                PresetChoiceCard(
-                                    label = preset.name,
-                                    detail = if (preset.exercises.isEmpty()) "種目を設定" else "${preset.exercises.size}種目",
-                                    enabled = preset.exercises.isNotEmpty(),
-                                    accent = if (index == 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.tertiary,
-                                    onClick = { onStartPreset(preset) },
-                                    modifier = Modifier.weight(1f),
-                                )
-                            }
-                            if (rowPresets.size == 1) Spacer(Modifier.weight(1f))
-                        }
-                    }
-                }
                 Spacer(Modifier.weight(1f))
-                Row(
-                    Modifier.fillMaxWidth().height(64.dp).padding(bottom = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    TextButton(onClick = hapticClick(onOpenRecords), modifier = Modifier.height(52.dp)) {
-                        Icon(Icons.Default.FitnessCenter, contentDescription = null)
-                        Spacer(Modifier.width(8.dp))
-                        Text("記録", fontWeight = FontWeight.Bold)
-                    }
-                    Spacer(Modifier.weight(1f))
-                    FloatingActionButton(
-                        onClick = hapticClick(onOpenSettingsMenu),
-                        modifier = Modifier.size(52.dp),
-                        shape = CircleShape,
-                    ) {
-                        Icon(Icons.Default.Settings, contentDescription = "設定")
-                    }
-                }
             }
-        }
-    }
-}
-
-@Composable
-private fun PresetChoiceCard(
-    label: String,
-    detail: String,
-    enabled: Boolean,
-    accent: Color,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Card(modifier = modifier.height(72.dp).pressMotionClickable(enabled, onClick)) {
-        Column(Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Box(Modifier.width(24.dp).height(4.dp).clip(CircleShape).background(accent))
-            Text(label, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, maxLines = 1)
-            Text(detail, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -794,7 +834,8 @@ private fun PresetChoiceCard(
 private fun WorkoutCompleteScreen(
     stats: WorkoutCompletionStats,
     saving: Boolean,
-    onOpenRecords: () -> Unit,
+    onHome: () -> Unit,
+    onShare: () -> Unit,
 ) {
     var animateIn by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { animateIn = true }
@@ -832,8 +873,11 @@ private fun WorkoutCompleteScreen(
             CompletionStatCard("${stats.setCount}", "セット", Modifier.weight(1f))
             CompletionStatCard("${stats.durationMinutes}", "分", Modifier.weight(1f))
         }
-        Button(onClick = hapticClick(onOpenRecords), enabled = !saving, modifier = Modifier.fillMaxWidth().padding(top = 24.dp).height(52.dp)) {
-            Text("記録を見る", fontWeight = FontWeight.Bold)
+        Button(onClick = hapticClick(onHome), enabled = !saving, modifier = Modifier.fillMaxWidth().padding(top = 24.dp).height(52.dp)) {
+            Text("ホームに戻る", fontWeight = FontWeight.Bold)
+        }
+        OutlinedButton(onClick = hapticClick(onShare), enabled = !saving, modifier = Modifier.fillMaxWidth().padding(top = 10.dp).height(52.dp)) {
+            Text("ルームへ共有", fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -3191,18 +3235,13 @@ private fun SettingsScreen(
                     }
                 }
                 item {
-                    SettingsNavigationCard("プリセット", "トレーニング内容を編集") {
-                        onPageChange(SettingsPage.PRESETS)
-                    }
-                }
-                item {
                     SettingsNavigationCard("種目管理", "名前・種目別設定・削除") {
                         onPageChange(SettingsPage.EXERCISES)
                     }
                 }
                 item {
                     Text(
-                        "このアプリは筋トレ記録を端末内に保存し、外部へ送信しません。",
+                        "記録は端末内に保存します。ルームへ投稿した記録だけがメンバーに共有されます。",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -3451,7 +3490,7 @@ private fun SettingsScreen(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun PresetEditorDialog(
+internal fun PresetEditorDialog(
     preset: WorkoutPreset,
     exercises: List<ExerciseEntity>,
     exerciseRestDurations: Map<Long, Long>,
@@ -3474,7 +3513,6 @@ private fun PresetEditorDialog(
         Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 16.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text("PRESET / EDIT", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.5.sp)
                     Text("プリセットを編集", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.ExtraBold)
                 }
                 TextButton(onClick = hapticClick(onDismiss)) { Text("完了") }

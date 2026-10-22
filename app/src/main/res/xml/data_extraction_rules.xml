@@ -1,0 +1,10 @@
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="sharedpref" path="fitlog_rooms_identity.xml" />
+        <exclude domain="sharedpref" path="fitlog_rooms_cache.xml" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="fitlog_rooms_identity.xml" />
+        <exclude domain="sharedpref" path="fitlog_rooms_cache.xml" />
+    </device-transfer>
+</data-extraction-rules>

@@ -37,7 +37,7 @@ class FitLogRepository(private val database: AppDatabase) {
     }
 
     suspend fun startOrResumeSession(): Long {
-        val current = sessions.observeInProgress().first()
+        val current = sessions.findInProgress()
         return current?.id ?: sessions.insert(WorkoutSessionEntity(startedAt = Instant.now()))
     }
 
@@ -85,8 +85,15 @@ class FitLogRepository(private val database: AppDatabase) {
         return sessionId to presetExercises.map { it.id }
     }
 
-    suspend fun startPresetSession(preset: WorkoutPreset): Pair<Long, List<Long>> {
-        val activeExercises = exercises.observeActive().first().associateBy { it.id }
+    suspend fun startPresetSession(preset: WorkoutPreset): Pair<Long, List<Long>> = database.withTransaction {
+        // Resume the existing session without adding another preset's sets to it.
+        sessions.findInProgress()?.let { active ->
+            val existing = sets.findForSession(active.id)
+            if (existing.isNotEmpty()) {
+                return@withTransaction active.id to existing.sortedBy { it.createdAt }.map { it.exerciseId }.distinct()
+            }
+        }
+        val activeExercises = exercises.findActive().associateBy { it.id }
         val selected = preset.exercises.mapNotNull { config -> activeExercises[config.exerciseId]?.let { config to it } }
         require(selected.isNotEmpty()) { "プリセットに種目を設定してください" }
         val sessionId = startOrResumeSession()
@@ -121,7 +128,7 @@ class FitLogRepository(private val database: AppDatabase) {
                 }
             }
         }
-        return sessionId to selected.map { (_, exercise) -> exercise.id }
+        sessionId to selected.map { (_, exercise) -> exercise.id }
     }
 
     suspend fun addSet(sessionId: Long, exercise: ExerciseEntity): Long {

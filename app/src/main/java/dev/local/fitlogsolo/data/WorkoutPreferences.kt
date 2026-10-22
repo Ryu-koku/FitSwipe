@@ -66,6 +66,14 @@ class WorkoutPreferences(context: Context) {
     private val _presets = MutableStateFlow(readPresets())
     val presets: StateFlow<List<WorkoutPreset>> = _presets.asStateFlow()
 
+    private val _selectedPresetId = MutableStateFlow(preferences.getString("selected_preset_id", null))
+    val selectedPresetId: StateFlow<String?> = _selectedPresetId.asStateFlow()
+
+    fun selectPreset(id: String?) {
+        preferences.edit().putString("selected_preset_id", id).apply()
+        _selectedPresetId.value = id
+    }
+
     fun setWeekStartsMonday(weekStartsMonday: Boolean) {
         preferences.edit().putBoolean(KEY_WEEK_STARTS_MONDAY, weekStartsMonday).apply()
         _weekStartsMonday.value = weekStartsMonday
@@ -145,6 +153,7 @@ class WorkoutPreferences(context: Context) {
         }
         preferences.edit().putString(KEY_PRESETS, encodePresets(cleaned)).apply()
         _presets.value = cleaned
+        if (cleaned.none { it.id == _selectedPresetId.value }) selectPreset(cleaned.firstOrNull()?.id)
     }
 
     fun initializePresetsIfMissing(gymIds: List<Long>, homeIds: List<Long>) {
