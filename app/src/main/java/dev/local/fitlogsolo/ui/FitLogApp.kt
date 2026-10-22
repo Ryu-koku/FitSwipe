@@ -156,6 +156,7 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 import java.math.BigDecimal
 import kotlin.math.abs
+import kotlin.math.hypot
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
@@ -1167,15 +1168,17 @@ private fun ExerciseEditor(
                     swipeOffset = restPreviewDragOffset,
                 )
             } else if (cardBehind != null) {
-                UpcomingSetPreviewCard(
-                    exercise = cardBehind.exercise,
-                    set = cardBehind.set,
-                    side = cardBehind.side,
-                    totalSets = allSessionSets.count { it.exerciseId == cardBehind.exercise.id }
-                        .coerceAtLeast(cardBehind.set.setOrder + 1),
-                    restCardActive = restEndsAtMillis > 0L,
-                    dismissWithRest = dismissRestStack,
-                )
+                androidx.compose.runtime.key(cardBehind.set.id, cardBehind.side, restEndsAtMillis > 0L) {
+                    UpcomingSetPreviewCard(
+                        exercise = cardBehind.exercise,
+                        set = cardBehind.set,
+                        side = cardBehind.side,
+                        totalSets = allSessionSets.count { it.exerciseId == cardBehind.exercise.id }
+                            .coerceAtLeast(cardBehind.set.setOrder + 1),
+                        restCardActive = restEndsAtMillis > 0L,
+                        dismissWithRest = dismissRestStack,
+                    )
+                }
             }
             AnimatedContent(
                 targetState = cardScene,
@@ -1183,7 +1186,9 @@ private fun ExerciseEditor(
                 transitionSpec = {
                     val promotesVisibleBackCard = targetState?.key?.startsWith("set:") == true &&
                         (initialState?.key?.startsWith("set:") == true || initialState?.key?.startsWith("rest:") == true)
-                    if (promotesVisibleBackCard) {
+                    val promotesRestPreview = targetState?.key?.startsWith("rest:") == true &&
+                        initialState?.key?.startsWith("set:") == true
+                    if (promotesVisibleBackCard || promotesRestPreview) {
                         androidx.compose.animation.EnterTransition.None togetherWith
                             androidx.compose.animation.ExitTransition.None
                     } else {
@@ -1216,7 +1221,9 @@ private fun ExerciseEditor(
                         onUpdate = viewModel::updateSet,
                         onAdvance = { if (currentSet?.id == scene.set.id) advance(scene.set) },
                         onSkip = { if (currentSet?.id == scene.set.id) skip(scene.set) },
-                        onSwipeOffsetChanged = { restPreviewDragOffset = it },
+                        onSwipeOffsetChanged = { offset, skipping ->
+                            restPreviewDragOffset = if (skipping == true) offset else Offset.Zero
+                        },
                     )
                 }
             }
@@ -1354,13 +1361,13 @@ private fun UpcomingSetPreviewCard(
                 ) {
                     Text(
                         set.normalWeightKg?.let(::formatWeight) ?: "—",
-                        style = MaterialTheme.typography.displayMedium.copy(fontWeight = FontWeight.ExtraBold),
+                        style = MaterialTheme.typography.displayLarge.copy(fontWeight = FontWeight.ExtraBold),
                         maxLines = 1,
                     )
                     Text(" × ", style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.primary)
                     Text(
                         set.normalReps?.toString() ?: "—",
-                        style = MaterialTheme.typography.displayMedium.copy(fontWeight = FontWeight.ExtraBold),
+                        style = MaterialTheme.typography.displayLarge.copy(fontWeight = FontWeight.ExtraBold),
                         maxLines = 1,
                     )
                 }
@@ -1419,7 +1426,7 @@ private fun PreviewSideValue(label: String, weightKg: Double?, reps: Int?, modif
         Text(label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(
             "${weightKg?.let(::formatWeight) ?: "—"} × ${reps ?: "—"}",
-            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.ExtraBold),
+            style = MaterialTheme.typography.displayMedium.copy(fontWeight = FontWeight.ExtraBold),
             maxLines = 1,
         )
     }
@@ -1436,28 +1443,32 @@ private fun SetEditorCard(
     onUpdate: (WorkoutSetEntity) -> Unit,
     onAdvance: () -> Unit,
     onSkip: () -> Unit,
-    onSwipeOffsetChanged: (Offset) -> Unit,
+    onSwipeOffsetChanged: (Offset, Boolean?) -> Unit,
 ) {
     val palette = exerciseCardPalette(exercise.name)
     var swipeOffsetX by androidx.compose.runtime.remember(set.id, side) { androidx.compose.runtime.mutableFloatStateOf(0f) }
     var swipeOffsetY by androidx.compose.runtime.remember(set.id, side) { androidx.compose.runtime.mutableFloatStateOf(0f) }
+    var swipeSkips by remember(set.id, side) { mutableStateOf<Boolean?>(null) }
+    var swipeHorizontalLock by remember(set.id, side) { mutableStateOf<Boolean?>(null) }
     LaunchedEffect(enabled, set.id, side) {
         if (!enabled) {
             swipeOffsetX = 0f
             swipeOffsetY = 0f
-            onSwipeOffsetChanged(Offset.Zero)
+            swipeSkips = null
+            swipeHorizontalLock = null
+            onSwipeOffsetChanged(Offset.Zero, null)
         }
     }
     val animationScope = rememberCoroutineScope()
     val density = LocalDensity.current
     BoxWithConstraints(Modifier.fillMaxSize()) {
-        val horizontalSwipe = abs(swipeOffsetX) >= abs(swipeOffsetY)
+        val horizontalSwipe = swipeHorizontalLock ?: (abs(swipeOffsetX) >= abs(swipeOffsetY))
         val cardWidthPx = with(density) { maxWidth.toPx() }
         val cardHeightPx = with(density) { (maxHeight * WORKOUT_CARD_HEIGHT_FRACTION).toPx() }
         val swipeEdgePx = if (horizontalSwipe) cardWidthPx else cardHeightPx
-        val swipeDistance = if (horizontalSwipe) abs(swipeOffsetX) else abs(swipeOffsetY)
+        val swipeDistance = hypot(swipeOffsetX.toDouble(), swipeOffsetY.toDouble()).toFloat()
         val swipeProgress = if (swipeEdgePx > 0f) (swipeDistance / (swipeEdgePx * 0.45f)).coerceIn(0f, 1f) else 0f
-        val advancing = if (horizontalSwipe) swipeOffsetX > 0f else swipeOffsetY < 0f
+        val advancing = swipeSkips?.not() ?: if (horizontalSwipe) swipeOffsetX > 0f else swipeOffsetY < 0f
         val swipeColor = if (!advancing) Color(0xFF201A19) else Color(0xFFF0442E)
         Card(
         Modifier.align(Alignment.Center).fillMaxWidth().fillMaxHeight(WORKOUT_CARD_HEIGHT_FRACTION)
@@ -1468,12 +1479,13 @@ private fun SetEditorCard(
             }
             .drawWithContent {
                 drawContent()
-                val horizontal = abs(swipeOffsetX) >= abs(swipeOffsetY)
-                val distance = if (horizontal) abs(swipeOffsetX) else abs(swipeOffsetY)
+                val horizontal = swipeHorizontalLock ?: (abs(swipeOffsetX) >= abs(swipeOffsetY))
+                val distance = hypot(swipeOffsetX.toDouble(), swipeOffsetY.toDouble()).toFloat()
                 val edgeSize = if (horizontal) size.width else size.height
                 val progress = if (edgeSize > 0f) (distance / (edgeSize * 0.45f)).coerceIn(0f, 1f) else 0f
                 if (progress > 0f) {
-                    val swipeAdvances = if (horizontal) swipeOffsetX > 0f else swipeOffsetY < 0f
+                    val swipeAdvances = swipeSkips?.not()
+                        ?: if (horizontal) swipeOffsetX > 0f else swipeOffsetY < 0f
                     val color = if (swipeAdvances) Color(0xFFF0442E) else Color(0xFF201A19)
                     val tint = color.copy(alpha = progress * 0.2f)
                     val softTint = tint.copy(alpha = tint.alpha * 0.58f)
@@ -1503,72 +1515,130 @@ private fun SetEditorCard(
             .pointerInput(set.id, enabled, side) {
                 var dragX = 0f
                 var dragY = 0f
+                var skipGesture: Boolean? = null
+                var horizontalGesture: Boolean? = null
                 detectDragGestures(
                     onDragStart = {
                         dragX = 0f
                         dragY = 0f
-                        onSwipeOffsetChanged(Offset.Zero)
+                        skipGesture = null
+                        horizontalGesture = null
+                        swipeSkips = null
+                        swipeHorizontalLock = null
+                        onSwipeOffsetChanged(Offset.Zero, null)
                     },
                     onDrag = { change, dragAmount ->
                         change.consume()
                         dragX += dragAmount.x
                         dragY += dragAmount.y
                         swipeOffsetX = dragX
-                        swipeOffsetY = dragY.coerceIn(-size.height * 0.35f, size.height * 0.35f)
-                        onSwipeOffsetChanged(Offset(swipeOffsetX, swipeOffsetY))
+                        swipeOffsetY = dragY
+                        val directionLockDistance = minOf(size.width, size.height) * 0.08f
+                        if (skipGesture == null && hypot(dragX.toDouble(), dragY.toDouble()) >= directionLockDistance) {
+                            horizontalGesture = abs(dragX) >= abs(dragY)
+                            skipGesture = if (horizontalGesture == true) dragX < 0f else dragY > 0f
+                            swipeSkips = skipGesture
+                            swipeHorizontalLock = horizontalGesture
+                        }
+                        onSwipeOffsetChanged(Offset(swipeOffsetX, swipeOffsetY), skipGesture)
                     },
                     onDragEnd = {
                         if (!enabled) {
                             animationScope.launch {
-                                Animatable(swipeOffsetX).animateTo(0f, spring(dampingRatio = 0.68f, stiffness = 250f)) { swipeOffsetX = value }
-                                Animatable(swipeOffsetY).animateTo(0f, spring(dampingRatio = 0.68f, stiffness = 250f)) { swipeOffsetY = value }
+                                coroutineScope {
+                                    launch {
+                                        Animatable(swipeOffsetX).animateTo(0f, spring(dampingRatio = 0.68f, stiffness = 250f)) {
+                                            swipeOffsetX = value
+                                            onSwipeOffsetChanged(Offset(value, swipeOffsetY), skipGesture)
+                                        }
+                                    }
+                                    launch {
+                                        Animatable(swipeOffsetY).animateTo(0f, spring(dampingRatio = 0.68f, stiffness = 250f)) {
+                                            swipeOffsetY = value
+                                            onSwipeOffsetChanged(Offset(swipeOffsetX, value), skipGesture)
+                                        }
+                                    }
+                                }
+                                swipeSkips = null
+                                swipeHorizontalLock = null
+                                onSwipeOffsetChanged(Offset.Zero, null)
                             }
                         } else {
-                            val horizontal = abs(dragX) >= abs(dragY)
-                            val distance = if (horizontal) abs(dragX) else abs(dragY)
-                            val threshold = minOf(size.width, size.height) * 0.12f
+                            val horizontal = horizontalGesture ?: (abs(dragX) >= abs(dragY))
+                            val distance = hypot(dragX.toDouble(), dragY.toDouble()).toFloat()
+                            val threshold = minOf(size.width, size.height) * 0.08f
                             if (distance >= threshold) {
-                                val advance = if (horizontal) dragX > 0f else dragY < 0f
+                                if (skipGesture == null) {
+                                    horizontalGesture = horizontal
+                                    skipGesture = if (horizontal) dragX < 0f else dragY > 0f
+                                    swipeHorizontalLock = horizontalGesture
+                                    swipeSkips = skipGesture
+                                }
+                                val advance = !skipGesture!!
+                                onSwipeOffsetChanged(Offset(swipeOffsetX, swipeOffsetY), skipGesture)
                                 animationScope.launch {
-                                    if (horizontal) {
-                                        val targetX = if (dragX > 0f) size.width * 1.25f else -size.width * 1.25f
-                                        Animatable(swipeOffsetX).animateTo(targetX, tween(220)) {
-                                            swipeOffsetX = value
-                                            onSwipeOffsetChanged(Offset(value, swipeOffsetY))
+                                    val scale = (hypot(size.width.toDouble(), size.height.toDouble()).toFloat() * 1.25f) /
+                                        distance.coerceAtLeast(1f)
+                                    val targetX = dragX * scale
+                                    val targetY = dragY * scale
+                                    coroutineScope {
+                                        launch {
+                                            Animatable(swipeOffsetX).animateTo(targetX, tween(220)) {
+                                                swipeOffsetX = value
+                                                onSwipeOffsetChanged(Offset(value, swipeOffsetY), skipGesture)
+                                            }
                                         }
-                                    } else {
-                                        val targetY = if (dragY > 0f) size.height * 1.25f else -size.height * 1.25f
-                                        Animatable(swipeOffsetY).animateTo(targetY, tween(220)) {
-                                            swipeOffsetY = value
-                                            onSwipeOffsetChanged(Offset(swipeOffsetX, value))
+                                        launch {
+                                            Animatable(swipeOffsetY).animateTo(targetY, tween(220)) {
+                                                swipeOffsetY = value
+                                                onSwipeOffsetChanged(Offset(swipeOffsetX, value), skipGesture)
+                                            }
                                         }
                                     }
                                     if (advance) onAdvance() else onSkip()
                                 }
                             } else {
                                 animationScope.launch {
-                                    Animatable(swipeOffsetX).animateTo(0f, spring(dampingRatio = 0.62f, stiffness = 220f)) {
-                                        swipeOffsetX = value
-                                        onSwipeOffsetChanged(Offset(value, swipeOffsetY))
+                                    coroutineScope {
+                                        launch {
+                                            Animatable(swipeOffsetX).animateTo(0f, spring(dampingRatio = 0.62f, stiffness = 220f)) {
+                                                swipeOffsetX = value
+                                                onSwipeOffsetChanged(Offset(value, swipeOffsetY), skipGesture)
+                                            }
+                                        }
+                                        launch {
+                                            Animatable(swipeOffsetY).animateTo(0f, spring(dampingRatio = 0.62f, stiffness = 220f)) {
+                                                swipeOffsetY = value
+                                                onSwipeOffsetChanged(Offset(swipeOffsetX, value), skipGesture)
+                                            }
+                                        }
                                     }
-                                    Animatable(swipeOffsetY).animateTo(0f, spring(dampingRatio = 0.62f, stiffness = 220f)) {
-                                        swipeOffsetY = value
-                                        onSwipeOffsetChanged(Offset(swipeOffsetX, value))
-                                    }
+                                    swipeSkips = null
+                                    swipeHorizontalLock = null
+                                    onSwipeOffsetChanged(Offset.Zero, null)
                                 }
                             }
                         }
                     },
                     onDragCancel = {
                         animationScope.launch {
-                            Animatable(swipeOffsetX).animateTo(0f, spring(dampingRatio = 0.62f, stiffness = 220f)) {
-                                swipeOffsetX = value
-                                onSwipeOffsetChanged(Offset(value, swipeOffsetY))
+                            coroutineScope {
+                                launch {
+                                    Animatable(swipeOffsetX).animateTo(0f, spring(dampingRatio = 0.62f, stiffness = 220f)) {
+                                        swipeOffsetX = value
+                                        onSwipeOffsetChanged(Offset(value, swipeOffsetY), skipGesture)
+                                    }
+                                }
+                                launch {
+                                    Animatable(swipeOffsetY).animateTo(0f, spring(dampingRatio = 0.62f, stiffness = 220f)) {
+                                        swipeOffsetY = value
+                                        onSwipeOffsetChanged(Offset(swipeOffsetX, value), skipGesture)
+                                    }
+                                }
                             }
-                            Animatable(swipeOffsetY).animateTo(0f, spring(dampingRatio = 0.62f, stiffness = 220f)) {
-                                swipeOffsetY = value
-                                onSwipeOffsetChanged(Offset(swipeOffsetX, value))
-                            }
+                            swipeSkips = null
+                            swipeHorizontalLock = null
+                            onSwipeOffsetChanged(Offset.Zero, null)
                         }
                     },
                 )
@@ -1903,30 +1973,26 @@ private fun RestTimerCard(
                 },
                 onDragEnd = {
                     if (!isDismissing) {
-                        val horizontal = abs(dragX) >= abs(dragY)
-                        val distance = if (horizontal) abs(dragX) else abs(dragY)
-                        val edgeSize = if (horizontal) size.width else size.height
-                        if (distance >= edgeSize * 0.12f) {
-                            val targetX = if (horizontal) {
-                                if (dragX > 0f) size.width * 1.25f else -size.width * 1.25f
-                            } else {
-                                0f
-                            }
-                            val targetY = if (horizontal) {
-                                0f
-                            } else if (dragY > 0f) {
-                                size.height * 1.25f
-                            } else {
-                                -size.height * 1.25f
-                            }
+                        val distance = hypot(dragX.toDouble(), dragY.toDouble()).toFloat()
+                        if (distance >= minOf(size.width, size.height) * 0.08f) {
+                            val exitDistance = hypot(size.width.toDouble(), size.height.toDouble()).toFloat() * 1.25f
+                            val scale = exitDistance / distance.coerceAtLeast(1f)
+                            val targetX = dragX * scale
+                            val targetY = dragY * scale
                             dismissTo(targetX, targetY, dismissStack = false)
                         } else {
                             animationScope.launch {
-                                Animatable(dragOffsetX).animateTo(0f, spring(dampingRatio = 0.62f, stiffness = 220f)) {
-                                    dragOffsetX = value
-                                }
-                                Animatable(dragOffsetY).animateTo(0f, spring(dampingRatio = 0.62f, stiffness = 220f)) {
-                                    dragOffsetY = value
+                                coroutineScope {
+                                    launch {
+                                        Animatable(dragOffsetX).animateTo(0f, spring(dampingRatio = 0.62f, stiffness = 220f)) {
+                                            dragOffsetX = value
+                                        }
+                                    }
+                                    launch {
+                                        Animatable(dragOffsetY).animateTo(0f, spring(dampingRatio = 0.62f, stiffness = 220f)) {
+                                            dragOffsetY = value
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -1934,11 +2000,17 @@ private fun RestTimerCard(
                 },
                 onDragCancel = {
                     animationScope.launch {
-                        Animatable(dragOffsetX).animateTo(0f, spring(dampingRatio = 0.62f, stiffness = 220f)) {
-                            dragOffsetX = value
-                        }
-                        Animatable(dragOffsetY).animateTo(0f, spring(dampingRatio = 0.62f, stiffness = 220f)) {
-                            dragOffsetY = value
+                        coroutineScope {
+                            launch {
+                                Animatable(dragOffsetX).animateTo(0f, spring(dampingRatio = 0.62f, stiffness = 220f)) {
+                                    dragOffsetX = value
+                                }
+                            }
+                            launch {
+                                Animatable(dragOffsetY).animateTo(0f, spring(dampingRatio = 0.62f, stiffness = 220f)) {
+                                    dragOffsetY = value
+                                }
+                            }
                         }
                     }
                 },
