@@ -165,11 +165,13 @@ import kotlin.math.abs
 import kotlin.math.hypot
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 private const val WORKOUT_CARD_HEIGHT_FRACTION = 0.78f
 
 private enum class MainScreen { HOME, SETTINGS, WORKOUT_COMPLETE }
+private enum class SettingsPage { MENU, BASIC, PRESETS, EXERCISES }
 private enum class ExerciseSide { RIGHT, LEFT }
 private val ExerciseSide.label: String
     get() = if (this == ExerciseSide.RIGHT) "右" else "左"
@@ -246,6 +248,7 @@ private fun FitLogAppContent(
     viewModel: FitLogViewModel,
 ) {
     var settings by rememberSaveable { mutableStateOf(false) }
+    var settingsPage by rememberSaveable { mutableStateOf(SettingsPage.MENU) }
     var selectedExerciseId by rememberSaveable { mutableStateOf<Long?>(null) }
     var showAddExercise by rememberSaveable { mutableStateOf(false) }
     var showWorkoutComplete by rememberSaveable { mutableStateOf(false) }
@@ -260,7 +263,6 @@ private fun FitLogAppContent(
     val allExercises by viewModel.allExercises.collectAsStateWithLifecycle()
     val activeSession by viewModel.activeSession.collectAsStateWithLifecycle()
     val sessions by viewModel.completedSessions.collectAsStateWithLifecycle()
-    val routineExerciseIds by viewModel.routineExerciseIds.collectAsStateWithLifecycle()
     val weekStartsMonday by viewModel.weekStartsMonday.collectAsStateWithLifecycle()
     val selectedExercise = exercises.firstOrNull { it.id == selectedExerciseId }
     val workoutFullscreen = activeSession != null && selectedExercise != null
@@ -327,6 +329,7 @@ private fun FitLogAppContent(
     ) {
         when {
             showAddExercise -> showAddExercise = false
+            settings && settingsPage != SettingsPage.MENU -> settingsPage = SettingsPage.MENU
             settings -> settings = false
             workoutFullscreen -> selectedExerciseId = null
         }
@@ -340,7 +343,10 @@ private fun FitLogAppContent(
                 enter = fadeIn(tween(220)) + scaleIn(tween(220), initialScale = 0.82f),
                 exit = fadeOut(tween(150)) + scaleOut(tween(150), targetScale = 0.82f),
             ) {
-                FloatingActionButton(onClick = { settings = true }, shape = CircleShape) {
+                FloatingActionButton(onClick = {
+                    settingsPage = SettingsPage.MENU
+                    settings = true
+                }, shape = CircleShape) {
                     Icon(Icons.Default.Settings, contentDescription = "設定")
                 }
             }
@@ -379,6 +385,8 @@ private fun FitLogAppContent(
                         viewModel = viewModel,
                         exercises = exercises,
                         presets = presets,
+                        page = settingsPage,
+                        onPageChange = { settingsPage = it },
                         onBack = { settings = false },
                         onAddExercise = { showAddExercise = true },
                         weekStartsMonday = weekStartsMonday,
@@ -402,8 +410,10 @@ private fun FitLogAppContent(
                         exercises = exercises,
                         allExercises = allExercises,
                         presets = presets,
-                        routineExerciseIds = routineExerciseIds,
-                        onOpenSettings = { settings = true },
+                        onOpenSettings = {
+                            settingsPage = SettingsPage.PRESETS
+                            settings = true
+                        },
                         activeSessionId = activeSession?.id,
                         completedSessions = sessions,
                         presetExerciseOrder = presetExerciseOrder.split(',').mapNotNull(String::toLongOrNull),
@@ -433,7 +443,6 @@ private fun FitLogAppContent(
                                 }
                             }
                         },
-                        onToggleRoutineExercise = viewModel::toggleRoutineExercise,
                         onSetCompleted = { durationSeconds ->
                             if (durationSeconds > 0L) {
                                 val restStartTime = System.currentTimeMillis()
@@ -521,7 +530,6 @@ private fun RecordScreen(
     exercises: List<ExerciseEntity>,
     allExercises: List<ExerciseEntity>,
     presets: List<WorkoutPreset>,
-    routineExerciseIds: List<Long>,
     onOpenSettings: () -> Unit,
     activeSessionId: Long?,
     completedSessions: List<dev.local.fitlogsolo.data.WorkoutSessionEntity>,
@@ -539,7 +547,6 @@ private fun RecordScreen(
     leftFirstExerciseIds: Set<Long>,
     onStartPreset: (WorkoutPreset) -> Unit,
     onSelectExercise: (ExerciseEntity) -> Unit,
-    onToggleRoutineExercise: (Long) -> Unit,
     onSetCompleted: (Long) -> Unit,
     onSkipRest: () -> Unit,
     onFinishSession: () -> Unit,
@@ -892,6 +899,7 @@ private fun WorkoutCalendar(
     var selectedDateText by rememberSaveable { mutableStateOf<String?>(null) }
     var historySets by remember { mutableStateOf<List<WorkoutSetEntity>?>(null) }
     val yearMonth = YearMonth.parse(month)
+    val today = LocalDate.now()
     val selectedDate = selectedDateText?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
     val sessionDays = sessions.mapNotNull { session ->
         runCatching { session.startedAt.atZone(ZoneId.systemDefault()).toLocalDate() }.getOrNull()
@@ -967,7 +975,13 @@ private fun WorkoutCalendar(
                         listOf("日", "月", "火", "水", "木", "金", "土")
                     }
                     weekLabels.forEach { day ->
-                        Text(day, modifier = Modifier.weight(1f), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            day,
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        )
                     }
                 }
                 val firstDayOfWeekValue = displayedMonth.atDay(1).dayOfWeek.value
@@ -982,21 +996,22 @@ private fun WorkoutCalendar(
                                     val day = displayedMonth.atDay(dayNumber)
                                     val hasWorkout = day in workoutDays
                                     val isSelected = day == selectedDate
+                                    val isToday = day == today
                                     Surface(
                                         modifier = Modifier.size(36.dp)
                                             .clickable(enabled = hasWorkout) { selectedDateText = day.toString() }
                                             .semantics {
                                                 contentDescription = buildString {
                                                     append(day.format(DateTimeFormatter.ofPattern("M月d日", Locale.JAPAN)))
+                                                    if (isToday) append("、今日")
                                                     if (hasWorkout) append("、トレーニング記録あり")
                                                     if (isSelected) append("、選択中")
                                                 }
                                             },
                                         shape = MaterialTheme.shapes.large,
-                                        border = if (day == LocalDate.now() && !hasWorkout && !isSelected) {
-                                            BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
-                                        } else null,
+                                        border = if (isToday) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
                                         color = when {
+                                            isToday -> MaterialTheme.colorScheme.primaryContainer
                                             isSelected || hasWorkout -> MaterialTheme.colorScheme.primary
                                             else -> Color.Transparent
                                         },
@@ -1004,13 +1019,24 @@ private fun WorkoutCalendar(
                                         Box(contentAlignment = Alignment.Center) {
                                             Text(
                                                 dayNumber.toString(),
-                                                style = MaterialTheme.typography.bodySmall,
+                                                style = MaterialTheme.typography.bodySmall.copy(
+                                                    fontWeight = if (isToday) FontWeight.Bold else FontWeight.Normal,
+                                                ),
                                                 color = when {
+                                                    isToday -> MaterialTheme.colorScheme.onPrimaryContainer
                                                     isSelected || hasWorkout -> MaterialTheme.colorScheme.onPrimary
-                                                    day == LocalDate.now() -> MaterialTheme.colorScheme.primary
                                                     else -> MaterialTheme.colorScheme.onSurface
                                                 },
                                             )
+                                            if (isToday && hasWorkout) {
+                                                Box(
+                                                    Modifier.align(Alignment.BottomCenter)
+                                                        .padding(bottom = 3.dp)
+                                                        .size(4.dp)
+                                                        .clip(CircleShape)
+                                                        .background(MaterialTheme.colorScheme.primary),
+                                                )
+                                            }
                                         }
                                     }
                                 }
@@ -1099,31 +1125,32 @@ private fun WorkoutHistorySummary(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    exerciseSets.sortedWith(compareBy<WorkoutSetEntity> { it.setOrder }.thenBy { it.id })
-                        .forEachIndexed { index, set ->
-                            val normalPerformance = if (set.normalWeightKg != null || set.normalReps != null) {
+                    val performanceCounts = exerciseSets
+                        .sortedWith(compareBy<WorkoutSetEntity> { it.setOrder }.thenBy { it.id })
+                        .mapNotNull { set ->
+                            val normal = if (set.normalWeightKg != null || set.normalReps != null) {
                                 performance(set.normalWeightKg, set.normalReps)
                             } else null
-                            val leftPerformance = if (set.leftWeightKg != null || set.leftReps != null) {
+                            val left = if (set.leftWeightKg != null || set.leftReps != null) {
                                 "左 ${performance(set.leftWeightKg, set.leftReps)}"
                             } else null
-                            val rightPerformance = if (set.rightWeightKg != null || set.rightReps != null) {
+                            val right = if (set.rightWeightKg != null || set.rightReps != null) {
                                 "右 ${performance(set.rightWeightKg, set.rightReps)}"
                             } else null
-                            val detail = listOfNotNull(normalPerformance, leftPerformance, rightPerformance)
-                                .joinToString("  ·  ")
-                            if (detail.isNotEmpty()) {
-                                Row(verticalAlignment = Alignment.Top) {
-                                    Text(
-                                        "${index + 1}",
-                                        modifier = Modifier.padding(end = 8.dp),
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                    Text(detail, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
-                                }
-                            }
+                            listOfNotNull(normal, left, right).takeIf { it.isNotEmpty() }
+                                ?.joinToString(" · ")
                         }
+                        .groupingBy { it }
+                        .eachCount()
+                    if (performanceCounts.isNotEmpty()) {
+                        Text(
+                            performanceCounts.entries.joinToString("  /  ") { (performance, count) ->
+                                "$performance${if (count > 1) " · ${count}セット" else ""}"
+                            },
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium,
+                        )
+                    }
                 }
             }
         }
@@ -2656,12 +2683,98 @@ private fun String.toRestSecondsOrNull(): Long? {
     return (minutes * 60.0).roundToInt().toLong()
 }
 
+@Composable
+private fun SettingsNavigationCard(
+    title: String,
+    description: String,
+    onClick: () -> Unit,
+) {
+    Card(Modifier.fillMaxWidth().clickable(onClick = onClick)) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun ExerciseManagementItem(
+    exerciseId: Long,
+    name: String,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    val revealWidth = 92.dp
+    val revealWidthPx = with(LocalDensity.current) { revealWidth.toPx() }
+    var revealOffset by remember(exerciseId) { androidx.compose.runtime.mutableFloatStateOf(0f) }
+    var settleJob by remember(exerciseId) { mutableStateOf<Job?>(null) }
+    val scope = rememberCoroutineScope()
+
+    fun settle(target: Float) {
+        settleJob?.cancel()
+        settleJob = scope.launch {
+            androidx.compose.animation.core.Animatable(revealOffset).animateTo(
+                target,
+                animationSpec = spring(stiffness = 520f, dampingRatio = 0.82f),
+            ) { revealOffset = value }
+        }
+    }
+
+    Box(
+        Modifier.fillMaxWidth().height(62.dp)
+            .clip(MaterialTheme.shapes.large)
+            .background(MaterialTheme.colorScheme.errorContainer),
+    ) {
+        Box(
+            Modifier.align(Alignment.CenterStart).width(revealWidth).fillMaxHeight()
+                .background(MaterialTheme.colorScheme.error)
+                .clickable(onClick = onDelete),
+            contentAlignment = Alignment.Center,
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.onError)
+                Text("削除", color = MaterialTheme.colorScheme.onError, style = MaterialTheme.typography.labelLarge)
+            }
+        }
+        Card(
+            Modifier.fillMaxSize()
+                .graphicsLayer { translationX = revealOffset }
+                .pointerInput(exerciseId, revealWidthPx) {
+                    detectHorizontalDragGestures(
+                        onDragStart = { settleJob?.cancel() },
+                        onHorizontalDrag = { change, dragAmount ->
+                            change.consume()
+                            revealOffset = (revealOffset + dragAmount).coerceIn(0f, revealWidthPx)
+                        },
+                        onDragEnd = { settle(if (revealOffset >= revealWidthPx * 0.42f) revealWidthPx else 0f) },
+                        onDragCancel = { settle(if (revealOffset >= revealWidthPx * 0.42f) revealWidthPx else 0f) },
+                    )
+                }
+                .clickable {
+                    if (revealOffset > 0f) settle(0f) else onEdit()
+                },
+        ) {
+            Box(Modifier.fillMaxSize().padding(horizontal = 18.dp), contentAlignment = Alignment.CenterStart) {
+                Text(name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
+            }
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SettingsScreen(
     viewModel: FitLogViewModel,
     exercises: List<ExerciseEntity>,
     presets: List<WorkoutPreset>,
+    page: SettingsPage,
+    onPageChange: (SettingsPage) -> Unit,
     onBack: () -> Unit,
     onAddExercise: () -> Unit,
     weekStartsMonday: Boolean,
@@ -2680,10 +2793,10 @@ private fun SettingsScreen(
     onExerciseSideSwitchRestChange: (Long, Boolean) -> Unit,
     onExerciseStartSideChange: (Long, Boolean) -> Unit,
 ) {
-    val routineExerciseIds by viewModel.routineExerciseIds.collectAsStateWithLifecycle()
     var weightStepDraft by rememberSaveable { mutableStateOf(weightStepKg.toInput()) }
     var restDurationDraft by rememberSaveable { mutableStateOf(restDurationSeconds.toMinutesInput()) }
     var editingWeightStepExerciseId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var exerciseNameDraft by rememberSaveable { mutableStateOf("") }
     var exerciseWeightStepDraft by rememberSaveable { mutableStateOf("") }
     var exerciseRestDurationDraft by rememberSaveable { mutableStateOf("") }
     var exerciseSideSwitchRestDraft by rememberSaveable { mutableStateOf(false) }
@@ -2700,152 +2813,172 @@ private fun SettingsScreen(
     val parsedExerciseWeightStep = exerciseWeightStepDraft.toDoubleOrNull()
         ?.takeIf { it.isFinite() && it in 0.01..1_000.0 }
     val parsedExerciseRestDuration = exerciseRestDurationDraft.toRestSecondsOrNull()
+    val pageTitle = when (page) {
+        SettingsPage.MENU -> "設定"
+        SettingsPage.BASIC -> "基本設定"
+        SettingsPage.PRESETS -> "プリセット"
+        SettingsPage.EXERCISES -> "種目管理"
+    }
     LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = "戻る", tint = MaterialTheme.colorScheme.primary) }
+                IconButton(
+                    onClick = { if (page == SettingsPage.MENU) onBack() else onPageChange(SettingsPage.MENU) },
+                ) { Icon(Icons.Default.ArrowBack, contentDescription = "戻る", tint = MaterialTheme.colorScheme.primary) }
                 Column {
                     Text("PREFERENCES", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.7.sp)
-                    Text("設定", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.ExtraBold)
+                    Text(pageTitle, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.ExtraBold)
                 }
             }
         }
-        item { Text("基本設定", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold) }
-        item {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("週の始まり", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                    SegmentedButton(
-                        selected = !weekStartsMonday,
-                        onClick = { onWeekStartsMondayChange(false) },
-                        shape = SegmentedButtonDefaults.itemShape(0, 2),
-                    ) { Text("日曜から") }
-                    SegmentedButton(
-                        selected = weekStartsMonday,
-                        onClick = { onWeekStartsMondayChange(true) },
-                        shape = SegmentedButtonDefaults.itemShape(1, 2),
-                    ) { Text("月曜から") }
-                }
-                Text("カレンダーの曜日表示に反映します。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
-        item { Text("トレーニング", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold) }
-        item { Text("基本の重量増減幅", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold) }
-        item {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                OutlinedTextField(
-                    value = weightStepDraft,
-                    onValueChange = { input ->
-                        val normalized = input.replace(',', '.')
-                        if (normalized.length <= 7 &&
-                            normalized.count { it == '.' } <= 1 &&
-                            normalized.all { it.isDigit() || it == '.' } &&
-                            normalized.substringAfter('.', "").length <= 2
-                        ) {
-                            weightStepDraft = normalized
-                        }
-                    },
-                    label = { Text("1タップあたり（kg）") },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    modifier = Modifier.weight(1f),
-                )
-                Button(
-                    onClick = { parsedWeightStep?.let(onWeightStepKgChange) },
-                    enabled = parsedWeightStep != null && parsedWeightStep != weightStepKg,
-                ) { Text("保存") }
-            }
-        }
-        item {
-            Text(
-                "すべての種目に適用します。種目ごとの設定がある場合はそちらを使います。",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        item { Text("共通のセット間休憩", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold) }
-        item {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                OutlinedTextField(
-                    value = restDurationDraft,
-                    onValueChange = { input ->
-                        val normalized = input.replace(',', '.')
-                        if (normalized.length <= 6 && normalized.count { it == '.' } <= 1 &&
-                            normalized.all { it.isDigit() || it == '.' } &&
-                            normalized.substringAfter('.', "").length <= 2
-                        ) restDurationDraft = normalized
-                    },
-                    label = { Text("分（0で休憩なし）") },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    modifier = Modifier.weight(1f),
-                )
-                Button(
-                    onClick = { parsedRestDuration?.let(onRestDurationChange) },
-                    enabled = parsedRestDuration != null && parsedRestDuration != restDurationSeconds,
-                ) { Text("保存") }
-            }
-            Text("種目ごとの設定がある場合は、その時間を使います。左右の切り替えは種目ごとに設定できます。", style = MaterialTheme.typography.bodySmall)
-        }
-        item { Text("プリセット", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold) }
-        items(presets, key = { "preset-${it.id}" }) { preset ->
-            Card(Modifier.fillMaxWidth().pressMotionClickable { editingPresetId = preset.id }) {
-                Row(Modifier.padding(start = 16.dp, end = 4.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text(preset.name, style = MaterialTheme.typography.titleMedium)
-                        Text("${preset.exercises.size}種目", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        when (page) {
+            SettingsPage.MENU -> {
+                item {
+                    SettingsNavigationCard("基本設定", "曜日・重量・休憩") {
+                        onPageChange(SettingsPage.BASIC)
                     }
-                    IconButton(onClick = { editingPresetId = preset.id }) { Icon(Icons.Default.Edit, "編集") }
-                    IconButton(onClick = { viewModel.setPresets(presets.filterNot { it.id == preset.id }) }) { Icon(Icons.Default.Delete, "削除") }
+                }
+                item {
+                    SettingsNavigationCard("プリセット", "トレーニング内容を編集") {
+                        onPageChange(SettingsPage.PRESETS)
+                    }
+                }
+                item {
+                    SettingsNavigationCard("種目管理", "名前・種目別設定・削除") {
+                        onPageChange(SettingsPage.EXERCISES)
+                    }
+                }
+                item {
+                    Text(
+                        "このアプリは筋トレ記録を端末内に保存し、外部へ送信しません。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
-        }
-        item {
-            OutlinedButton(onClick = { newPresetName = ""; showAddPreset = true }, modifier = Modifier.fillMaxWidth().height(56.dp)) {
-                Icon(Icons.Default.Add, null); Text("プリセットを追加")
+            SettingsPage.BASIC -> {
+                item { Text("カレンダー", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold) }
+                item {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("週の始まり", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                            SegmentedButton(
+                                selected = !weekStartsMonday,
+                                onClick = { onWeekStartsMondayChange(false) },
+                                shape = SegmentedButtonDefaults.itemShape(0, 2),
+                            ) { Text("日曜から") }
+                            SegmentedButton(
+                                selected = weekStartsMonday,
+                                onClick = { onWeekStartsMondayChange(true) },
+                                shape = SegmentedButtonDefaults.itemShape(1, 2),
+                            ) { Text("月曜から") }
+                        }
+                        Text("カレンダーの曜日表示に反映します。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+                item { Text("トレーニング", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold) }
+                item { Text("基本の重量増減幅", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold) }
+                item {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        OutlinedTextField(
+                            value = weightStepDraft,
+                            onValueChange = { input ->
+                                val normalized = input.replace(',', '.')
+                                if (normalized.length <= 7 && normalized.count { it == '.' } <= 1 &&
+                                    normalized.all { it.isDigit() || it == '.' } && normalized.substringAfter('.', "").length <= 2
+                                ) weightStepDraft = normalized
+                            },
+                            label = { Text("1タップあたり（kg）") },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                            modifier = Modifier.weight(1f),
+                        )
+                        Button(
+                            onClick = { parsedWeightStep?.let(onWeightStepKgChange) },
+                            enabled = parsedWeightStep != null && parsedWeightStep != weightStepKg,
+                        ) { Text("保存") }
+                    }
+                }
+                item {
+                    Text(
+                        "すべての種目に適用します。種目ごとの設定がある場合はそちらを使います。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                item { Text("共通のセット間休憩", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold) }
+                item {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        OutlinedTextField(
+                            value = restDurationDraft,
+                            onValueChange = { input ->
+                                val normalized = input.replace(',', '.')
+                                if (normalized.length <= 6 && normalized.count { it == '.' } <= 1 &&
+                                    normalized.all { it.isDigit() || it == '.' } && normalized.substringAfter('.', "").length <= 2
+                                ) restDurationDraft = normalized
+                            },
+                            label = { Text("分（0で休憩なし）") },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                            modifier = Modifier.weight(1f),
+                        )
+                        Button(
+                            onClick = { parsedRestDuration?.let(onRestDurationChange) },
+                            enabled = parsedRestDuration != null && parsedRestDuration != restDurationSeconds,
+                        ) { Text("保存") }
+                    }
+                    Text("種目ごとの設定がある場合は、その時間を使います。左右の切り替えは種目ごとに設定できます。", style = MaterialTheme.typography.bodySmall)
+                }
             }
-        }
-        item { Text("種目を管理", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold) }
-        item { Button(onClick = onAddExercise, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Add, null); Text("種目を追加") } }
-        items(exercises, key = { it.id }) { exercise ->
-            var editing by rememberSaveable(exercise.id) { mutableStateOf(false) }
-            var name by rememberSaveable(exercise.id) { mutableStateOf(exercise.name) }
-            val exerciseStepKg = exerciseWeightSteps[exercise.id]
-                ?: weightStepKg
-            val exerciseRest = exerciseRestDurations[exercise.id]
-            val restSummary = exerciseRest?.let { "休憩${it.toMinutesInput()}分" } ?: "共通休憩"
-            Card(Modifier.fillMaxWidth()) {
-                Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    if (editing) {
-                        OutlinedTextField(name, { name = it }, modifier = Modifier.weight(1f), singleLine = true)
-                        IconButton(onClick = { viewModel.renameExercise(exercise, name); editing = false }) { Icon(Icons.Default.Check, "保存") }
-                    } else {
-                        Column(Modifier.weight(1f)) {
-                            Text(exercise.name)
-                            Text(
-                                "${if (exercise.mode == ExerciseMode.NORMAL) "通常" else "左右別"}・${formatWeight(exerciseStepKg)}kg刻み・$restSummary" +
-                                    (if (exercise.mode == ExerciseMode.BILATERAL) "・${if (exercise.id in leftFirstExerciseIds) "左" else "右"}から" else "") +
-                                    (if (exercise.id in sideSwitchRestExerciseIds) "・左右切替休憩あり" else ""),
-                                style = MaterialTheme.typography.bodySmall,
-                            )
+            SettingsPage.PRESETS -> {
+                item { Text("プリセット", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold) }
+                items(presets, key = { "preset-${it.id}" }) { preset ->
+                    Card(Modifier.fillMaxWidth().pressMotionClickable { editingPresetId = preset.id }) {
+                        Row(Modifier.padding(start = 16.dp, end = 4.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text(preset.name, style = MaterialTheme.typography.titleMedium)
+                                Text("${preset.exercises.size}種目", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            IconButton(onClick = { editingPresetId = preset.id }) { Icon(Icons.Default.Edit, "編集") }
+                            IconButton(onClick = { viewModel.setPresets(presets.filterNot { it.id == preset.id }) }) { Icon(Icons.Default.Delete, "削除") }
                         }
-                        IconButton(onClick = { viewModel.toggleRoutineExercise(exercise.id) }) {
-                            Text(if (exercise.id in routineExerciseIds) "★" else "☆")
-                        }
-                        IconButton(onClick = {
-                            editingWeightStepExerciseId = exercise.id
-                            exerciseWeightStepDraft = exerciseStepKg.toInput()
-                            exerciseRestDurationDraft = exerciseRest?.toMinutesInput().orEmpty()
+                    }
+                }
+                item {
+                    OutlinedButton(onClick = { newPresetName = ""; showAddPreset = true }, modifier = Modifier.fillMaxWidth().height(56.dp)) {
+                        Icon(Icons.Default.Add, null); Text("プリセットを追加")
+                    }
+                }
+            }
+            SettingsPage.EXERCISES -> {
+                item {
+                    Text(
+                        "種目名をタップして編集。右にスワイプすると削除できます。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                item { Button(onClick = onAddExercise, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Add, null); Text("種目を追加") } }
+                items(exercises, key = { "exercise-${it.id}" }) { exercise ->
+                    ExerciseManagementItem(
+                        exerciseId = exercise.id,
+                        name = exercise.name,
+                        onEdit = {
+                            exerciseNameDraft = exercise.name
+                            exerciseWeightStepDraft = (exerciseWeightSteps[exercise.id] ?: weightStepKg).toInput()
+                            exerciseRestDurationDraft = exerciseRestDurations[exercise.id]?.toMinutesInput().orEmpty()
                             exerciseSideSwitchRestDraft = exercise.id in sideSwitchRestExerciseIds
                             exerciseStartsLeftDraft = exercise.id in leftFirstExerciseIds
-                        }) { Icon(Icons.Default.Settings, "重量・休憩を設定") }
-                        IconButton(onClick = { editing = true }) { Icon(Icons.Default.Edit, "名前を変更") }
-                        IconButton(onClick = { viewModel.archiveExercise(exercise) }) { Icon(Icons.Default.Delete, "非表示") }
-                    }
+                            editingWeightStepExerciseId = exercise.id
+                        },
+                        onDelete = { viewModel.archiveExercise(exercise) },
+                    )
+                }
+                if (exercises.isEmpty()) {
+                    item { Text("種目はありません", Modifier.fillMaxWidth().padding(vertical = 12.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 }
             }
         }
-        item { Text("このアプリは筋トレ記録を端末内に保存し、外部へ送信しません。", style = MaterialTheme.typography.bodySmall) }
     }
     editingWeightStepExercise?.let { exercise ->
         ModalBottomSheet(onDismissRequest = { editingWeightStepExerciseId = null }) {
@@ -2854,8 +2987,15 @@ private fun SettingsScreen(
                     .heightIn(max = 680.dp).verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                Text("${exercise.name}の設定", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.ExtraBold)
-                Text("この種目だけに適用", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("種目を編集", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.ExtraBold)
+                OutlinedTextField(
+                    value = exerciseNameDraft,
+                    onValueChange = { exerciseNameDraft = it.take(32) },
+                    label = { Text("種目名") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Text("種目別の設定", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text("重量の刻み幅", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                 OutlinedTextField(
                     value = exerciseWeightStepDraft,
@@ -2903,14 +3043,19 @@ private fun SettingsScreen(
                         onExerciseRestDurationChange(exercise.id, null)
                         onExerciseSideSwitchRestChange(exercise.id, false)
                         onExerciseStartSideChange(exercise.id, false)
-                        editingWeightStepExerciseId = null
+                        exerciseWeightStepDraft = weightStepKg.toInput()
+                        exerciseRestDurationDraft = ""
+                        exerciseSideSwitchRestDraft = false
+                        exerciseStartsLeftDraft = false
                     }) { Text("共通設定に戻す") }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         TextButton(onClick = { editingWeightStepExerciseId = null }) { Text("キャンセル") }
                         Button(
-                            enabled = parsedExerciseWeightStep != null &&
+                            enabled = exerciseNameDraft.isNotBlank() && parsedExerciseWeightStep != null &&
                                 (exerciseRestDurationDraft.isBlank() || parsedExerciseRestDuration != null),
                             onClick = {
+                                val cleanedName = exerciseNameDraft.trim()
+                                if (cleanedName != exercise.name) viewModel.renameExercise(exercise, cleanedName)
                                 parsedExerciseWeightStep?.let { onExerciseWeightStepChange(exercise.id, it) }
                                 onExerciseRestDurationChange(exercise.id, parsedExerciseRestDuration)
                                 onExerciseSideSwitchRestChange(exercise.id, exerciseSideSwitchRestDraft)

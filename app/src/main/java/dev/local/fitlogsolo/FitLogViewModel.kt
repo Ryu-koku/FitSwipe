@@ -32,7 +32,6 @@ class FitLogViewModel(
     val allExercises = repository.observeAllExercises().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     val activeSession = repository.observeInProgressSession().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
     val completedSessions = repository.observeCompletedSessions().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
-    val routineExerciseIds = workoutPreferences.routineExerciseIds
     val weekStartsMonday = workoutPreferences.weekStartsMonday
     val weightStepKg = workoutPreferences.weightStepKg
     val exerciseWeightSteps = workoutPreferences.exerciseWeightSteps
@@ -101,8 +100,6 @@ class FitLogViewModel(
     }
 
     fun archiveExercise(exercise: ExerciseEntity) = viewModelScope.launch { repository.archiveExercise(exercise) }
-
-    fun toggleRoutineExercise(exerciseId: Long) = workoutPreferences.toggleRoutineExercise(exerciseId)
 
     fun setWeekStartsMonday(weekStartsMonday: Boolean) =
         workoutPreferences.setWeekStartsMonday(weekStartsMonday)

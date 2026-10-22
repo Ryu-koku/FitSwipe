@@ -26,9 +26,6 @@ data class WorkoutPreset(
 class WorkoutPreferences(context: Context) {
     private val preferences = context.getSharedPreferences("workout_preferences", Context.MODE_PRIVATE)
 
-    private val _routineExerciseIds = MutableStateFlow(readRoutineExerciseIds())
-    val routineExerciseIds: StateFlow<List<Long>> = _routineExerciseIds.asStateFlow()
-
     private val _weekStartsMonday = MutableStateFlow(
         preferences.getBoolean(KEY_WEEK_STARTS_MONDAY, false),
     )
@@ -68,14 +65,6 @@ class WorkoutPreferences(context: Context) {
 
     private val _presets = MutableStateFlow(readPresets())
     val presets: StateFlow<List<WorkoutPreset>> = _presets.asStateFlow()
-
-    fun toggleRoutineExercise(exerciseId: Long) {
-        val updated = _routineExerciseIds.value.toMutableList().apply {
-            if (!remove(exerciseId)) add(exerciseId)
-        }
-        preferences.edit().putString(KEY_ROUTINE_EXERCISES, updated.joinToString(",")).apply()
-        _routineExerciseIds.value = updated
-    }
 
     fun setWeekStartsMonday(weekStartsMonday: Boolean) {
         preferences.edit().putBoolean(KEY_WEEK_STARTS_MONDAY, weekStartsMonday).apply()
@@ -193,11 +182,6 @@ class WorkoutPreferences(context: Context) {
         preferences.edit().putBoolean(KEY_DEFAULT_PRESETS_INITIALIZED, true).apply()
     }
 
-    private fun readRoutineExerciseIds(): List<Long> = preferences.getString(KEY_ROUTINE_EXERCISES, null)
-        ?.split(',')
-        ?.mapNotNull(String::toLongOrNull)
-        .orEmpty()
-
     private fun readIds(key: String): List<Long> = preferences.getString(key, null)
         ?.split(',')
         ?.mapNotNull(String::toLongOrNull)
@@ -281,7 +265,6 @@ class WorkoutPreferences(context: Context) {
     }.toString()
 
     private companion object {
-        const val KEY_ROUTINE_EXERCISES = "routine_exercise_ids"
         const val KEY_WEEK_STARTS_MONDAY = "week_starts_monday"
         const val KEY_WEIGHT_STEP_KG = "weight_step_kg"
         const val KEY_EXERCISE_WEIGHT_STEPS = "exercise_weight_steps"
