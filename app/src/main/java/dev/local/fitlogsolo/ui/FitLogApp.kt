@@ -72,7 +72,6 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FitnessCenter
-import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -1209,66 +1208,67 @@ private fun ExerciseEditor(
         )
     } else {
         Column(Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 4.dp)) {
-            WorkoutProgressButton(progress = progress) { showExerciseOrder = true }
-            Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-            AnimatedContent(
-                targetState = cardScene,
-                contentKey = { it?.key },
-                transitionSpec = {
-                    fadeIn(tween(180)) togetherWith fadeOut(tween(120))
-                },
-                modifier = Modifier.fillMaxSize().padding(horizontal = 4.dp),
-                contentAlignment = Alignment.Center,
-                label = "workout card transition",
-            ) { scene ->
-                when {
-                    scene == null -> Unit
-                    scene.restEndsAtMillis > 0L -> RestTimerCard(
-                        restEndsAtMillis = scene.restEndsAtMillis,
-                        onSkipRest = {
-                            onSkipRest()
+            WorkoutProgressBar(progress = progress)
+            Box(Modifier.weight(1f).fillMaxWidth()) {
+                Box(Modifier.fillMaxSize().padding(horizontal = 4.dp), contentAlignment = Alignment.Center) {
+                    AnimatedContent(
+                        targetState = cardScene,
+                        contentKey = { it?.key },
+                        transitionSpec = {
+                            fadeIn(tween(180)) togetherWith fadeOut(tween(120))
                         },
-                    )
-                    scene.exercise != null && scene.set != null -> SetEditorCard(
-                        exercise = scene.exercise,
-                        set = scene.set,
-                        side = scene.side,
-                        totalSets = scene.totalSets,
-                        enabled = scene.enabled,
-                        weightStepKg = exerciseWeightSteps[scene.exercise.id]
-                            ?: weightStepKg,
-                        onUpdate = { transform -> viewModel.updateSet(scene.set.id, transform) },
-                        onAdvance = { if (currentSet?.id == scene.set.id) advance(scene.set) },
-                        onSkip = { if (currentSet?.id == scene.set.id) skip(scene.set) },
-                        onSwipeOffsetChanged = { _, _ -> },
-                    )
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center,
+                        label = "workout card transition",
+                    ) { scene ->
+                        when {
+                            scene == null -> Unit
+                            scene.restEndsAtMillis > 0L -> RestTimerCard(
+                                restEndsAtMillis = scene.restEndsAtMillis,
+                                onSkipRest = { onSkipRest() },
+                            )
+                            scene.exercise != null && scene.set != null -> SetEditorCard(
+                                exercise = scene.exercise,
+                                set = scene.set,
+                                side = scene.side,
+                                totalSets = scene.totalSets,
+                                enabled = scene.enabled,
+                                weightStepKg = exerciseWeightSteps[scene.exercise.id]
+                                    ?: weightStepKg,
+                                onUpdate = { transform -> viewModel.updateSet(scene.set.id, transform) },
+                                onAdvance = { if (currentSet?.id == scene.set.id) advance(scene.set) },
+                                onSkip = { if (currentSet?.id == scene.set.id) skip(scene.set) },
+                                onSwipeOffsetChanged = { _, _ -> },
+                            )
+                        }
+                    }
+                }
+                FloatingActionButton(
+                    onClick = { showExerciseOrder = true },
+                    modifier = Modifier.align(Alignment.BottomEnd).padding(end = 8.dp, bottom = 4.dp)
+                        .size(48.dp),
+                    shape = CircleShape,
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                ) {
+                    Icon(Icons.Default.Edit, contentDescription = "種目の順番を編集")
                 }
             }
-        }
         }
     }
 }
 
 @Composable
-private fun WorkoutProgressButton(progress: Float, onClick: () -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().height(40.dp).padding(vertical = 4.dp)
-            .clickable(onClick = onClick)
-            .semantics { contentDescription = "トレーニング全体の進捗 ${(progress.coerceIn(0f, 1f) * 100).toInt()}%。タップして種目の順番を変更" },
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+private fun WorkoutProgressBar(progress: Float) {
+    Box(
+        Modifier.fillMaxWidth().height(40.dp).padding(vertical = 4.dp),
+        contentAlignment = Alignment.Center,
     ) {
         LinearProgressIndicator(
             progress = { progress.coerceIn(0f, 1f) },
-            modifier = Modifier.weight(1f).height(8.dp).clip(CircleShape),
+            modifier = Modifier.fillMaxWidth().height(8.dp).clip(CircleShape),
             color = MaterialTheme.colorScheme.primary,
             trackColor = MaterialTheme.colorScheme.surfaceVariant,
-        )
-        Icon(
-            Icons.Default.Layers,
-            contentDescription = null,
-            modifier = Modifier.size(20.dp),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }
@@ -1285,9 +1285,13 @@ private fun WorkoutExerciseOrderScreen(
 ) {
     val exerciseById = remember(exercises) { exercises.associateBy { it.id } }
     val latestOrder by rememberUpdatedState(exerciseOrderIds)
-    val latestUpcoming by rememberUpdatedState(upcomingExerciseIds)
+    var draftUpcoming by remember(currentExerciseId, upcomingExerciseIds) {
+        mutableStateOf(upcomingExerciseIds)
+    }
+    val latestDraftUpcoming by rememberUpdatedState(draftUpcoming)
     val completedOrder = exerciseOrderIds.filter { it in completedExerciseIds && it != currentExerciseId }
-    val displayOrder = listOf(currentExerciseId) + upcomingExerciseIds + completedOrder
+    val displayOrder = listOf(currentExerciseId) + draftUpcoming + completedOrder
+    val hasOrderChanges = draftUpcoming != upcomingExerciseIds
     val rowPitchPx = with(LocalDensity.current) { 76.dp.toPx() }
     var draggedExerciseId by remember { mutableStateOf<Long?>(null) }
 
@@ -1300,7 +1304,7 @@ private fun WorkoutExerciseOrderScreen(
             Text("種目の順番", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
         }
         Text(
-            "完了済みと進行中は固定",
+            "長押ししてドラッグ。進行中と完了済みは固定です。複数変更してから適用できます。",
             Modifier.padding(start = 12.dp),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1334,28 +1338,22 @@ private fun WorkoutExerciseOrderScreen(
                                         var draggedDistance = 0f
                                         detectDragGesturesAfterLongPress(
                                             onDragStart = {
-                                                startIndex = latestUpcoming.indexOf(exerciseId)
+                                                startIndex = latestDraftUpcoming.indexOf(exerciseId)
                                                 draggedDistance = 0f
                                                 draggedExerciseId = exerciseId
                                             },
                                             onDrag = { change, amount ->
                                                 change.consume()
                                                 draggedDistance += amount.y
-                                                val currentUpcoming = latestUpcoming
+                                                val currentUpcoming = latestDraftUpcoming
                                                 val currentIndex = currentUpcoming.indexOf(exerciseId)
                                                 if (startIndex >= 0 && currentIndex >= 0 && currentUpcoming.isNotEmpty()) {
                                                     val targetIndex = (startIndex + (draggedDistance / rowPitchPx).roundToInt())
                                                         .coerceIn(0, currentUpcoming.lastIndex)
                                                     if (targetIndex != currentIndex) {
-                                                        val reorderedUpcoming = currentUpcoming.toMutableList().apply {
+                                                        draftUpcoming = currentUpcoming.toMutableList().apply {
                                                             add(targetIndex, removeAt(currentIndex))
                                                         }
-                                                        val latestCompleted = latestOrder.filter {
-                                                            it in completedExerciseIds && it != currentExerciseId
-                                                        }
-                                                        val reorderedAll = listOf(currentExerciseId) +
-                                                            reorderedUpcoming + latestCompleted
-                                                        onReorder(reorderedAll)
                                                     }
                                                 }
                                             },
@@ -1414,6 +1412,20 @@ private fun WorkoutExerciseOrderScreen(
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                 )
             }
+        }
+        Button(
+            onClick = {
+                if (hasOrderChanges) {
+                    val latestCompleted = latestOrder.filter {
+                        it in completedExerciseIds && it != currentExerciseId
+                    }
+                    onReorder(listOf(currentExerciseId) + draftUpcoming + latestCompleted)
+                }
+                onClose()
+            },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(if (hasOrderChanges) "順番を適用" else "閉じる")
         }
     }
 }
