@@ -172,7 +172,7 @@ import kotlinx.coroutines.launch
 
 private const val WORKOUT_CARD_HEIGHT_FRACTION = 0.78f
 
-private enum class MainScreen { HOME, SETTINGS, WORKOUT_COMPLETE }
+private enum class MainScreen { HOME, SETTINGS, RECORDS, WORKOUT_COMPLETE }
 private enum class SettingsPage { MENU, BASIC, PRESETS, EXERCISES }
 private enum class ExerciseSide { RIGHT, LEFT }
 private val ExerciseSide.label: String
@@ -251,6 +251,8 @@ private fun FitLogAppContent(
 ) {
     var settings by rememberSaveable { mutableStateOf(false) }
     var settingsPage by rememberSaveable { mutableStateOf(SettingsPage.MENU) }
+    var showRecords by rememberSaveable { mutableStateOf(false) }
+    var activePresetId by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedExerciseId by rememberSaveable { mutableStateOf<Long?>(null) }
     var showAddExercise by rememberSaveable { mutableStateOf(false) }
     var showWorkoutComplete by rememberSaveable { mutableStateOf(false) }
@@ -325,15 +327,17 @@ private fun FitLogAppContent(
     val mainScreen = when {
         showWorkoutComplete -> MainScreen.WORKOUT_COMPLETE
         settings -> MainScreen.SETTINGS
+        showRecords -> MainScreen.RECORDS
         else -> MainScreen.HOME
     }
     BackHandler(
-        enabled = showAddExercise || settings || workoutFullscreen,
+        enabled = showAddExercise || settings || showRecords || workoutFullscreen,
     ) {
         when {
             showAddExercise -> showAddExercise = false
             settings && settingsPage != SettingsPage.MENU -> settingsPage = SettingsPage.MENU
             settings -> settings = false
+            showRecords -> showRecords = false
             workoutFullscreen -> selectedExerciseId = null
         }
     }
@@ -368,6 +372,7 @@ private fun FitLogAppContent(
                         onOpenRecords = {
                             showWorkoutComplete = false
                             workoutCompletionSaved = false
+                            showRecords = true
                         },
                     )
                     MainScreen.SETTINGS -> SettingsScreen(
@@ -394,6 +399,14 @@ private fun FitLogAppContent(
                         onExerciseSideSwitchRestChange = viewModel::setExerciseSideSwitchRestEnabled,
                         onExerciseStartSideChange = viewModel::setExerciseStartsLeft,
                     )
+                    MainScreen.RECORDS -> RecordsScreen(
+                        viewModel = viewModel,
+                        sessions = sessions,
+                        presets = presets,
+                        selectedPresetId = activePresetId,
+                        onPresetSelected = { activePresetId = it },
+                        onBack = { showRecords = false },
+                    )
                     MainScreen.HOME -> RecordScreen(
                         viewModel = viewModel,
                         exercises = exercises,
@@ -408,6 +421,7 @@ private fun FitLogAppContent(
                             settingsPage = SettingsPage.MENU
                             settings = true
                         },
+                        onOpenRecords = { showRecords = true },
                         activeSessionId = activeSession?.id,
                         completedSessions = sessions,
                         presetExerciseOrder = presetExerciseOrder.split(',').mapNotNull(String::toLongOrNull),
@@ -424,6 +438,7 @@ private fun FitLogAppContent(
                         leftFirstExerciseIds = leftFirstExerciseIds,
                         onStartPreset = { preset ->
                             startWorkoutWithBackgroundAlerts {
+                                activePresetId = preset.id
                                 activePresetName = preset.name
                                 viewModel.startPreset(preset) { _, exerciseIds ->
                                     selectedExerciseId = exerciseIds.firstOrNull()
@@ -530,6 +545,7 @@ private fun RecordScreen(
     activePresetName: String?,
     onOpenSettings: () -> Unit,
     onOpenSettingsMenu: () -> Unit,
+    onOpenRecords: () -> Unit,
     activeSessionId: Long?,
     completedSessions: List<dev.local.fitlogsolo.data.WorkoutSessionEntity>,
     presetExerciseOrder: List<Long>,
@@ -651,6 +667,7 @@ private fun RecordScreen(
                                     ),
                                     color = MaterialTheme.colorScheme.primary,
                                 )
+                                TextButton(onClick = onOpenRecords) { Text("記録") }
                                 Surface(
                                     modifier = Modifier.size(44.dp).clickable(onClick = onOpenSettingsMenu),
                                     shape = CircleShape,
@@ -825,7 +842,6 @@ private fun WorkoutCompleteScreen(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Text("SESSION COMPLETE", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.ExtraBold, letterSpacing = 2.sp)
         Box(
             Modifier.padding(top = 12.dp).size(112.dp)
                 .graphicsLayer { scaleX = progress; scaleY = progress; alpha = progress }
@@ -841,12 +857,6 @@ private fun WorkoutCompleteScreen(
             Modifier.padding(top = 24.dp).graphicsLayer { alpha = progress },
             style = MaterialTheme.typography.headlineMedium,
             color = MaterialTheme.colorScheme.onBackground,
-        )
-        Text(
-            if (saving) "今日のトレーニングを保存しています" else "今日のトレーニングを記録しました",
-            Modifier.padding(top = 8.dp),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Row(
             Modifier.fillMaxWidth().padding(top = 24.dp),
@@ -868,6 +878,208 @@ private fun CompletionStatCard(value: String, label: String, modifier: Modifier 
         Column(Modifier.fillMaxWidth().padding(vertical = 13.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.ExtraBold)
             Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+private data class PresetVolumePoint(
+    val date: LocalDate,
+    val valueKgSets: Double,
+)
+
+@Composable
+private fun RecordsScreen(
+    viewModel: FitLogViewModel,
+    sessions: List<dev.local.fitlogsolo.data.WorkoutSessionEntity>,
+    presets: List<WorkoutPreset>,
+    selectedPresetId: String?,
+    onPresetSelected: (String?) -> Unit,
+    onBack: () -> Unit,
+) {
+    var menuExpanded by rememberSaveable { mutableStateOf(false) }
+    var localPresetId by rememberSaveable { mutableStateOf(selectedPresetId) }
+    LaunchedEffect(selectedPresetId, presets.map { it.id }) {
+        val resolvedId = presets.firstOrNull { it.id == selectedPresetId }?.id
+            ?: presets.firstOrNull()?.id
+        localPresetId = resolvedId
+        if (resolvedId != selectedPresetId) onPresetSelected(resolvedId)
+    }
+    val selectedPreset = presets.firstOrNull { it.id == localPresetId }
+
+    val sessionIds = remember(sessions) { sessions.map { it.id } }
+    var loadedSets by remember { mutableStateOf<List<WorkoutSetEntity>?>(null) }
+    LaunchedEffect(sessionIds) {
+        if (sessionIds.isEmpty()) {
+            loadedSets = emptyList()
+        } else {
+            loadedSets = null
+            loadedSets = viewModel.historySets(sessionIds)
+        }
+    }
+
+    val setsBySession = loadedSets.orEmpty().groupBy { it.sessionId }
+    val presetExerciseIds = selectedPreset?.exercises?.map { it.exerciseId }?.toSet().orEmpty()
+    val matchingPresetCount = presets.count { preset ->
+        preset.exercises.map { it.exerciseId }.toSet() == presetExerciseIds && presetExerciseIds.isNotEmpty()
+    }
+    val matchingSessions = if (selectedPreset == null || presetExerciseIds.isEmpty()) {
+        emptyList()
+    } else {
+        sessions.filter { session ->
+            session.presetId == selectedPreset.id ||
+                (session.presetId == null && matchingPresetCount == 1 &&
+                    setsBySession[session.id].orEmpty().map { it.exerciseId }.toSet() == presetExerciseIds)
+        }
+    }
+    val points = matchingSessions.mapNotNull { session ->
+        val value = setsBySession[session.id].orEmpty()
+            .filter { it.isCompleted && it.exerciseId in presetExerciseIds }
+            .sumOf { set ->
+                listOfNotNull(set.normalWeightKg, set.leftWeightKg, set.rightWeightKg).sum()
+            }
+        if (value <= 0.0) null else PresetVolumePoint(
+            date = session.startedAt.atZone(ZoneId.systemDefault()).toLocalDate(),
+            valueKgSets = value,
+        )
+    }.sortedBy { it.date }
+
+    LazyColumn(
+        Modifier.fillMaxSize().padding(horizontal = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp),
+    ) {
+        item {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onBack) {
+                    Icon(Icons.Default.ArrowBack, contentDescription = "戻る", tint = MaterialTheme.colorScheme.primary)
+                }
+                Text("記録", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.ExtraBold)
+            }
+        }
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("プリセット", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                Box {
+                    OutlinedButton(
+                        onClick = { menuExpanded = true },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = selectedPreset != null,
+                    ) {
+                        Text(selectedPreset?.name ?: "プリセットがありません", Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Start)
+                        Text("⌄", style = MaterialTheme.typography.titleMedium)
+                    }
+                    DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
+                        presets.forEach { preset ->
+                            DropdownMenuItem(
+                                text = { Text(preset.name) },
+                                onClick = {
+                                    localPresetId = preset.id
+                                    onPresetSelected(preset.id)
+                                    menuExpanded = false
+                                },
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        if (selectedPreset == null) {
+            item {
+                Text("設定からプリセットを追加できます。", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        } else {
+            item {
+                Text("${presetExerciseIds.size}種目の重量 × 完了セット数の合計", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            if (loadedSets == null) {
+                item { Text("記録を読み込み中…", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            } else if (points.isEmpty()) {
+                item {
+                    Card(Modifier.fillMaxWidth()) {
+                        Text(
+                            "このプリセットの重量記録はまだありません",
+                            Modifier.fillMaxWidth().padding(18.dp),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            } else {
+                val latest = points.last()
+                item {
+                    Card(Modifier.fillMaxWidth()) {
+                        Row(
+                            Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 16.dp),
+                            verticalAlignment = Alignment.Bottom,
+                        ) {
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text("直近の合計", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Text(formatWeight(latest.valueKgSets), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.ExtraBold)
+                                    Text("kg·セット", Modifier.padding(bottom = 4.dp), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                            Text(latest.date.format(DateTimeFormatter.ofPattern("M月d日", Locale.JAPAN)), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+                item { PresetVolumeChart(points.takeLast(7)) }
+                item {
+                    Text(
+                        "各種目の完了セットに記録された重量を合計しています。回数は含みません。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PresetVolumeChart(points: List<PresetVolumePoint>) {
+    val primary = MaterialTheme.colorScheme.primary
+    val grid = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
+    val maxValue = points.maxOfOrNull { it.valueKgSets }?.coerceAtLeast(1.0) ?: 1.0
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 14.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text("合計重量の推移", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                Text("kg·セット", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Canvas(Modifier.fillMaxWidth().height(176.dp).padding(top = 12.dp)) {
+                val horizontalInset = 8.dp.toPx()
+                val top = 8.dp.toPx()
+                val bottom = size.height - 8.dp.toPx()
+                val right = size.width - horizontalInset
+                val plotHeight = bottom - top
+                repeat(4) { index ->
+                    val y = top + plotHeight * index / 3f
+                    drawLine(grid, Offset(horizontalInset, y), Offset(right, y), strokeWidth = 1.dp.toPx())
+                }
+                val dataPoints = points.mapIndexed { index, point ->
+                    val x = if (points.size == 1) (horizontalInset + right) / 2f
+                    else horizontalInset + (right - horizontalInset) * index / (points.size - 1).toFloat()
+                    val y = bottom - (point.valueKgSets.toFloat() / maxValue.toFloat()) * plotHeight
+                    Offset(x, y)
+                }
+                dataPoints.zipWithNext().forEach { (start, end) ->
+                    drawLine(primary, start, end, strokeWidth = 3.dp.toPx())
+                }
+                dataPoints.forEach { point -> drawCircle(primary, radius = 5.dp.toPx(), center = point) }
+            }
+            Row(Modifier.fillMaxWidth().padding(top = 4.dp)) {
+                points.forEach { point ->
+                    Text(
+                        point.date.format(DateTimeFormatter.ofPattern("M/d", Locale.JAPAN)),
+                        Modifier.weight(1f),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        maxLines = 1,
+                    )
+                }
+            }
         }
     }
 }

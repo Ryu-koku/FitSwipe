@@ -26,6 +26,7 @@ data class WorkoutSessionEntity(
     val startedAt: Instant,
     val endedAt: Instant? = null,
     val status: SessionStatus = SessionStatus.IN_PROGRESS,
+    val presetId: String? = null,
 )
 
 @Entity(

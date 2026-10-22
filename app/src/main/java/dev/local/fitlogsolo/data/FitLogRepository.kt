@@ -90,6 +90,9 @@ class FitLogRepository(private val database: AppDatabase) {
         val selected = preset.exercises.mapNotNull { config -> activeExercises[config.exerciseId]?.let { config to it } }
         require(selected.isNotEmpty()) { "プリセットに種目を設定してください" }
         val sessionId = startOrResumeSession()
+        sessions.findById(sessionId)?.let { session ->
+            if (session.presetId != preset.id) sessions.update(session.copy(presetId = preset.id))
+        }
         selected.forEach { (config, exercise) ->
             val desiredCount = config.sets.toIntOrNull()?.coerceIn(1, 30) ?: 3
             var currentSets = sets.findForSession(sessionId).filter { it.exerciseId == exercise.id }.sortedBy { it.setOrder }
