@@ -2,6 +2,7 @@ package dev.local.fitlogsolo.data
 
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import androidx.room.withTransaction
 import java.time.Instant
 
 class FitLogRepository(private val database: AppDatabase) {
@@ -103,17 +104,17 @@ class FitLogRepository(private val database: AppDatabase) {
             val reps = config.reps.toIntOrNull()?.takeIf { it >= 0 }
             currentSets.forEach { set ->
                 if (set.id in createdSetIds) {
-                    updateSet(
+                    updateSet(set.id) { latest ->
                         when (exercise.mode) {
-                            ExerciseMode.NORMAL -> set.copy(normalWeightKg = weight, normalReps = reps)
-                            ExerciseMode.BILATERAL -> set.copy(
+                            ExerciseMode.NORMAL -> latest.copy(normalWeightKg = weight, normalReps = reps)
+                            ExerciseMode.BILATERAL -> latest.copy(
                                 leftWeightKg = leftWeight,
                                 leftReps = reps,
                                 rightWeightKg = rightWeight,
                                 rightReps = reps,
                             )
-                        },
-                    )
+                        }
+                    }
                 }
             }
         }
@@ -165,21 +166,19 @@ class FitLogRepository(private val database: AppDatabase) {
         )
     }
 
-    suspend fun updateSet(set: WorkoutSetEntity) {
-        val sessionSets = sets.findForSession(set.sessionId)
-        val previous = sessionSets.firstOrNull { it.id == set.id }
-        val updatedAt = Instant.now()
-        sets.update(set.copy(updatedAt = updatedAt))
-        if (previous == null) return
+    suspend fun updateSet(setId: Long, transform: (WorkoutSetEntity) -> WorkoutSetEntity) =
+        database.withTransaction {
+            val previous = sets.findById(setId) ?: return@withTransaction
+            val set = transform(previous)
+            val updatedAt = Instant.now()
+            sets.update(set.copy(updatedAt = updatedAt))
 
-        val carryNormalWeight = set.normalWeightKg != previous.normalWeightKg && set.normalWeightKg != null
-        val carryLeftWeight = set.leftWeightKg != previous.leftWeightKg && set.leftWeightKg != null
-        val carryRightWeight = set.rightWeightKg != previous.rightWeightKg && set.rightWeightKg != null
-        if (!carryNormalWeight && !carryLeftWeight && !carryRightWeight) return
+            val carryNormalWeight = set.normalWeightKg != previous.normalWeightKg && set.normalWeightKg != null
+            val carryLeftWeight = set.leftWeightKg != previous.leftWeightKg && set.leftWeightKg != null
+            val carryRightWeight = set.rightWeightKg != previous.rightWeightKg && set.rightWeightKg != null
+            if (!carryNormalWeight && !carryLeftWeight && !carryRightWeight) return@withTransaction
 
-        sessionSets.asSequence()
-            .filter { it.exerciseId == set.exerciseId && it.setOrder > set.setOrder && !it.isCompleted }
-            .forEach { nextSet ->
+            sets.findIncompleteAfter(set.sessionId, set.exerciseId, set.setOrder).forEach { nextSet ->
                 sets.update(
                     nextSet.copy(
                         normalWeightKg = if (carryNormalWeight) set.normalWeightKg else nextSet.normalWeightKg,
@@ -189,7 +188,7 @@ class FitLogRepository(private val database: AppDatabase) {
                     ),
                 )
             }
-    }
+        }
 
     suspend fun finishSession(sessionId: Long) {
         sessions.findById(sessionId)?.let {

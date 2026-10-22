@@ -139,7 +139,8 @@ class FitLogViewModel(
         repository.duplicateSet(sessionId, exerciseId)
     }
 
-    fun updateSet(set: WorkoutSetEntity) = viewModelScope.launch { repository.updateSet(set) }
+    fun updateSet(setId: Long, transform: (WorkoutSetEntity) -> WorkoutSetEntity) =
+        viewModelScope.launch { repository.updateSet(setId, transform) }
 
     fun finishSession(
         sessionId: Long,

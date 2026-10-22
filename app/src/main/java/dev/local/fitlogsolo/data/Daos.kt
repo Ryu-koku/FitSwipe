@@ -63,6 +63,12 @@ interface WorkoutSetDao {
     @Query("SELECT * FROM workout_sets WHERE sessionId = :sessionId ORDER BY exerciseId, setOrder, id")
     suspend fun findForSession(sessionId: Long): List<WorkoutSetEntity>
 
+    @Query("SELECT * FROM workout_sets WHERE id = :setId LIMIT 1")
+    suspend fun findById(setId: Long): WorkoutSetEntity?
+
+    @Query("SELECT * FROM workout_sets WHERE sessionId = :sessionId AND exerciseId = :exerciseId AND setOrder > :setOrder AND isCompleted = 0 ORDER BY setOrder, id")
+    suspend fun findIncompleteAfter(sessionId: Long, exerciseId: Long, setOrder: Int): List<WorkoutSetEntity>
+
     @Query("SELECT * FROM workout_sets WHERE exerciseId = :exerciseId AND isCompleted = 1 ORDER BY updatedAt DESC")
     suspend fun findCompletedForExercise(exerciseId: Long): List<WorkoutSetEntity>
 

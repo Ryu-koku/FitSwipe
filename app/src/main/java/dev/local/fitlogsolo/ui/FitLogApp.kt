@@ -78,7 +78,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Divider
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -118,6 +118,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -247,6 +248,8 @@ private fun FitLogAppContent(
     val sessions by viewModel.completedSessions.collectAsStateWithLifecycle()
     val routineExerciseIds by viewModel.routineExerciseIds.collectAsStateWithLifecycle()
     val flatModeEnabled by viewModel.flatModeEnabled.collectAsStateWithLifecycle()
+    val selectedExercise = exercises.firstOrNull { it.id == selectedExerciseId }
+    val workoutFullscreen = activeSession != null && selectedExercise != null
     var lastUserInteractionAtMillis by remember { mutableLongStateOf(0L) }
     var userInteractionActive by remember { mutableStateOf(false) }
     val displayName by viewModel.displayName.collectAsStateWithLifecycle()
@@ -261,7 +264,7 @@ private fun FitLogAppContent(
     val snackbar = SnackbarHostState()
     val flatCandidate = rememberFlatDeviceCandidate(
         enabled = flatModeEnabled,
-        workoutActive = activeSession != null,
+        workoutActive = workoutFullscreen,
         lastUserInteractionAtMillis = lastUserInteractionAtMillis,
         userInteractionActive = userInteractionActive,
     )
@@ -293,9 +296,9 @@ private fun FitLogAppContent(
         }
     }
 
-    DisposableEffect(activeSession != null) {
+    DisposableEffect(workoutFullscreen) {
         val window = (context as? Activity)?.window
-        val keepAwake = activeSession != null
+        val keepAwake = workoutFullscreen
         if (keepAwake) window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         onDispose {
             if (keepAwake) window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -316,21 +319,19 @@ private fun FitLogAppContent(
         }
     }
 
-    val selectedExercise = exercises.firstOrNull { it.id == selectedExerciseId }
-    val workoutFullscreen = activeSession != null
     val mainScreen = when {
         showWorkoutComplete -> MainScreen.WORKOUT_COMPLETE
-        !settings && activeSession != null && flatCandidate -> MainScreen.WORKOUT_DOCK
+        !settings && workoutFullscreen && flatCandidate -> MainScreen.WORKOUT_DOCK
         settings -> MainScreen.SETTINGS
         else -> MainScreen.HOME
     }
     BackHandler(
-        enabled = showAddExercise || settings || (activeSession != null && selectedExerciseId != null),
+        enabled = showAddExercise || settings || workoutFullscreen,
     ) {
         when {
             showAddExercise -> showAddExercise = false
             settings -> settings = false
-            activeSession != null && selectedExerciseId != null -> selectedExerciseId = null
+            workoutFullscreen -> selectedExerciseId = null
         }
     }
     Scaffold(
@@ -564,6 +565,13 @@ private fun RecordScreen(
 ) {
     val sessionSets by (activeSessionId?.let(viewModel::sessionSets) ?: kotlinx.coroutines.flow.flowOf(emptyList()))
         .collectAsStateWithLifecycle(emptyList())
+    val sessionExerciseIds = presetExerciseOrder.ifEmpty {
+        sessionSets.sortedBy { it.createdAt }.map { it.exerciseId }.distinct()
+    }
+    val resumableExercise = sessionExerciseIds
+        .firstOrNull { exerciseId -> sessionSets.any { it.exerciseId == exerciseId && !it.isCompleted } }
+        ?.let { exerciseId -> exercises.firstOrNull { it.id == exerciseId } }
+        ?: sessionExerciseIds.firstOrNull()?.let { exerciseId -> exercises.firstOrNull { it.id == exerciseId } }
     AnimatedContent(
         targetState = selectedExercise?.let { exercise -> activeSessionId?.let { sessionId -> sessionId to exercise.id } },
         transitionSpec = {
@@ -607,7 +615,29 @@ private fun RecordScreen(
                 Modifier.fillMaxSize().padding(horizontal = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-        if (activeSessionId == null) {
+        if (activeSessionId != null) {
+            item {
+                Card(Modifier.fillMaxWidth()) {
+                    Column(
+                        Modifier.fillMaxWidth().padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text("進行中のトレーニング", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            resumableExercise?.let { "続き：${it.name}" } ?: "プリセットから再開できます",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            if (resumableExercise != null) {
+                                Button(onClick = { onSelectExercise(resumableExercise) }) { Text("再開") }
+                            }
+                            TextButton(onClick = onFinishSession) { Text("終了") }
+                        }
+                    }
+                }
+            }
+        }
             item { Text("カレンダー", style = MaterialTheme.typography.titleLarge) }
             item { WorkoutCalendar(completedSessions, allExercises, viewModel) }
             item { Text("プリセット", style = MaterialTheme.typography.titleLarge) }
@@ -629,15 +659,6 @@ private fun RecordScreen(
                     }
                 }
             }
-        } else {
-            val orderedIds = presetExerciseOrder.ifEmpty { sessionSets.map { it.exerciseId }.distinct() }
-            items(orderedIds.mapNotNull { id -> exercises.firstOrNull { it.id == id } }, key = { "active-${it.id}" }) { exercise ->
-                Card(Modifier.fillMaxWidth().pressMotionClickable { onSelectExercise(exercise) }) {
-                    Text(exercise.name, Modifier.padding(20.dp), style = MaterialTheme.typography.titleLarge)
-                }
-            }
-            item { TextButton(onClick = onFinishSession) { Text("終了") } }
-        }
             }
         }
     }
@@ -1121,21 +1142,27 @@ private fun ExerciseEditor(
 
     fun advance(set: WorkoutSetEntity) {
         if (exercise.mode == ExerciseMode.BILATERAL && activeSide != null) {
-            val updated = when (activeSide) {
-                ExerciseSide.RIGHT -> set.copy(rightCompleted = true)
-                ExerciseSide.LEFT -> set.copy(leftCompleted = true)
-            }
             if (!otherSideCompleted) {
-                viewModel.updateSet(updated)
+                viewModel.updateSet(set.id) { latest ->
+                    when (activeSide) {
+                        ExerciseSide.RIGHT -> latest.copy(rightCompleted = true)
+                        ExerciseSide.LEFT -> latest.copy(leftCompleted = true)
+                    }
+                }
                 currentSideName = otherSide?.name ?: firstSide.name
                 if (exercise.id in sideSwitchRestExerciseIds) {
                     onSetCompleted(effectiveRestSeconds)
                 }
                 return
             }
-            viewModel.updateSet(updated.copy(isCompleted = true))
+            viewModel.updateSet(set.id) { latest ->
+                when (activeSide) {
+                    ExerciseSide.RIGHT -> latest.copy(rightCompleted = true, isCompleted = true)
+                    ExerciseSide.LEFT -> latest.copy(leftCompleted = true, isCompleted = true)
+                }
+            }
         } else {
-            viewModel.updateSet(set.copy(isCompleted = true))
+            viewModel.updateSet(set.id) { latest -> latest.copy(isCompleted = true) }
         }
         if (upcomingCard?.exercise?.id == exercise.id) {
             onSetCompleted(effectiveRestSeconds)
@@ -1145,24 +1172,26 @@ private fun ExerciseEditor(
 
     fun skip(set: WorkoutSetEntity) {
         if (exercise.mode == ExerciseMode.BILATERAL && activeSide != null) {
-            val updated = when (activeSide) {
-                ExerciseSide.RIGHT -> set.copy(rightWeightKg = null, rightReps = null, rightCompleted = true)
-                ExerciseSide.LEFT -> set.copy(leftWeightKg = null, leftReps = null, leftCompleted = true)
-            }
             if (!otherSideCompleted) {
-                viewModel.updateSet(updated)
+                viewModel.updateSet(set.id) { latest ->
+                    when (activeSide) {
+                        ExerciseSide.RIGHT -> latest.copy(rightWeightKg = null, rightReps = null, rightCompleted = true)
+                        ExerciseSide.LEFT -> latest.copy(leftWeightKg = null, leftReps = null, leftCompleted = true)
+                    }
+                }
                 currentSideName = otherSide?.name ?: firstSide.name
                 return
             }
-            viewModel.updateSet(updated.copy(isCompleted = true))
+            viewModel.updateSet(set.id) { latest ->
+                when (activeSide) {
+                    ExerciseSide.RIGHT -> latest.copy(rightWeightKg = null, rightReps = null, rightCompleted = true, isCompleted = true)
+                    ExerciseSide.LEFT -> latest.copy(leftWeightKg = null, leftReps = null, leftCompleted = true, isCompleted = true)
+                }
+            }
         } else {
-            viewModel.updateSet(
-                set.copy(
-                    normalWeightKg = null,
-                    normalReps = null,
-                    isCompleted = true,
-                ),
-            )
+            viewModel.updateSet(set.id) { latest ->
+                latest.copy(normalWeightKg = null, normalReps = null, isCompleted = true)
+            }
         }
         proceedFrom(set)
     }
@@ -1180,9 +1209,7 @@ private fun ExerciseEditor(
         )
     } else {
         Column(Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 4.dp)) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                WorkoutProgressButton(progress = progress) { showExerciseOrder = true }
-            }
+            WorkoutProgressButton(progress = progress) { showExerciseOrder = true }
             Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
             AnimatedContent(
                 targetState = cardScene,
@@ -1210,7 +1237,7 @@ private fun ExerciseEditor(
                         enabled = scene.enabled,
                         weightStepKg = exerciseWeightSteps[scene.exercise.id]
                             ?: weightStepKg,
-                        onUpdate = viewModel::updateSet,
+                        onUpdate = { transform -> viewModel.updateSet(scene.set.id, transform) },
                         onAdvance = { if (currentSet?.id == scene.set.id) advance(scene.set) },
                         onSkip = { if (currentSet?.id == scene.set.id) skip(scene.set) },
                         onSwipeOffsetChanged = { _, _ -> },
@@ -1224,24 +1251,23 @@ private fun ExerciseEditor(
 
 @Composable
 private fun WorkoutProgressButton(progress: Float, onClick: () -> Unit) {
-    Box(
-        Modifier.padding(vertical = 4.dp)
-            .size(52.dp)
+    Row(
+        Modifier.fillMaxWidth().height(40.dp).padding(vertical = 4.dp)
             .clickable(onClick = onClick)
-            .semantics { contentDescription = "トレーニング全体の進捗。タップして種目の順番を変更" },
-        contentAlignment = Alignment.Center,
+            .semantics { contentDescription = "トレーニング全体の進捗 ${(progress.coerceIn(0f, 1f) * 100).toInt()}%。タップして種目の順番を変更" },
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        CircularProgressIndicator(
+        LinearProgressIndicator(
             progress = { progress.coerceIn(0f, 1f) },
-            modifier = Modifier.fillMaxSize().padding(3.dp),
+            modifier = Modifier.weight(1f).height(8.dp).clip(CircleShape),
             color = MaterialTheme.colorScheme.primary,
             trackColor = MaterialTheme.colorScheme.surfaceVariant,
-            strokeWidth = 3.dp,
         )
         Icon(
             Icons.Default.Layers,
             contentDescription = null,
-            modifier = Modifier.size(22.dp),
+            modifier = Modifier.size(20.dp),
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
@@ -1601,7 +1627,7 @@ private fun SetEditorCard(
     totalSets: Int,
     enabled: Boolean,
     weightStepKg: Double,
-    onUpdate: (WorkoutSetEntity) -> Unit,
+    onUpdate: ((WorkoutSetEntity) -> WorkoutSetEntity) -> Unit,
     onAdvance: () -> Unit,
     onSkip: () -> Unit,
     onSwipeOffsetChanged: (Offset, Boolean?) -> Unit,
@@ -1611,6 +1637,7 @@ private fun SetEditorCard(
     var swipeOffsetY by androidx.compose.runtime.remember(set.id, side) { androidx.compose.runtime.mutableFloatStateOf(0f) }
     var swipeSkips by remember(set.id, side) { mutableStateOf<Boolean?>(null) }
     var swipeHorizontalLock by remember(set.id, side) { mutableStateOf<Boolean?>(null) }
+    var swipeAnimating by remember(set.id, side) { mutableStateOf(false) }
     LaunchedEffect(enabled, set.id, side) {
         if (!enabled) {
             swipeOffsetX = 0f
@@ -1673,15 +1700,18 @@ private fun SetEditorCard(
                     drawRect(brush = brush)
                 }
             }
-            .pointerInput(set.id, enabled, side) {
+            .pointerInput(set.id, enabled, side, swipeAnimating) {
+                if (!enabled || swipeAnimating) return@pointerInput
                 var dragX = 0f
                 var dragY = 0f
                 var skipGesture: Boolean? = null
                 var horizontalGesture: Boolean? = null
+                var velocityTracker = androidx.compose.ui.input.pointer.util.VelocityTracker()
                 detectDragGestures(
                     onDragStart = {
                         dragX = 0f
                         dragY = 0f
+                        velocityTracker = androidx.compose.ui.input.pointer.util.VelocityTracker()
                         skipGesture = null
                         horizontalGesture = null
                         swipeSkips = null
@@ -1690,6 +1720,7 @@ private fun SetEditorCard(
                     },
                     onDrag = { change, dragAmount ->
                         change.consume()
+                        velocityTracker.addPosition(change.uptimeMillis, change.position)
                         dragX += dragAmount.x
                         dragY += dragAmount.y
                         swipeOffsetX = dragX
@@ -1704,17 +1735,69 @@ private fun SetEditorCard(
                         onSwipeOffsetChanged(Offset(swipeOffsetX, swipeOffsetY), skipGesture)
                     },
                     onDragEnd = {
-                        if (!enabled) {
+                        val distance = hypot(dragX.toDouble(), dragY.toDouble()).toFloat()
+                        val velocity = velocityTracker.calculateVelocity()
+                        val minFlingVelocity = with(density) { 700.dp.toPx() }
+                        val threshold = minOf(size.width, size.height) * 0.08f
+                        val velocityIsHorizontal = abs(velocity.x) >= abs(velocity.y)
+                        val horizontal = if (
+                            distance < threshold && maxOf(abs(velocity.x), abs(velocity.y)) >= minFlingVelocity
+                        ) {
+                            velocityIsHorizontal
+                        } else {
+                            horizontalGesture ?: (abs(dragX) >= abs(dragY))
+                        }
+                        val axisDistance = if (horizontal) abs(dragX) else abs(dragY)
+                        val axisVelocity = if (horizontal) abs(velocity.x) else abs(velocity.y)
+                        val crossAxisVelocity = if (horizontal) abs(velocity.y) else abs(velocity.x)
+                        val fastFling = axisVelocity >= minFlingVelocity && axisVelocity >= crossAxisVelocity * 1.2f
+                        if (axisDistance >= threshold || fastFling) {
+                            val useVelocityDirection = axisDistance < threshold && fastFling
+                            val direction = when {
+                                horizontal && useVelocityDirection -> velocity.x
+                                !horizontal && useVelocityDirection -> velocity.y
+                                horizontal -> dragX
+                                else -> dragY
+                            }
+                            horizontalGesture = horizontal
+                            skipGesture = if (horizontal) direction < 0f else direction > 0f
+                            swipeHorizontalLock = horizontal
+                            swipeSkips = skipGesture
+                            swipeAnimating = true
+                            val advance = !skipGesture!!
+                            onSwipeOffsetChanged(Offset(swipeOffsetX, swipeOffsetY), skipGesture)
                             animationScope.launch {
+                                val scale = (hypot(size.width.toDouble(), size.height.toDouble()).toFloat() * 1.25f) /
+                                    distance.coerceAtLeast(1f)
+                                val targetX = dragX * scale
+                                val targetY = dragY * scale
                                 coroutineScope {
                                     launch {
-                                        Animatable(swipeOffsetX).animateTo(0f, spring(dampingRatio = 0.68f, stiffness = 250f)) {
+                                        Animatable(swipeOffsetX).animateTo(targetX, tween(160)) {
                                             swipeOffsetX = value
                                             onSwipeOffsetChanged(Offset(value, swipeOffsetY), skipGesture)
                                         }
                                     }
                                     launch {
-                                        Animatable(swipeOffsetY).animateTo(0f, spring(dampingRatio = 0.68f, stiffness = 250f)) {
+                                        Animatable(swipeOffsetY).animateTo(targetY, tween(160)) {
+                                            swipeOffsetY = value
+                                            onSwipeOffsetChanged(Offset(swipeOffsetX, value), skipGesture)
+                                        }
+                                    }
+                                }
+                                if (advance) onAdvance() else onSkip()
+                            }
+                        } else {
+                            animationScope.launch {
+                                coroutineScope {
+                                    launch {
+                                        Animatable(swipeOffsetX).animateTo(0f, spring(dampingRatio = 0.62f, stiffness = 220f)) {
+                                            swipeOffsetX = value
+                                            onSwipeOffsetChanged(Offset(value, swipeOffsetY), skipGesture)
+                                        }
+                                    }
+                                    launch {
+                                        Animatable(swipeOffsetY).animateTo(0f, spring(dampingRatio = 0.62f, stiffness = 220f)) {
                                             swipeOffsetY = value
                                             onSwipeOffsetChanged(Offset(swipeOffsetX, value), skipGesture)
                                         }
@@ -1723,61 +1806,6 @@ private fun SetEditorCard(
                                 swipeSkips = null
                                 swipeHorizontalLock = null
                                 onSwipeOffsetChanged(Offset.Zero, null)
-                            }
-                        } else {
-                            val horizontal = horizontalGesture ?: (abs(dragX) >= abs(dragY))
-                            val distance = hypot(dragX.toDouble(), dragY.toDouble()).toFloat()
-                            val threshold = minOf(size.width, size.height) * 0.08f
-                            if (distance >= threshold) {
-                                if (skipGesture == null) {
-                                    horizontalGesture = horizontal
-                                    skipGesture = if (horizontal) dragX < 0f else dragY > 0f
-                                    swipeHorizontalLock = horizontalGesture
-                                    swipeSkips = skipGesture
-                                }
-                                val advance = !skipGesture!!
-                                onSwipeOffsetChanged(Offset(swipeOffsetX, swipeOffsetY), skipGesture)
-                                animationScope.launch {
-                                    val scale = (hypot(size.width.toDouble(), size.height.toDouble()).toFloat() * 1.25f) /
-                                        distance.coerceAtLeast(1f)
-                                    val targetX = dragX * scale
-                                    val targetY = dragY * scale
-                                    coroutineScope {
-                                        launch {
-                                            Animatable(swipeOffsetX).animateTo(targetX, tween(220)) {
-                                                swipeOffsetX = value
-                                                onSwipeOffsetChanged(Offset(value, swipeOffsetY), skipGesture)
-                                            }
-                                        }
-                                        launch {
-                                            Animatable(swipeOffsetY).animateTo(targetY, tween(220)) {
-                                                swipeOffsetY = value
-                                                onSwipeOffsetChanged(Offset(swipeOffsetX, value), skipGesture)
-                                            }
-                                        }
-                                    }
-                                    if (advance) onAdvance() else onSkip()
-                                }
-                            } else {
-                                animationScope.launch {
-                                    coroutineScope {
-                                        launch {
-                                            Animatable(swipeOffsetX).animateTo(0f, spring(dampingRatio = 0.62f, stiffness = 220f)) {
-                                                swipeOffsetX = value
-                                                onSwipeOffsetChanged(Offset(value, swipeOffsetY), skipGesture)
-                                            }
-                                        }
-                                        launch {
-                                            Animatable(swipeOffsetY).animateTo(0f, spring(dampingRatio = 0.62f, stiffness = 220f)) {
-                                                swipeOffsetY = value
-                                                onSwipeOffsetChanged(Offset(swipeOffsetX, value), skipGesture)
-                                            }
-                                        }
-                                    }
-                                    swipeSkips = null
-                                    swipeHorizontalLock = null
-                                    onSwipeOffsetChanged(Offset.Zero, null)
-                                }
                             }
                         }
                     },
@@ -1880,14 +1908,16 @@ private fun SetEditorCard(
                                 description = "重量を${formatWeight(weightStepKg)}キログラム増やす",
                                 enabled = enabled,
                                 onClick = {
-                                    onUpdate(set.copy(normalWeightKg = adjustWeight(set.normalWeightKg, weightStepKg, increase = true)))
+                                    onUpdate { latest ->
+                                        latest.copy(normalWeightKg = adjustWeight(latest.normalWeightKg, weightStepKg, increase = true))
+                                    }
                                 },
                                 modifier = Modifier.weight(1f).fillMaxHeight(),
                             )
                             InvisibleTapZone(
                                 description = "回数を1回増やす",
                                 enabled = enabled,
-                                onClick = { onUpdate(set.copy(normalReps = (set.normalReps ?: 0) + 1)) },
+                                onClick = { onUpdate { latest -> latest.copy(normalReps = (latest.normalReps ?: 0) + 1) } },
                                 modifier = Modifier.weight(1f).fillMaxHeight(),
                             )
                         }
@@ -1896,14 +1926,20 @@ private fun SetEditorCard(
                                 description = "重量を${formatWeight(weightStepKg)}キログラム減らす",
                                 enabled = enabled && (set.normalWeightKg ?: 0.0) > 0.0,
                                 onClick = {
-                                    onUpdate(set.copy(normalWeightKg = adjustWeight(set.normalWeightKg, weightStepKg, increase = false)))
+                                    onUpdate { latest ->
+                                        latest.copy(normalWeightKg = adjustWeight(latest.normalWeightKg, weightStepKg, increase = false))
+                                    }
                                 },
                                 modifier = Modifier.weight(1f).fillMaxHeight(),
                             )
                             InvisibleTapZone(
                                 description = "回数を1回減らす",
                                 enabled = enabled && (set.normalReps ?: 0) > 0,
-                                onClick = { onUpdate(set.copy(normalReps = ((set.normalReps ?: 0) - 1).coerceAtLeast(0))) },
+                                onClick = {
+                                    onUpdate { latest ->
+                                        latest.copy(normalReps = ((latest.normalReps ?: 0) - 1).coerceAtLeast(0))
+                                    }
+                                },
                                 modifier = Modifier.weight(1f).fillMaxHeight(),
                             )
                         }
@@ -1923,20 +1959,20 @@ private fun SetEditorCard(
                         weightStepKg,
                         Modifier.weight(1f).fillMaxWidth(),
                     ) { weight, reps ->
-                        onUpdate(
-                            if (isRight) set.copy(rightWeightKg = weight, rightReps = reps)
-                            else set.copy(leftWeightKg = weight, leftReps = reps),
-                        )
+                        onUpdate { latest ->
+                            if (isRight) latest.copy(rightWeightKg = weight, rightReps = reps)
+                            else latest.copy(leftWeightKg = weight, leftReps = reps)
+                        }
                     }
                 }
             } else {
                 Column(Modifier.weight(1f).fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     BilateralTapControls("左", set.leftWeightKg, set.leftReps, enabled, weightStepKg, Modifier.weight(1f)) { weight, reps ->
-                        onUpdate(set.copy(leftWeightKg = weight, leftReps = reps))
+                        onUpdate { latest -> latest.copy(leftWeightKg = weight, leftReps = reps) }
                     }
                     BilateralTapControls("右", set.rightWeightKg, set.rightReps, enabled, weightStepKg, Modifier.weight(1f)) { weight, reps ->
-                        onUpdate(set.copy(rightWeightKg = weight, rightReps = reps))
+                        onUpdate { latest -> latest.copy(rightWeightKg = weight, rightReps = reps) }
                     }
                 }
             }
