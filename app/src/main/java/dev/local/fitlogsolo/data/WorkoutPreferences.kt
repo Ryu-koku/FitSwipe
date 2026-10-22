@@ -29,6 +29,11 @@ class WorkoutPreferences(context: Context) {
     private val _routineExerciseIds = MutableStateFlow(readRoutineExerciseIds())
     val routineExerciseIds: StateFlow<List<Long>> = _routineExerciseIds.asStateFlow()
 
+    private val _weekStartsMonday = MutableStateFlow(
+        preferences.getBoolean(KEY_WEEK_STARTS_MONDAY, false),
+    )
+    val weekStartsMonday: StateFlow<Boolean> = _weekStartsMonday.asStateFlow()
+
     private val _weightStepKg = MutableStateFlow(
         preferences.getString(KEY_WEIGHT_STEP_KG, null)?.toDoubleOrNull()
             ?.takeIf { it.isFinite() && it in MIN_WEIGHT_STEP_KG..MAX_WEIGHT_STEP_KG }
@@ -70,6 +75,11 @@ class WorkoutPreferences(context: Context) {
         }
         preferences.edit().putString(KEY_ROUTINE_EXERCISES, updated.joinToString(",")).apply()
         _routineExerciseIds.value = updated
+    }
+
+    fun setWeekStartsMonday(weekStartsMonday: Boolean) {
+        preferences.edit().putBoolean(KEY_WEEK_STARTS_MONDAY, weekStartsMonday).apply()
+        _weekStartsMonday.value = weekStartsMonday
     }
 
     fun setWeightStepKg(weightStepKg: Double) {
@@ -272,6 +282,7 @@ class WorkoutPreferences(context: Context) {
 
     private companion object {
         const val KEY_ROUTINE_EXERCISES = "routine_exercise_ids"
+        const val KEY_WEEK_STARTS_MONDAY = "week_starts_monday"
         const val KEY_WEIGHT_STEP_KG = "weight_step_kg"
         const val KEY_EXERCISE_WEIGHT_STEPS = "exercise_weight_steps"
         const val KEY_REST_DURATION_SECONDS = "rest_duration_seconds"

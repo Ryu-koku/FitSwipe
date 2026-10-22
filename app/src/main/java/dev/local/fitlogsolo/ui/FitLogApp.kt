@@ -261,6 +261,7 @@ private fun FitLogAppContent(
     val activeSession by viewModel.activeSession.collectAsStateWithLifecycle()
     val sessions by viewModel.completedSessions.collectAsStateWithLifecycle()
     val routineExerciseIds by viewModel.routineExerciseIds.collectAsStateWithLifecycle()
+    val weekStartsMonday by viewModel.weekStartsMonday.collectAsStateWithLifecycle()
     val selectedExercise = exercises.firstOrNull { it.id == selectedExerciseId }
     val workoutFullscreen = activeSession != null && selectedExercise != null
     val weightStepKg by viewModel.weightStepKg.collectAsStateWithLifecycle()
@@ -380,6 +381,8 @@ private fun FitLogAppContent(
                         presets = presets,
                         onBack = { settings = false },
                         onAddExercise = { showAddExercise = true },
+                        weekStartsMonday = weekStartsMonday,
+                        onWeekStartsMondayChange = viewModel::setWeekStartsMonday,
                         weightStepKg = weightStepKg,
                         exerciseWeightSteps = exerciseWeightSteps,
                         restDurationSeconds = restDurationSeconds,
@@ -406,6 +409,7 @@ private fun FitLogAppContent(
                         presetExerciseOrder = presetExerciseOrder.split(',').mapNotNull(String::toLongOrNull),
                         selectedExercise = selectedExercise,
                         onExerciseOrderChange = { ids -> presetExerciseOrder = ids.joinToString(",") },
+                        weekStartsMonday = weekStartsMonday,
                         restEndsAtMillis = restEndsAtMillis,
                         restStartedAtMillis = restStartedAtMillis,
                         weightStepKg = weightStepKg,
@@ -524,6 +528,7 @@ private fun RecordScreen(
     presetExerciseOrder: List<Long>,
     selectedExercise: ExerciseEntity?,
     onExerciseOrderChange: (List<Long>) -> Unit,
+    weekStartsMonday: Boolean,
     restEndsAtMillis: Long,
     restStartedAtMillis: Long,
     weightStepKg: Double,
@@ -668,7 +673,7 @@ private fun RecordScreen(
                             }
                         }
                     }
-                    item { WorkoutCalendar(completedSessions, allExercises, viewModel) }
+                    item { WorkoutCalendar(completedSessions, allExercises, viewModel, weekStartsMonday) }
                     item {
                         val completedSetCount = homeSets.count { it.sessionId in monthlySessionIds && it.isCompleted }
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
@@ -881,6 +886,7 @@ private fun WorkoutCalendar(
     sessions: List<dev.local.fitlogsolo.data.WorkoutSessionEntity>,
     exercises: List<ExerciseEntity>,
     viewModel: FitLogViewModel,
+    weekStartsMonday: Boolean,
 ) {
     var month by rememberSaveable { mutableStateOf(YearMonth.now().toString()) }
     var selectedDateText by rememberSaveable { mutableStateOf<String?>(null) }
@@ -955,11 +961,17 @@ private fun WorkoutCalendar(
                     }) { Icon(Icons.Default.ChevronRight, "次の月") }
                 }
                 Row(Modifier.fillMaxWidth()) {
-                    listOf("月", "火", "水", "木", "金", "土", "日").forEach { day ->
+                    val weekLabels = if (weekStartsMonday) {
+                        listOf("月", "火", "水", "木", "金", "土", "日")
+                    } else {
+                        listOf("日", "月", "火", "水", "木", "金", "土")
+                    }
+                    weekLabels.forEach { day ->
                         Text(day, modifier = Modifier.weight(1f), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
-                val leadingBlanks = displayedMonth.atDay(1).dayOfWeek.value - 1
+                val firstDayOfWeekValue = displayedMonth.atDay(1).dayOfWeek.value
+                val leadingBlanks = if (weekStartsMonday) firstDayOfWeekValue - 1 else firstDayOfWeekValue % 7
                 val cells = ((leadingBlanks + displayedMonth.lengthOfMonth() + 6) / 7) * 7
                 repeat(cells / 7) { week ->
                     Row(Modifier.fillMaxWidth()) {
@@ -2652,6 +2664,8 @@ private fun SettingsScreen(
     presets: List<WorkoutPreset>,
     onBack: () -> Unit,
     onAddExercise: () -> Unit,
+    weekStartsMonday: Boolean,
+    onWeekStartsMondayChange: (Boolean) -> Unit,
     weightStepKg: Double,
     exerciseWeightSteps: Map<Long, Double>,
     restDurationSeconds: Long,
@@ -2694,6 +2708,25 @@ private fun SettingsScreen(
                     Text("PREFERENCES", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.7.sp)
                     Text("設定", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.ExtraBold)
                 }
+            }
+        }
+        item { Text("基本設定", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold) }
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("週の始まり", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                    SegmentedButton(
+                        selected = !weekStartsMonday,
+                        onClick = { onWeekStartsMondayChange(false) },
+                        shape = SegmentedButtonDefaults.itemShape(0, 2),
+                    ) { Text("日曜から") }
+                    SegmentedButton(
+                        selected = weekStartsMonday,
+                        onClick = { onWeekStartsMondayChange(true) },
+                        shape = SegmentedButtonDefaults.itemShape(1, 2),
+                    ) { Text("月曜から") }
+                }
+                Text("カレンダーの曜日表示に反映します。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         item { Text("トレーニング", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold) }
