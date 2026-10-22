@@ -72,8 +72,10 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FitnessCenter
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -104,6 +106,7 @@ import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -136,6 +139,8 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.LocalViewConfiguration
+import androidx.compose.ui.platform.ViewConfiguration
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.text.input.KeyboardType
@@ -170,7 +175,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
-private const val WORKOUT_CARD_HEIGHT_FRACTION = 0.78f
+private const val WORKOUT_CARD_HEIGHT_FRACTION = 0.84f
 
 private enum class MainScreen { HOME, SETTINGS, RECORDS, WORKOUT_COMPLETE }
 private enum class SettingsPage { MENU, BASIC, PRESETS, EXERCISES }
@@ -189,6 +194,7 @@ private data class EditorCardScene(
     val exercise: ExerciseEntity? = null,
     val set: WorkoutSetEntity? = null,
     val side: ExerciseSide? = null,
+    val exerciseColorIndex: Int = 0,
     val totalSets: Int = 0,
     val enabled: Boolean = true,
     val restEndsAtMillis: Long = 0L,
@@ -239,8 +245,16 @@ private val FitLogColors = lightColorScheme(
 fun FitLogApp(
     viewModel: FitLogViewModel,
 ) {
-    MaterialTheme(colorScheme = FitLogColors) {
-        FitLogAppContent(viewModel)
+    val baseViewConfiguration = LocalViewConfiguration.current
+    val shorterLongPressConfiguration = remember(baseViewConfiguration) {
+        object : ViewConfiguration by baseViewConfiguration {
+            override val longPressTimeoutMillis: Long = 280L
+        }
+    }
+    CompositionLocalProvider(LocalViewConfiguration provides shorterLongPressConfiguration) {
+        MaterialTheme(colorScheme = FitLogColors) {
+            FitLogAppContent(viewModel)
+        }
     }
 }
 
@@ -491,7 +505,6 @@ private fun FitLogAppContent(
                             showWorkoutComplete = true
                         },
                         onBack = { selectedExerciseId = null },
-                        onAddExercise = { showAddExercise = true },
                     )
                 }
             }
@@ -567,14 +580,26 @@ private fun RecordScreen(
     onFinishSession: () -> Unit,
     onWorkoutComplete: (WorkoutCompletionStats) -> Unit,
     onBack: () -> Unit,
-    onAddExercise: () -> Unit,
 ) {
-    var showExercisePicker by rememberSaveable { mutableStateOf(false) }
     val sessionSetsFlow = remember(viewModel, activeSessionId) {
         activeSessionId?.let(viewModel::sessionSets) ?: kotlinx.coroutines.flow.flowOf(emptyList())
     }
     val sessionSets by sessionSetsFlow
         .collectAsStateWithLifecycle(emptyList())
+    val progressUnits = sessionSets.sumOf { set ->
+        if (allExercises.firstOrNull { it.id == set.exerciseId }?.mode == ExerciseMode.BILATERAL) 2L else 1L
+    }
+    val completedProgressUnits = sessionSets.sumOf { set ->
+        if (allExercises.firstOrNull { it.id == set.exerciseId }?.mode == ExerciseMode.BILATERAL) {
+            if (set.isCompleted) 2L else (if (set.leftCompleted) 1L else 0L) + (if (set.rightCompleted) 1L else 0L)
+        } else if (set.isCompleted) 1L else 0L
+    }
+    val progressTarget = if (progressUnits > 0) completedProgressUnits.toFloat() / progressUnits else 0f
+    val workoutProgress by animateFloatAsState(
+        targetValue = progressTarget.coerceIn(0f, 1f),
+        animationSpec = tween(durationMillis = 850),
+        label = "workout progress across exercises",
+    )
     val sessionExerciseIds = presetExerciseOrder.ifEmpty {
         sessionSets.sortedBy { it.createdAt }.map { it.exerciseId }.distinct()
     }
@@ -582,8 +607,10 @@ private fun RecordScreen(
         .firstOrNull { exerciseId -> sessionSets.any { it.exerciseId == exerciseId && !it.isCompleted } }
         ?.let { exerciseId -> exercises.firstOrNull { it.id == exerciseId } }
         ?: sessionExerciseIds.firstOrNull()?.let { exerciseId -> exercises.firstOrNull { it.id == exerciseId } }
-    val recentSession = remember(completedSessions) { completedSessions.maxByOrNull { it.endedAt ?: it.startedAt } }
-    val homeSessionIds = remember(recentSession) { listOfNotNull(recentSession?.id) }
+    val recentSessions = remember(completedSessions) {
+        completedSessions.sortedBy { it.endedAt ?: it.startedAt }.takeLast(7)
+    }
+    val homeSessionIds = remember(recentSessions) { recentSessions.map { it.id } }
     var homeSets by remember { mutableStateOf<List<WorkoutSetEntity>>(emptyList()) }
     LaunchedEffect(homeSessionIds) {
         homeSets = if (homeSessionIds.isEmpty()) emptyList() else viewModel.historySets(homeSessionIds)
@@ -608,6 +635,7 @@ private fun RecordScreen(
                 viewModel = viewModel,
                 sessionId = editorRoute.first,
                 exercise = editorExercise,
+                workoutProgress = workoutProgress,
                 presetName = activePresetName,
                 allExercises = allExercises,
                 allSessionSets = sessionSets,
@@ -668,17 +696,6 @@ private fun RecordScreen(
                                     color = MaterialTheme.colorScheme.primary,
                                 )
                                 TextButton(onClick = onOpenRecords) { Text("記録") }
-                                Surface(
-                                    modifier = Modifier.size(44.dp).clickable(onClick = onOpenSettingsMenu),
-                                    shape = CircleShape,
-                                    color = MaterialTheme.colorScheme.surface,
-                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                                    shadowElevation = 1.dp,
-                                ) {
-                                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                        Icon(Icons.Default.Settings, contentDescription = "設定", tint = MaterialTheme.colorScheme.onSurface)
-                                    }
-                                }
                             }
                             Text("トレーニング", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.ExtraBold)
                         }
@@ -701,6 +718,7 @@ private fun RecordScreen(
                             }
                         }
                     }
+                    item { WorkoutCalendar(completedSessions, allExercises, viewModel, weekStartsMonday) }
                     item {
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                             Text("プリセット", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -726,80 +744,18 @@ private fun RecordScreen(
                             }
                         }
                     }
-                    item { WorkoutCalendar(completedSessions, allExercises, viewModel, weekStartsMonday) }
                     item {
-                        val recent = recentSession
-                        val recentSets = homeSets.filter { it.sessionId == recent?.id && it.isCompleted }
-                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            Text("最近の記録", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                            Text("履歴", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                        Card(Modifier.fillMaxWidth()) {
-                            if (recent == null) {
-                                Text("トレーニング記録がここに表示されます", Modifier.padding(14.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            } else {
-                                val recentDate = recent.startedAt.atZone(ZoneId.systemDefault()).toLocalDate()
-                                val recentExerciseIds = recentSets.map { it.exerciseId }.distinct()
-                                Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text(recentDate.format(DateTimeFormatter.ofPattern("M月d日", Locale.JAPAN)), Modifier.weight(1f), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
-                                        Text("${recentExerciseIds.size}種目・${recentSets.size}セット", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    }
-                                    val latestSet = recentSets.maxByOrNull { it.updatedAt }
-                                    val latestExercise = latestSet?.let { set -> allExercises.firstOrNull { it.id == set.exerciseId } }
-                                    if (latestSet != null) {
-                                        Divider(color = MaterialTheme.colorScheme.surfaceVariant)
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Text(latestExercise?.name ?: "トレーニング", Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
-                                            Text(
-                                                "${latestSet.normalWeightKg?.let(::formatWeight) ?: "—"}kg × ${latestSet.normalReps ?: "—"}回",
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
+                        TrainingHistoryChart(sessions = recentSessions, sets = homeSets)
                     }
                 }
-                Button(
-                    onClick = { showExercisePicker = true },
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 8.dp).height(52.dp),
-                ) {
-                    Icon(Icons.Default.Add, null)
-                    Text("種目を選んで開始", Modifier.padding(start = 8.dp), fontWeight = FontWeight.Bold)
-                }
-            }
-        }
-    }
-    if (showExercisePicker) {
-        ModalBottomSheet(onDismissRequest = { showExercisePicker = false }) {
-            Column(
-                Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 20.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Text("種目を選んで開始", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.ExtraBold)
-                Text("記録を始める種目を選んでください。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
-                    exercises.forEach { exercise ->
-                        Card(
-                            Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable {
-                                showExercisePicker = false
-                                onSelectExercise(exercise)
-                            },
-                        ) {
-                            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Text(exercise.name, Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.SemiBold)
-                                Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                            }
-                        }
+                Box(Modifier.fillMaxWidth().height(72.dp).padding(bottom = 8.dp)) {
+                    FloatingActionButton(
+                        onClick = onOpenSettingsMenu,
+                        modifier = Modifier.align(Alignment.CenterEnd).size(56.dp),
+                        shape = CircleShape,
+                    ) {
+                        Icon(Icons.Default.Settings, contentDescription = "設定")
                     }
-                    if (exercises.isEmpty()) Text("種目を追加すると、ここから開始できます。", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    TextButton(
-                        onClick = { showExercisePicker = false; onAddExercise() },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) { Text("＋ 種目を追加") }
                 }
             }
         }
@@ -878,6 +834,72 @@ private fun CompletionStatCard(value: String, label: String, modifier: Modifier 
         Column(Modifier.fillMaxWidth().padding(vertical = 13.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.ExtraBold)
             Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun TrainingHistoryChart(
+    sessions: List<dev.local.fitlogsolo.data.WorkoutSessionEntity>,
+    sets: List<WorkoutSetEntity>,
+) {
+    val chartValues = sessions.map { session ->
+        session to sets.count { it.sessionId == session.id && it.isCompleted }
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("記録", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text("完了セット数", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Card(Modifier.fillMaxWidth()) {
+            if (chartValues.isEmpty()) {
+                Text(
+                    "トレーニング記録がここに表示されます",
+                    Modifier.padding(16.dp),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                val primary = MaterialTheme.colorScheme.primary
+                val grid = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)
+                val maxValue = chartValues.maxOf { it.second }.coerceAtLeast(1)
+                Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp)) {
+                    Canvas(Modifier.fillMaxWidth().height(132.dp)) {
+                        val left = 8.dp.toPx()
+                        val right = size.width - left
+                        val top = 8.dp.toPx()
+                        val bottom = size.height - 8.dp.toPx()
+                        val plotHeight = bottom - top
+                        repeat(3) { index ->
+                            val y = top + plotHeight * index / 2f
+                            drawLine(grid, Offset(left, y), Offset(right, y), strokeWidth = 1.dp.toPx())
+                        }
+                        val points = chartValues.mapIndexed { index, (_, value) ->
+                            val x = if (chartValues.size == 1) (left + right) / 2f
+                            else left + (right - left) * index / (chartValues.size - 1).toFloat()
+                            val y = bottom - (value.toFloat() / maxValue) * plotHeight
+                            Offset(x, y)
+                        }
+                        points.zipWithNext().forEach { (start, end) ->
+                            drawLine(primary, start, end, strokeWidth = 3.dp.toPx())
+                        }
+                        points.forEach { point -> drawCircle(primary, radius = 4.dp.toPx(), center = point) }
+                    }
+                    Row(Modifier.fillMaxWidth().padding(top = 4.dp)) {
+                        chartValues.forEach { (session, _) ->
+                            val date = session.startedAt.atZone(ZoneId.systemDefault()).toLocalDate()
+                            Text(
+                                date.format(DateTimeFormatter.ofPattern("M/d", Locale.JAPAN)),
+                                Modifier.weight(1f),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                maxLines = 1,
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -1081,6 +1103,38 @@ private fun PresetVolumeChart(points: List<PresetVolumePoint>) {
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun SetProgressBadge(
+    setNumber: Int,
+    totalSets: Int,
+    color: Color,
+    trackColor: Color,
+) {
+    val total = totalSets.coerceAtLeast(setNumber).coerceAtLeast(1)
+    val progress by animateFloatAsState(
+        targetValue = setNumber.toFloat() / total,
+        animationSpec = tween(durationMillis = 420),
+        label = "set ring progress",
+    )
+    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(1.dp)) {
+        Canvas(Modifier.size(32.dp)) {
+            val stroke = 3.dp.toPx()
+            val arcSize = androidx.compose.ui.geometry.Size(size.width - stroke, size.height - stroke)
+            val topLeft = Offset(stroke / 2f, stroke / 2f)
+            drawArc(trackColor, -90f, 360f, false, topLeft, arcSize, style = androidx.compose.ui.graphics.drawscope.Stroke(stroke))
+            if (progress > 0f) {
+                drawArc(color, -90f, 360f * progress, false, topLeft, arcSize, style = androidx.compose.ui.graphics.drawscope.Stroke(stroke))
+            }
+        }
+        Text(
+            "$setNumber/$total",
+            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+            color = color,
+            maxLines = 1,
+        )
     }
 }
 
@@ -1432,6 +1486,7 @@ private fun ExerciseEditor(
     viewModel: FitLogViewModel,
     sessionId: Long,
     exercise: ExerciseEntity,
+    workoutProgress: Float,
     presetName: String?,
     allExercises: List<ExerciseEntity>,
     allSessionSets: List<WorkoutSetEntity>,
@@ -1502,17 +1557,6 @@ private fun ExerciseEditor(
         .filterValues { setsForExercise -> setsForExercise.isNotEmpty() && setsForExercise.all { it.isCompleted } }
         .keys
     val upcomingExerciseIds = orderedIds.filter { it != exercise.id && it !in completedExerciseIds }
-    val progressUnits = allSessionSets.sumOf { set ->
-        if (allExercises.firstOrNull { it.id == set.exerciseId }?.mode == ExerciseMode.BILATERAL) 2L else 1L
-    }
-    val completedProgressUnits = allSessionSets.sumOf { set ->
-        if (allExercises.firstOrNull { it.id == set.exerciseId }?.mode == ExerciseMode.BILATERAL) {
-            if (set.isCompleted) 2L else (if (set.leftCompleted) 1L else 0L) + (if (set.rightCompleted) 1L else 0L)
-        } else {
-            if (set.isCompleted) 1L else 0L
-        }
-    }
-    val progress = if (progressUnits > 0) completedProgressUnits.toFloat() / progressUnits else 0f
     val nextSetInExercise = currentSet?.let { current ->
         exerciseSets.filter { it.setOrder > current.setOrder && !it.isCompleted }
             .minByOrNull { it.setOrder }
@@ -1567,6 +1611,7 @@ private fun ExerciseEditor(
                 exercise = displayedExercise,
                 set = displayedSet,
                 side = displayedCard.side,
+                exerciseColorIndex = orderedIds.indexOf(displayedExercise.id).coerceAtLeast(0),
                 totalSets = allSessionSets.count { it.exerciseId == displayedExercise.id }
                     .coerceAtLeast(displayedSet.setOrder + 1),
                 enabled = currentSet?.id == displayedSet.id && activeSide == displayedCard.side,
@@ -1683,7 +1728,7 @@ private fun ExerciseEditor(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            WorkoutProgressBar(progress = progress)
+            WorkoutProgressBar(progress = workoutProgress)
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 Box(Modifier.fillMaxSize().padding(horizontal = 4.dp), contentAlignment = Alignment.Center) {
                     AnimatedContent(
@@ -1703,13 +1748,13 @@ private fun ExerciseEditor(
                                 restStartedAtMillis = scene.restStartedAtMillis,
                                 nextExercise = exercise,
                                 nextSet = currentSet,
-                                totalSets = exerciseSets.size,
                                 onSkipRest = { onSkipRest() },
                             )
                             scene.exercise != null && scene.set != null -> SetEditorCard(
                                 exercise = scene.exercise,
                                 set = scene.set,
                                 side = scene.side,
+                                exerciseColorIndex = scene.exerciseColorIndex,
                                 totalSets = scene.totalSets,
                                 enabled = scene.enabled,
                                 weightStepKg = exerciseWeightSteps[scene.exercise.id]
@@ -1791,12 +1836,6 @@ private fun WorkoutExerciseOrderScreen(
                 Text("編集", Modifier.padding(horizontal = 11.dp, vertical = 6.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
             }
         }
-        Text(
-            "カードを長押ししてドラッグ。離れた位置にも一度で移動できます。",
-            Modifier.padding(start = 8.dp),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
         LazyColumn(
             Modifier.weight(1f).fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -1884,20 +1923,16 @@ private fun WorkoutExerciseOrderScreen(
                                 Modifier.size(width = 46.dp, height = 56.dp),
                                 contentAlignment = Alignment.Center,
                             ) {
-                                Text(
-                                    "☷",
-                                    style = MaterialTheme.typography.headlineSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
+                                Icon(Icons.Default.DragHandle, contentDescription = "並べ替え", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         } else {
-                            Text(
-                                if (isCurrent) "●" else "✓",
-                                Modifier.size(width = 46.dp, height = 56.dp),
-                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                                color = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.tertiary,
-                                style = MaterialTheme.typography.titleMedium,
-                            )
+                            Box(Modifier.size(width = 46.dp, height = 56.dp), contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = if (isCurrent) Icons.Default.PlayArrow else Icons.Default.Check,
+                                    contentDescription = if (isCurrent) "進行中" else "完了",
+                                    tint = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.tertiary,
+                                )
+                            }
                         }
                         Text(
                             name,
@@ -1958,7 +1993,7 @@ private fun RestTimerPreviewCard(restSeconds: Long, swipeOffset: Offset) {
         val horizontal = abs(swipeOffset.x) >= abs(swipeOffset.y)
         val skipped = if (horizontal) swipeOffset.x < 0f else swipeOffset.y > 0f
         Card(
-            Modifier.align(Alignment.Center).fillMaxWidth().padding(horizontal = 4.dp)
+            Modifier.align(Alignment.TopCenter).fillMaxWidth().padding(horizontal = 4.dp, vertical = 6.dp)
                 .fillMaxHeight(WORKOUT_CARD_HEIGHT_FRACTION)
                 .graphicsLayer {
                     if (skipped) {
@@ -2038,7 +2073,7 @@ private fun UpcomingSetPreviewCard(
             label = "rest preview card dismissal",
         )
         Card(
-            Modifier.align(Alignment.Center).fillMaxWidth().padding(horizontal = 4.dp)
+            Modifier.align(Alignment.TopCenter).fillMaxWidth().padding(horizontal = 4.dp, vertical = 6.dp)
                 .fillMaxHeight(WORKOUT_CARD_HEIGHT_FRACTION)
                 .graphicsLayer {
                     this.translationX = translationX
@@ -2053,14 +2088,14 @@ private fun UpcomingSetPreviewCard(
             Row(
                 Modifier.fillMaxWidth()
                     .background(Brush.horizontalGradient(listOf(palette.headerStart, palette.headerEnd)))
-                    .padding(horizontal = 20.dp, vertical = 16.dp),
+                .padding(horizontal = 16.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 if (exercise.name.pictogramResource() != null) {
                     ExercisePictogramThumbnail(
                         exerciseName = exercise.name,
-                        modifier = Modifier.size(width = 72.dp, height = 52.dp),
+                        modifier = Modifier.size(width = 68.dp, height = 54.dp),
                     )
                 }
                 Text(
@@ -2069,16 +2104,12 @@ private fun UpcomingSetPreviewCard(
                     maxLines = 2,
                     modifier = Modifier.weight(1f),
                 )
-                Surface(color = Color.White, shape = CircleShape) {
-                    Box(Modifier.height(44.dp).padding(horizontal = 12.dp), contentAlignment = Alignment.Center) {
-                        Text(
-                            "${set.setOrder + 1}/$totalSets",
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold),
-                            color = palette.headerStart,
-                            maxLines = 1,
-                        )
-                    }
-                }
+                SetProgressBadge(
+                    setNumber = set.setOrder + 1,
+                    totalSets = totalSets,
+                    color = palette.headerStart,
+                    trackColor = palette.headerStart.copy(alpha = 0.18f),
+                )
             }
             if (exercise.mode == ExerciseMode.NORMAL) {
                 Row(
@@ -2127,12 +2158,15 @@ private data class ExerciseCardPalette(
     val surfaceEnd: Color,
 )
 
-private fun exerciseCardPalette(): ExerciseCardPalette = ExerciseCardPalette(
-    headerStart = Color(0xFF0F665F),
-    headerEnd = Color(0xFF0B5B55),
-    surfaceStart = Color(0xFFFFFFFF),
-    surfaceEnd = Color(0xFFFAFCFA),
-)
+private fun exerciseCardPalette(exerciseColorIndex: Int = 0): ExerciseCardPalette {
+    val hue = (164f + exerciseColorIndex.coerceAtLeast(0) * 18f) % 360f
+    return ExerciseCardPalette(
+        headerStart = Color.hsv(hue, saturation = 0.72f, value = 0.56f),
+        headerEnd = Color.hsv((hue + 14f) % 360f, saturation = 0.78f, value = 0.44f),
+        surfaceStart = Color.hsv(hue, saturation = 0.08f, value = 0.99f),
+        surfaceEnd = Color.hsv(hue, saturation = 0.14f, value = 0.95f),
+    )
+}
 
 @Composable
 private fun PreviewSideValue(label: String, weightKg: Double?, reps: Int?, modifier: Modifier = Modifier) {
@@ -2151,6 +2185,7 @@ private fun SetEditorCard(
     exercise: ExerciseEntity,
     set: WorkoutSetEntity,
     side: ExerciseSide?,
+    exerciseColorIndex: Int,
     totalSets: Int,
     enabled: Boolean,
     weightStepKg: Double,
@@ -2159,7 +2194,7 @@ private fun SetEditorCard(
     onSkip: () -> Unit,
     onSwipeOffsetChanged: (Offset, Boolean?) -> Unit,
 ) {
-    val palette = exerciseCardPalette()
+    val palette = exerciseCardPalette(exerciseColorIndex)
     val primaryActionColor = MaterialTheme.colorScheme.primary
     val skipActionColor = MaterialTheme.colorScheme.error
     var swipeOffsetX by androidx.compose.runtime.remember(set.id, side) { androidx.compose.runtime.mutableFloatStateOf(0f) }
@@ -2184,17 +2219,20 @@ private fun SetEditorCard(
 
             val cardWidthPx = size.width.toFloat()
             val cardHeightPx = size.height * WORKOUT_CARD_HEIGHT_FRACTION
-            val cardTopPx = (size.height - cardHeightPx) / 2f
+            val cardTopPx = with(density) { 6.dp.toPx() }
             val swipeThreshold = minOf(cardWidthPx, cardHeightPx) * 0.08f
             val minFlingVelocity = with(density) { 700.dp.toPx() }
 
             fun updateDrag(offset: Offset) {
                 swipeOffsetX = offset.x
                 swipeOffsetY = offset.y
-                if (swipeSkips == null && offset.getDistance() >= swipeThreshold) {
-                    val horizontal = abs(offset.x) >= abs(offset.y)
+                if (offset.getDistance() >= swipeThreshold) {
+                    val horizontal = swipeHorizontalLock ?: (abs(offset.x) >= abs(offset.y))
                     swipeHorizontalLock = horizontal
                     swipeSkips = if (horizontal) offset.x < 0f else offset.y > 0f
+                } else {
+                    swipeSkips = null
+                    swipeHorizontalLock = null
                 }
                 onSwipeOffsetChanged(offset, swipeSkips)
             }
@@ -2327,7 +2365,7 @@ private fun SetEditorCard(
         val advancing = swipeSkips?.not() ?: if (horizontalSwipe) swipeOffsetX > 0f else swipeOffsetY < 0f
         val swipeColor = if (!advancing) skipActionColor else primaryActionColor
         Card(
-        Modifier.align(Alignment.Center).fillMaxWidth().fillMaxHeight(WORKOUT_CARD_HEIGHT_FRACTION)
+        Modifier.align(Alignment.TopCenter).padding(top = 6.dp).fillMaxWidth().fillMaxHeight(WORKOUT_CARD_HEIGHT_FRACTION)
             .graphicsLayer {
                 translationX = swipeOffsetX
                 translationY = swipeOffsetY
@@ -2380,14 +2418,14 @@ private fun SetEditorCard(
             Row(
                 Modifier.fillMaxWidth()
                     .background(Brush.horizontalGradient(listOf(palette.headerStart, palette.headerEnd)))
-                    .padding(horizontal = 20.dp, vertical = 16.dp),
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 if (exercise.name.pictogramResource() != null) {
                     ExercisePictogramThumbnail(
                         exerciseName = exercise.name,
-                        modifier = Modifier.size(width = 72.dp, height = 52.dp),
+                        modifier = Modifier.size(width = 68.dp, height = 54.dp),
                     )
                 }
                 Text(
@@ -2396,29 +2434,15 @@ private fun SetEditorCard(
                     maxLines = 2,
                     modifier = Modifier.weight(1f),
                 )
-                Surface(color = Color.White.copy(alpha = 0.14f), shape = CircleShape) {
-                    Box(
-                        modifier = Modifier.height(32.dp).padding(horizontal = 12.dp),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            "${set.setOrder + 1}/$totalSets",
-                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.ExtraBold),
-                            color = Color.White,
-                            maxLines = 1,
-                        )
-                    }
-                }
+                SetProgressBadge(
+                    setNumber = set.setOrder + 1,
+                    totalSets = totalSets,
+                    color = Color.White,
+                    trackColor = Color.White.copy(alpha = 0.25f),
+                )
             }
             if (exercise.mode == ExerciseMode.NORMAL) {
                 Box(Modifier.weight(1f).fillMaxWidth().padding(12.dp)) {
-                    Text(
-                        "セット ${set.setOrder + 1}",
-                        Modifier.align(Alignment.TopCenter).padding(top = 18.dp),
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontWeight = FontWeight.Bold,
-                    )
                     Surface(
                         Modifier.align(Alignment.Center).fillMaxWidth(0.96f).fillMaxHeight(0.64f),
                         shape = MaterialTheme.shapes.extraLarge,
@@ -2529,11 +2553,6 @@ private fun SetEditorCard(
                 Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Text(
-                    "右へスワイプで次へ　·　左へスワイプでスキップ",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
                 TextButton(
                     onClick = onSkip,
                     enabled = enabled,
@@ -2567,12 +2586,21 @@ private fun SetEditorCard(
                       .background(swipeColor.copy(alpha = 0.16f), CircleShape),
                   contentAlignment = Alignment.Center,
               ) {
-                  Icon(
-                      imageVector = if (advancing) Icons.Default.Check else Icons.Default.Close,
-                      contentDescription = null,
-                      modifier = Modifier.size(36.dp),
-                      tint = swipeColor,
-                  )
+                  if (advancing) {
+                      Surface(
+                          modifier = Modifier.size(30.dp),
+                          shape = CircleShape,
+                          color = Color.Transparent,
+                          border = BorderStroke(3.dp, swipeColor),
+                      ) {}
+                  } else {
+                      Icon(
+                          imageVector = Icons.Default.Close,
+                          contentDescription = null,
+                          modifier = Modifier.size(36.dp),
+                          tint = swipeColor,
+                      )
+                  }
               }
           }
         }
@@ -2681,12 +2709,9 @@ private fun RestTimerCard(
     restStartedAtMillis: Long,
     nextExercise: ExerciseEntity,
     nextSet: WorkoutSetEntity?,
-    totalSets: Int,
     onSkipRest: () -> Unit,
 ) {
     val primaryColor = MaterialTheme.colorScheme.primary
-    val remainingSets = nextSet?.let { (totalSets - it.setOrder).coerceAtLeast(0) } ?: 0
-    val remainingSetProgress = if (totalSets > 0) remainingSets.toFloat() / totalSets else 0f
     val remainingSeconds by produceState(
         initialValue = ((restEndsAtMillis - System.currentTimeMillis()).coerceAtLeast(0L) + 999L) / 1_000L,
         key1 = restEndsAtMillis,
@@ -2811,7 +2836,7 @@ private fun RestTimerCard(
             }
         }
         Card(
-            Modifier.align(Alignment.Center).fillMaxWidth().fillMaxHeight(WORKOUT_CARD_HEIGHT_FRACTION)
+            Modifier.align(Alignment.TopCenter).padding(top = 6.dp).fillMaxWidth().fillMaxHeight(WORKOUT_CARD_HEIGHT_FRACTION)
                 .graphicsLayer {
                     translationX = dragOffsetX
                     translationY = dragOffsetY
@@ -2865,18 +2890,18 @@ private fun RestTimerCard(
               horizontalAlignment = Alignment.CenterHorizontally,
               verticalArrangement = Arrangement.spacedBy(16.dp),
           ) {
-              Box(
+              Column(
                   Modifier.weight(1f).fillMaxWidth(),
-                  contentAlignment = Alignment.Center,
+                  horizontalAlignment = Alignment.CenterHorizontally,
               ) {
-                  Row(
-                      Modifier.fillMaxWidth(),
-                      horizontalArrangement = Arrangement.spacedBy(10.dp),
-                      verticalAlignment = Alignment.CenterVertically,
+                  Text("休憩", style = MaterialTheme.typography.titleMedium, color = primaryColor, fontWeight = FontWeight.Bold)
+                  Box(
+                      Modifier.weight(1f).fillMaxWidth(),
+                      contentAlignment = Alignment.Center,
                   ) {
                       CircularProgressRing(
                           progress = 1f - timerProgress,
-                          modifier = Modifier.weight(1.65f).aspectRatio(1f),
+                          modifier = Modifier.fillMaxHeight().aspectRatio(1f),
                           color = primaryColor,
                           trackColor = Color.White.copy(alpha = 0.9f),
                       ) {
@@ -2891,22 +2916,6 @@ private fun RestTimerCard(
                               color = MaterialTheme.colorScheme.onSurface,
                               maxLines = 1,
                           )
-                      }
-                      CircularProgressRing(
-                          progress = remainingSetProgress,
-                          modifier = Modifier.weight(1f).aspectRatio(1f),
-                          color = primaryColor,
-                          trackColor = Color.White.copy(alpha = 0.9f),
-                          strokeWidth = 8.dp,
-                      ) {
-                          Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                              Text(
-                                  remainingSets.toString(),
-                                  style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.ExtraBold),
-                                  color = MaterialTheme.colorScheme.onSurface,
-                              )
-                              Text("セット残り", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
-                          }
                       }
                   }
               }
@@ -3268,13 +3277,6 @@ private fun SettingsScreen(
                 }
             }
             SettingsPage.EXERCISES -> {
-                item {
-                    Text(
-                        "種目名をタップして編集。右にスワイプすると削除できます。",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
                 item { Button(onClick = onAddExercise, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Add, null); Text("種目を追加") } }
                 items(exercises, key = { "exercise-${it.id}" }) { exercise ->
                     ExerciseManagementItem(
@@ -3327,7 +3329,6 @@ private fun SettingsScreen(
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     modifier = Modifier.fillMaxWidth(),
                 )
-                Text("マシンやプレートの実際の刻みに合わせて設定できます。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text("セット間休憩", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                 OutlinedTextField(
                     value = exerciseRestDurationDraft,
@@ -3338,7 +3339,6 @@ private fun SettingsScreen(
                         ) exerciseRestDurationDraft = normalized
                     },
                     label = { Text("種目別（分）") },
-                    supportingText = { Text("空欄は共通設定、0は休憩なし") },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     modifier = Modifier.fillMaxWidth(),
@@ -3392,7 +3392,6 @@ private fun SettingsScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Text("プリセットを追加", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.ExtraBold)
-                Text("よく使う種目をまとめて、トレーニングをすぐ開始できます。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 OutlinedTextField(
                     value = newPresetName,
                     onValueChange = { newPresetName = it.take(24) },
@@ -3400,12 +3399,6 @@ private fun SettingsScreen(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
-                Surface(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f), shape = MaterialTheme.shapes.large) {
-                    Column(Modifier.fillMaxWidth().padding(14.dp)) {
-                        Text("あとから設定できます", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-                        Text("種目の順番・重量・回数・セット数", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                     TextButton(onClick = { showAddPreset = false }) { Text("キャンセル") }
                     Button(enabled = newPresetName.trim().isNotEmpty(), onClick = {
@@ -3422,6 +3415,8 @@ private fun SettingsScreen(
         PresetEditorDialog(
             preset = preset,
             exercises = exercises,
+            exerciseRestDurations = exerciseRestDurations,
+            onExerciseRestDurationChange = onExerciseRestDurationChange,
             onChange = { updated -> viewModel.setPresets(presets.map { if (it.id == preset.id) updated else it }) },
             onDismiss = { editingPresetId = null },
         )
@@ -3433,11 +3428,15 @@ private fun SettingsScreen(
 private fun PresetEditorDialog(
     preset: WorkoutPreset,
     exercises: List<ExerciseEntity>,
+    exerciseRestDurations: Map<Long, Long>,
+    onExerciseRestDurationChange: (Long, Long?) -> Unit,
     onChange: (WorkoutPreset) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val latestPreset by androidx.compose.runtime.rememberUpdatedState(preset)
     var expanded by rememberSaveable(preset.id) { mutableStateOf(false) }
+    var expandedExerciseId by rememberSaveable(preset.id) { mutableStateOf<Long?>(null) }
+    var exerciseRestDrafts by remember(preset.id) { mutableStateOf<Map<Long, String>>(emptyMap()) }
     var draggedExerciseId by remember(preset.id) { mutableStateOf<Long?>(null) }
     var measuredCardHeightsPx by remember(preset.id) { mutableStateOf<Map<Long, Int>>(emptyMap()) }
     val dragFeedbackView = LocalView.current
@@ -3468,14 +3467,6 @@ private fun PresetEditorDialog(
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
-                item(key = "preset-order-hint") {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("カード上部を長押しして、好きな位置へドラッグ", Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
-                        Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = CircleShape) {
-                            Text("↕", Modifier.padding(horizontal = 10.dp, vertical = 4.dp), color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                }
                 items(presetExerciseRows, key = { "preset-exercise-${it.first.exerciseId}" }) { (config, exercise) ->
                     fun updateConfig(transform: (PresetExerciseConfig) -> PresetExerciseConfig) {
                         onChange(
@@ -3486,6 +3477,11 @@ private fun PresetEditorDialog(
                             ),
                         )
                     }
+                    val isExpanded = expandedExerciseId == config.exerciseId
+                    val restDraft = exerciseRestDrafts[exercise.id]
+                        ?: exerciseRestDurations[exercise.id]?.toMinutesInput().orEmpty()
+                    val parsedRestDraft = restDraft.toRestSecondsOrNull()
+                    val savedRestDraft = exerciseRestDurations[exercise.id]?.toMinutesInput().orEmpty()
                     val isDragged = draggedExerciseId == config.exerciseId
                     val cardScale by animateFloatAsState(
                         targetValue = if (isDragged) 1.025f else 1f,
@@ -3520,13 +3516,20 @@ private fun PresetEditorDialog(
                                 scaleY = cardScale
                                 rotationZ = cardRotation
                             }
-                            .semantics { contentDescription = "${exercise.name}、カード上部を長押しして並べ替え" },
+                            .semantics { contentDescription = "${exercise.name}の設定" },
                         elevation = CardDefaults.cardElevation(defaultElevation = cardElevation),
                         border = if (isDragged) BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary) else null,
                     ) {
                         Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Row(
-                                Modifier.fillMaxWidth().pointerInput(config.exerciseId) {
+                                Modifier.fillMaxWidth()
+                                    .clickable {
+                                        expandedExerciseId = if (isExpanded) null else config.exerciseId
+                                        if (!isExpanded && exercise.id !in exerciseRestDrafts) {
+                                            exerciseRestDrafts = exerciseRestDrafts + (exercise.id to savedRestDraft)
+                                        }
+                                    }
+                                    .pointerInput(config.exerciseId) {
                                     var startCenterY = 0f
                                     var pointerOffsetFromCenter = 0f
                                     var draggedDistance = 0f
@@ -3580,17 +3583,39 @@ private fun PresetEditorDialog(
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Text(exercise.name, Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
-                                Text(
-                                    "☷",
-                                    Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
-                                    color = MaterialTheme.colorScheme.primary,
-                                    style = MaterialTheme.typography.headlineSmall,
-                                )
+                                Icon(Icons.Default.DragHandle, contentDescription = "並べ替え", tint = MaterialTheme.colorScheme.primary)
                                 IconButton(onClick = {
                                     onChange(preset.copy(exercises = preset.exercises.filterNot { it.exerciseId == config.exerciseId }))
                                 }) { Icon(Icons.Default.Delete, "種目を削除") }
                             }
-                            if (exercise.mode == ExerciseMode.BILATERAL) {
+                            if (isExpanded) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    OutlinedTextField(
+                                        value = restDraft,
+                                        onValueChange = { input ->
+                                            val normalized = input.replace(',', '.')
+                                            if (normalized.length <= 6 && normalized.count { it == '.' } <= 1 &&
+                                                normalized.all { it.isDigit() || it == '.' } &&
+                                                normalized.substringAfter('.', "").length <= 2
+                                            ) exerciseRestDrafts = exerciseRestDrafts + (exercise.id to normalized)
+                                        },
+                                        label = { Text("休憩（分）") },
+                                        singleLine = true,
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                    Button(
+                                        enabled = (restDraft.isBlank() || parsedRestDraft != null) && restDraft != savedRestDraft,
+                                        onClick = {
+                                            onExerciseRestDurationChange(
+                                                exercise.id,
+                                                if (restDraft.isBlank()) null else parsedRestDraft,
+                                            )
+                                        },
+                                    ) { Text("保存") }
+                                }
+                            }
+                            if (isExpanded && exercise.mode == ExerciseMode.BILATERAL) {
                                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                     listOf(
                                         "左kg" to config.leftWeightKg,
@@ -3635,7 +3660,7 @@ private fun PresetEditorDialog(
                                         modifier = Modifier.weight(1f),
                                     )
                                 }
-                            } else {
+                            } else if (isExpanded) {
                                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                     OutlinedTextField(
                                         value = config.weightKg,
