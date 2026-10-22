@@ -259,6 +259,7 @@ private fun FitLogAppContent(
     var pendingWorkoutStart by remember { mutableStateOf<(() -> Unit)?>(null) }
     var showExactAlarmPermissionDialog by rememberSaveable { mutableStateOf(false) }
     var presetExerciseOrder by rememberSaveable { mutableStateOf("") }
+    var activePresetName by rememberSaveable { mutableStateOf<String?>(null) }
     val exercises by viewModel.exercises.collectAsStateWithLifecycle()
     val allExercises by viewModel.allExercises.collectAsStateWithLifecycle()
     val activeSession by viewModel.activeSession.collectAsStateWithLifecycle()
@@ -410,6 +411,7 @@ private fun FitLogAppContent(
                         exercises = exercises,
                         allExercises = allExercises,
                         presets = presets,
+                        activePresetName = activePresetName,
                         onOpenSettings = {
                             settingsPage = SettingsPage.PRESETS
                             settings = true
@@ -430,6 +432,7 @@ private fun FitLogAppContent(
                         leftFirstExerciseIds = leftFirstExerciseIds,
                         onStartPreset = { preset ->
                             startWorkoutWithBackgroundAlerts {
+                                activePresetName = preset.name
                                 viewModel.startPreset(preset) { _, exerciseIds ->
                                     selectedExerciseId = exerciseIds.firstOrNull()
                                     presetExerciseOrder = exerciseIds.joinToString(",")
@@ -464,6 +467,7 @@ private fun FitLogAppContent(
                             restStartedAtMillis = 0L
                             restEndsAtMillis = 0L
                             presetExerciseOrder = ""
+                            activePresetName = null
                         },
                         onWorkoutComplete = { stats ->
                             completionStats = stats
@@ -476,6 +480,7 @@ private fun FitLogAppContent(
                             restStartedAtMillis = 0L
                             restEndsAtMillis = 0L
                             presetExerciseOrder = ""
+                            activePresetName = null
                             showWorkoutComplete = true
                         },
                         onBack = { selectedExerciseId = null },
@@ -530,6 +535,7 @@ private fun RecordScreen(
     exercises: List<ExerciseEntity>,
     allExercises: List<ExerciseEntity>,
     presets: List<WorkoutPreset>,
+    activePresetName: String?,
     onOpenSettings: () -> Unit,
     activeSessionId: Long?,
     completedSessions: List<dev.local.fitlogsolo.data.WorkoutSessionEntity>,
@@ -603,6 +609,7 @@ private fun RecordScreen(
                 viewModel = viewModel,
                 sessionId = editorRoute.first,
                 exercise = editorExercise,
+                presetName = activePresetName,
                 allExercises = allExercises,
                 allSessionSets = sessionSets,
                 exerciseOrderIds = presetExerciseOrder,
@@ -1226,6 +1233,7 @@ private fun ExerciseEditor(
     viewModel: FitLogViewModel,
     sessionId: Long,
     exercise: ExerciseEntity,
+    presetName: String?,
     allExercises: List<ExerciseEntity>,
     allSessionSets: List<WorkoutSetEntity>,
     exerciseOrderIds: List<Long>,
@@ -1449,6 +1457,33 @@ private fun ExerciseEditor(
         )
     } else {
         Column(Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 4.dp)) {
+            val exercisePosition = (orderedIds.indexOf(exercise.id) + 1).coerceAtLeast(1)
+            val exerciseCount = orderedIds.size.coerceAtLeast(1)
+            Row(
+                Modifier.fillMaxWidth().height(48.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                IconButton(onClick = onFinishSession, modifier = Modifier.size(48.dp)) {
+                    Icon(
+                        Icons.Default.Close,
+                        contentDescription = "トレーニングを終了",
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                }
+                Text(
+                    presetName ?: "トレーニング",
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                )
+                Text(
+                    "$exercisePosition / $exerciseCount 種目",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             WorkoutProgressBar(progress = progress)
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 Box(Modifier.fillMaxSize().padding(horizontal = 4.dp), contentAlignment = Alignment.Center) {
