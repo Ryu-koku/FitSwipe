@@ -24,6 +24,7 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -41,6 +42,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -124,6 +126,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -139,6 +142,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.local.fitlogsolo.FitLogViewModel
 import dev.local.fitlogsolo.R
@@ -1475,8 +1479,9 @@ private fun WorkoutExerciseOrderScreen(
     val completedOrder = exerciseOrderIds.filter { it in completedExerciseIds && it != currentExerciseId }
     val displayOrder = listOf(currentExerciseId) + draftUpcoming + completedOrder
     val hasOrderChanges = draftUpcoming != upcomingExerciseIds
-    val rowPitchPx = with(LocalDensity.current) { 62.dp.toPx() }
+    val rowPitchPx = with(LocalDensity.current) { 64.dp.toPx() }
     var draggedExerciseId by remember { mutableStateOf<Long?>(null) }
+    val dragFeedbackView = LocalView.current
 
     Column(
         Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 8.dp),
@@ -1490,27 +1495,88 @@ private fun WorkoutExerciseOrderScreen(
             }
         }
         Text(
-            "長押しして並べ替え。複数変更してから適用できます。",
+            "カードを長押ししてドラッグ。離れた位置にも一度で移動できます。",
             Modifier.padding(start = 8.dp),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        Column(
-            Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+        LazyColumn(
+            Modifier.weight(1f).fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            displayOrder.forEach { exerciseId ->
+            items(displayOrder, key = { "order-$it" }) { exerciseId ->
                 val name = exerciseById[exerciseId]?.name ?: "種目"
                 val isCurrent = exerciseId == currentExerciseId
                 val isCompleted = exerciseId in completedExerciseIds
                 val isDraggable = !isCurrent && !isCompleted
                 val isDragged = draggedExerciseId == exerciseId
+                val cardScale by animateFloatAsState(
+                    targetValue = if (isDragged) 1.035f else 1f,
+                    animationSpec = spring(dampingRatio = 0.72f, stiffness = 520f),
+                    label = "reorder card scale",
+                )
+                val cardRotation by animateFloatAsState(
+                    targetValue = if (isDragged) -1.2f else 0f,
+                    animationSpec = spring(dampingRatio = 0.72f, stiffness = 520f),
+                    label = "reorder card tilt",
+                )
+                val cardElevation by animateDpAsState(
+                    targetValue = if (isDragged) 14.dp else 1.dp,
+                    animationSpec = spring(dampingRatio = 0.72f, stiffness = 520f),
+                    label = "reorder card elevation",
+                )
                 Card(
-                    Modifier.fillMaxWidth().height(56.dp).graphicsLayer {
-                        scaleX = if (isDragged) 1.025f else 1f
-                        scaleY = if (isDragged) 1.025f else 1f
-                    },
-                    elevation = CardDefaults.cardElevation(defaultElevation = if (isDragged) 8.dp else 1.dp),
+                    Modifier.fillMaxWidth().height(56.dp)
+                        .animateItem(
+                            fadeInSpec = tween(140),
+                            placementSpec = spring(dampingRatio = 0.78f, stiffness = 520f),
+                            fadeOutSpec = tween(110),
+                        )
+                        .zIndex(if (isDragged) 1f else 0f)
+                        .graphicsLayer {
+                            scaleX = cardScale
+                            scaleY = cardScale
+                            rotationZ = cardRotation
+                        }
+                        .then(
+                            if (isDraggable) {
+                                Modifier.pointerInput(exerciseId) {
+                                    var startIndex = -1
+                                    var draggedDistance = 0f
+                                    detectDragGesturesAfterLongPress(
+                                        onDragStart = {
+                                            startIndex = latestDraftUpcoming.indexOf(exerciseId)
+                                            draggedDistance = 0f
+                                            draggedExerciseId = exerciseId
+                                            dragFeedbackView.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                                        },
+                                        onDrag = { change, amount ->
+                                            change.consume()
+                                            draggedDistance += amount.y
+                                            val currentUpcoming = latestDraftUpcoming
+                                            val currentIndex = currentUpcoming.indexOf(exerciseId)
+                                            if (startIndex >= 0 && currentIndex >= 0 && currentUpcoming.isNotEmpty()) {
+                                                val targetIndex = (startIndex + (draggedDistance / rowPitchPx).roundToInt())
+                                                    .coerceIn(0, currentUpcoming.lastIndex)
+                                                if (targetIndex != currentIndex) {
+                                                    draftUpcoming = currentUpcoming.toMutableList().apply {
+                                                        add(targetIndex, removeAt(currentIndex))
+                                                    }
+                                                    dragFeedbackView.performHapticFeedback(HapticFeedbackConstants.TEXT_HANDLE_MOVE)
+                                                }
+                                            }
+                                        },
+                                        onDragEnd = { draggedExerciseId = null },
+                                        onDragCancel = { draggedExerciseId = null },
+                                    )
+                                }
+                            } else Modifier
+                        )
+                        .semantics {
+                            if (isDraggable) contentDescription = "$name、カードを長押しして並べ替え"
+                        },
+                    elevation = CardDefaults.cardElevation(defaultElevation = cardElevation),
+                    border = if (isDragged) BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary) else null,
                     colors = CardDefaults.cardColors(
                         containerColor = if (isCurrent) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
                     ),
@@ -1518,36 +1584,7 @@ private fun WorkoutExerciseOrderScreen(
                     Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
                         if (isDraggable) {
                             Box(
-                                Modifier.size(width = 46.dp, height = 56.dp)
-                                    .pointerInput(exerciseId) {
-                                        var startIndex = -1
-                                        var draggedDistance = 0f
-                                        detectDragGesturesAfterLongPress(
-                                            onDragStart = {
-                                                startIndex = latestDraftUpcoming.indexOf(exerciseId)
-                                                draggedDistance = 0f
-                                                draggedExerciseId = exerciseId
-                                            },
-                                            onDrag = { change, amount ->
-                                                change.consume()
-                                                draggedDistance += amount.y
-                                                val currentUpcoming = latestDraftUpcoming
-                                                val currentIndex = currentUpcoming.indexOf(exerciseId)
-                                                if (startIndex >= 0 && currentIndex >= 0 && currentUpcoming.isNotEmpty()) {
-                                                    val targetIndex = (startIndex + (draggedDistance / rowPitchPx).roundToInt())
-                                                        .coerceIn(0, currentUpcoming.lastIndex)
-                                                    if (targetIndex != currentIndex) {
-                                                        draftUpcoming = currentUpcoming.toMutableList().apply {
-                                                            add(targetIndex, removeAt(currentIndex))
-                                                        }
-                                                    }
-                                                }
-                                            },
-                                            onDragEnd = { draggedExerciseId = null },
-                                            onDragCancel = { draggedExerciseId = null },
-                                        )
-                                    }
-                                    .semantics { contentDescription = "$name、長押しして並べ替え" },
+                                Modifier.size(width = 46.dp, height = 56.dp),
                                 contentAlignment = Alignment.Center,
                             ) {
                                 Text(
@@ -1590,13 +1627,15 @@ private fun WorkoutExerciseOrderScreen(
                 }
             }
             if (upcomingExerciseIds.isEmpty()) {
-                Text(
-                    "並べ替えできる種目はありません",
-                    Modifier.fillMaxWidth().padding(vertical = 16.dp),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                )
+                item {
+                    Text(
+                        "並べ替えできる種目はありません",
+                        Modifier.fillMaxWidth().padding(vertical = 16.dp),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    )
+                }
             }
         }
         Button(
@@ -2904,6 +2943,13 @@ private fun PresetEditorDialog(
 ) {
     val latestPreset by androidx.compose.runtime.rememberUpdatedState(preset)
     var expanded by rememberSaveable(preset.id) { mutableStateOf(false) }
+    var draggedExerciseId by remember(preset.id) { mutableStateOf<Long?>(null) }
+    var measuredCardHeightsPx by remember(preset.id) { mutableStateOf<Map<Long, Int>>(emptyMap()) }
+    val dragFeedbackView = LocalView.current
+    val exerciseById = remember(exercises) { exercises.associateBy { it.id } }
+    val presetExerciseRows = preset.exercises.mapNotNull { config ->
+        exerciseById[config.exerciseId]?.let { exercise -> config to exercise }
+    }
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 16.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -2913,20 +2959,29 @@ private fun PresetEditorDialog(
                 }
                 TextButton(onClick = onDismiss) { Text("完了") }
             }
-            Column(
-                Modifier.fillMaxWidth().heightIn(max = 620.dp).verticalScroll(rememberScrollState()),
+            LazyColumn(
+                Modifier.fillMaxWidth().heightIn(max = 620.dp),
+                contentPadding = PaddingValues(bottom = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                OutlinedTextField(
-                    value = preset.name,
-                    onValueChange = { onChange(preset.copy(name = it.take(24))) },
-                    label = { Text("プリセット名") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Text("種目の順番と、開始時の値を設定", style = MaterialTheme.typography.bodySmall)
-                preset.exercises.forEach { config ->
-                    val exercise = exercises.firstOrNull { it.id == config.exerciseId } ?: return@forEach
+                item(key = "preset-name") {
+                    OutlinedTextField(
+                        value = preset.name,
+                        onValueChange = { onChange(preset.copy(name = it.take(24))) },
+                        label = { Text("プリセット名") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+                item(key = "preset-order-hint") {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("カード上部を長押しして、好きな位置へドラッグ", Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
+                        Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = CircleShape) {
+                            Text("↕", Modifier.padding(horizontal = 10.dp, vertical = 4.dp), color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+                items(presetExerciseRows, key = { "preset-exercise-${it.first.exerciseId}" }) { (config, exercise) ->
                     fun updateConfig(transform: (PresetExerciseConfig) -> PresetExerciseConfig) {
                         onChange(
                             preset.copy(
@@ -2936,36 +2991,103 @@ private fun PresetEditorDialog(
                             ),
                         )
                     }
-                    Card(Modifier.fillMaxWidth()) {
+                    val isDragged = draggedExerciseId == config.exerciseId
+                    val cardScale by animateFloatAsState(
+                        targetValue = if (isDragged) 1.025f else 1f,
+                        animationSpec = spring(dampingRatio = 0.72f, stiffness = 520f),
+                        label = "preset exercise scale",
+                    )
+                    val cardRotation by animateFloatAsState(
+                        targetValue = if (isDragged) -0.8f else 0f,
+                        animationSpec = spring(dampingRatio = 0.72f, stiffness = 520f),
+                        label = "preset exercise tilt",
+                    )
+                    val cardElevation by animateDpAsState(
+                        targetValue = if (isDragged) 14.dp else 1.dp,
+                        animationSpec = spring(dampingRatio = 0.72f, stiffness = 520f),
+                        label = "preset exercise elevation",
+                    )
+                    Card(
+                        Modifier.fillMaxWidth()
+                            .onSizeChanged { size ->
+                                if (measuredCardHeightsPx[config.exerciseId] != size.height) {
+                                    measuredCardHeightsPx = measuredCardHeightsPx + (config.exerciseId to size.height)
+                                }
+                            }
+                            .animateItem(
+                                fadeInSpec = tween(140),
+                                placementSpec = spring(dampingRatio = 0.78f, stiffness = 520f),
+                                fadeOutSpec = tween(110),
+                            )
+                            .zIndex(if (isDragged) 1f else 0f)
+                            .graphicsLayer {
+                                scaleX = cardScale
+                                scaleY = cardScale
+                                rotationZ = cardRotation
+                            }
+                            .semantics { contentDescription = "${exercise.name}、カード上部を長押しして並べ替え" },
+                        elevation = CardDefaults.cardElevation(defaultElevation = cardElevation),
+                        border = if (isDragged) BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary) else null,
+                    ) {
                         Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
+                            Row(
+                                Modifier.fillMaxWidth().pointerInput(config.exerciseId) {
+                                    var startCenterY = 0f
+                                    var pointerOffsetFromCenter = 0f
+                                    var draggedDistance = 0f
+                                    fun cardHeightPx(item: PresetExerciseConfig): Float {
+                                        measuredCardHeightsPx[item.exerciseId]?.let { return it.toFloat() }
+                                        val isBilateral = exerciseById[item.exerciseId]?.mode == ExerciseMode.BILATERAL
+                                        return with(density) { (if (isBilateral) 196.dp else 132.dp).toPx() }
+                                    }
+                                    fun itemPitchPx(item: PresetExerciseConfig): Float =
+                                        cardHeightPx(item) + with(density) { 10.dp.toPx() }
+                                    detectDragGesturesAfterLongPress(
+                                        onDragStart = { touchPosition ->
+                                            val startIndex = latestPreset.exercises.indexOfFirst { it.exerciseId == config.exerciseId }
+                                            startCenterY = latestPreset.exercises.take(startIndex).fold(0f) { total, item -> total + itemPitchPx(item) } +
+                                                cardHeightPx(config) / 2f
+                                            pointerOffsetFromCenter = touchPosition.y - cardHeightPx(config) / 2f
+                                            draggedDistance = 0f
+                                            draggedExerciseId = config.exerciseId
+                                            dragFeedbackView.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                                        },
+                                        onDrag = { change, amount ->
+                                            change.consume()
+                                            draggedDistance += amount.y
+                                            val currentPreset = latestPreset.exercises
+                                            val targetCenterY = startCenterY + draggedDistance + pointerOffsetFromCenter
+                                            var cursor = 0f
+                                            var targetIndex = -1
+                                            var closestDistance = Float.POSITIVE_INFINITY
+                                            currentPreset.forEachIndexed { index, item ->
+                                                val center = cursor + cardHeightPx(item) / 2f
+                                                val distance = abs(center - targetCenterY)
+                                                if (distance < closestDistance) {
+                                                    closestDistance = distance
+                                                    targetIndex = index
+                                                }
+                                                cursor += itemPitchPx(item)
+                                            }
+                                            val currentIndex = currentPreset.indexOfFirst { it.exerciseId == config.exerciseId }
+                                            if (targetIndex >= 0 && currentIndex >= 0 && targetIndex != currentIndex) {
+                                                val reordered = currentPreset.toMutableList().apply {
+                                                    add(targetIndex, removeAt(currentIndex))
+                                                }
+                                                onChange(latestPreset.copy(exercises = reordered))
+                                                dragFeedbackView.performHapticFeedback(HapticFeedbackConstants.TEXT_HANDLE_MOVE)
+                                            }
+                                        },
+                                        onDragEnd = { draggedExerciseId = null },
+                                        onDragCancel = { draggedExerciseId = null },
+                                    )
+                                },
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
                                 Text(exercise.name, Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
                                 Text(
                                     "☷",
-                                    Modifier.pointerInput(config.exerciseId) {
-                                        var startIndex = 0
-                                        var draggedDistance = 0f
-                                        val rowHeight = with(density) { 156.dp.toPx() }
-                                        detectDragGesturesAfterLongPress(
-                                            onDragStart = {
-                                                startIndex = latestPreset.exercises.indexOfFirst { it.exerciseId == config.exerciseId }
-                                                draggedDistance = 0f
-                                            },
-                                            onDrag = { change, amount ->
-                                                change.consume()
-                                                draggedDistance += amount.y
-                                                val target = (startIndex + (draggedDistance / rowHeight).roundToInt())
-                                                    .coerceIn(0, latestPreset.exercises.lastIndex)
-                                                val current = latestPreset.exercises.indexOfFirst { it.exerciseId == config.exerciseId }
-                                                if (current >= 0 && target != current) {
-                                                    val reordered = latestPreset.exercises.toMutableList().apply {
-                                                        add(target, removeAt(current))
-                                                    }
-                                                    onChange(latestPreset.copy(exercises = reordered))
-                                                }
-                                            },
-                                        )
-                                    }.padding(horizontal = 12.dp, vertical = 4.dp),
+                                    Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
                                     color = MaterialTheme.colorScheme.primary,
                                     style = MaterialTheme.typography.headlineSmall,
                                 )
@@ -3055,31 +3177,33 @@ private fun PresetEditorDialog(
                         }
                     }
                 }
-                Box {
-                    OutlinedButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()) {
-                        Icon(Icons.Default.Add, null); Text("種目を追加")
-                    }
-                    DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                        exercises.filter { candidate -> preset.exercises.none { it.exerciseId == candidate.id } }.forEach { exercise ->
-                            DropdownMenuItem(
-                                text = { Text(exercise.name) },
-                                onClick = {
-                                    val defaults = exerciseTrainingDefault(exercise.name)
-                                    val defaultWeight = defaults?.tenRepWeightKg?.let(::formatWeight) ?: "0"
-                                    onChange(
-                                        preset.copy(
-                                            exercises = preset.exercises + PresetExerciseConfig(
-                                                exerciseId = exercise.id,
-                                                weightKg = defaultWeight,
-                                                leftWeightKg = defaultWeight,
-                                                rightWeightKg = defaultWeight,
-                                                reps = "10",
+                item(key = "preset-add-exercise") {
+                    Box {
+                        OutlinedButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()) {
+                            Icon(Icons.Default.Add, null); Text("種目を追加")
+                        }
+                        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                            exercises.filter { candidate -> preset.exercises.none { it.exerciseId == candidate.id } }.forEach { exercise ->
+                                DropdownMenuItem(
+                                    text = { Text(exercise.name) },
+                                    onClick = {
+                                        val defaults = exerciseTrainingDefault(exercise.name)
+                                        val defaultWeight = defaults?.tenRepWeightKg?.let(::formatWeight) ?: "0"
+                                        onChange(
+                                            preset.copy(
+                                                exercises = preset.exercises + PresetExerciseConfig(
+                                                    exerciseId = exercise.id,
+                                                    weightKg = defaultWeight,
+                                                    leftWeightKg = defaultWeight,
+                                                    rightWeightKg = defaultWeight,
+                                                    reps = "10",
+                                                ),
                                             ),
-                                        ),
-                                    )
-                                    expanded = false
-                                },
-                            )
+                                        )
+                                        expanded = false
+                                    },
+                                )
+                            }
                         }
                     }
                 }
