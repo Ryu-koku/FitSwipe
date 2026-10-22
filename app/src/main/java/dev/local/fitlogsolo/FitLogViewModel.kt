@@ -33,8 +33,6 @@ class FitLogViewModel(
     val activeSession = repository.observeInProgressSession().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
     val completedSessions = repository.observeCompletedSessions().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     val routineExerciseIds = workoutPreferences.routineExerciseIds
-    val flatModeEnabled = workoutPreferences.flatModeEnabled
-    val displayName = workoutPreferences.displayName
     val weightStepKg = workoutPreferences.weightStepKg
     val exerciseWeightSteps = workoutPreferences.exerciseWeightSteps
     val restDurationSeconds = workoutPreferences.restDurationSeconds
@@ -108,10 +106,6 @@ class FitLogViewModel(
     fun togglePresetExercise(gym: Boolean, exerciseId: Long) = workoutPreferences.togglePresetExercise(gym, exerciseId)
 
     fun setPresetExerciseIds(gym: Boolean, exerciseIds: List<Long>) = workoutPreferences.setPresetExerciseIds(gym, exerciseIds)
-
-    fun setFlatModeEnabled(enabled: Boolean) = workoutPreferences.setFlatModeEnabled(enabled)
-
-    fun setDisplayName(name: String) = workoutPreferences.setDisplayName(name)
 
     fun setWeightStepKg(weightStepKg: Double) = workoutPreferences.setWeightStepKg(weightStepKg)
 

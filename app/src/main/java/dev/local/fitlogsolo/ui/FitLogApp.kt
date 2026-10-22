@@ -1,15 +1,9 @@
 package dev.local.fitlogsolo.ui
 
 import android.app.Activity
-import android.content.Context
 import android.content.Intent
-import android.hardware.Sensor
-import android.hardware.SensorEvent
-import android.hardware.SensorEventListener
-import android.hardware.SensorManager
 import android.net.Uri
 import android.provider.Settings
-import android.os.SystemClock
 import android.view.HapticFeedbackConstants
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
@@ -143,9 +137,6 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import dev.local.fitlogsolo.FitLogViewModel
 import dev.local.fitlogsolo.R
 import dev.local.fitlogsolo.RestTimerAlarm
@@ -171,7 +162,7 @@ import kotlinx.coroutines.launch
 
 private const val WORKOUT_CARD_HEIGHT_FRACTION = 0.78f
 
-private enum class MainScreen { HOME, SETTINGS, WORKOUT_DOCK, WORKOUT_COMPLETE }
+private enum class MainScreen { HOME, SETTINGS, WORKOUT_COMPLETE }
 private enum class ExerciseSide { RIGHT, LEFT }
 private val ExerciseSide.label: String
     get() = if (this == ExerciseSide.RIGHT) "右" else "左"
@@ -256,12 +247,8 @@ private fun FitLogAppContent(
     val activeSession by viewModel.activeSession.collectAsStateWithLifecycle()
     val sessions by viewModel.completedSessions.collectAsStateWithLifecycle()
     val routineExerciseIds by viewModel.routineExerciseIds.collectAsStateWithLifecycle()
-    val flatModeEnabled by viewModel.flatModeEnabled.collectAsStateWithLifecycle()
     val selectedExercise = exercises.firstOrNull { it.id == selectedExerciseId }
     val workoutFullscreen = activeSession != null && selectedExercise != null
-    var lastUserInteractionAtMillis by remember { mutableLongStateOf(0L) }
-    var userInteractionActive by remember { mutableStateOf(false) }
-    val displayName by viewModel.displayName.collectAsStateWithLifecycle()
     val weightStepKg by viewModel.weightStepKg.collectAsStateWithLifecycle()
     val exerciseWeightSteps by viewModel.exerciseWeightSteps.collectAsStateWithLifecycle()
     val restDurationSeconds by viewModel.restDurationSeconds.collectAsStateWithLifecycle()
@@ -271,12 +258,6 @@ private fun FitLogAppContent(
     val presets by viewModel.presets.collectAsStateWithLifecycle()
     val message by viewModel.message.collectAsStateWithLifecycle()
     val snackbar = SnackbarHostState()
-    val flatCandidate = rememberFlatDeviceCandidate(
-        enabled = flatModeEnabled,
-        workoutActive = workoutFullscreen,
-        lastUserInteractionAtMillis = lastUserInteractionAtMillis,
-        userInteractionActive = userInteractionActive,
-    )
     val context = LocalContext.current
     val permissionScope = rememberCoroutineScope()
 
@@ -330,7 +311,6 @@ private fun FitLogAppContent(
 
     val mainScreen = when {
         showWorkoutComplete -> MainScreen.WORKOUT_COMPLETE
-        !settings && workoutFullscreen && flatCandidate -> MainScreen.WORKOUT_DOCK
         settings -> MainScreen.SETTINGS
         else -> MainScreen.HOME
     }
@@ -363,7 +343,7 @@ private fun FitLogAppContent(
         },
         floatingActionButton = {
             AnimatedVisibility(
-                visible = !workoutFullscreen && !settings && !flatCandidate && !showWorkoutComplete,
+                visible = !workoutFullscreen && !settings && !showWorkoutComplete,
                 enter = fadeIn(tween(220)) + scaleIn(tween(220), initialScale = 0.82f),
                 exit = fadeOut(tween(150)) + scaleOut(tween(150), targetScale = 0.82f),
             ) {
@@ -377,23 +357,7 @@ private fun FitLogAppContent(
         Surface(
             Modifier.fillMaxSize()
                 .padding(padding)
-                .animateContentSize(spring(stiffness = 500f))
-                .pointerInput(Unit) {
-                    awaitPointerEventScope {
-                        while (true) {
-                            val event = awaitPointerEvent(PointerEventPass.Initial)
-                            val now = SystemClock.elapsedRealtime()
-                            if (event.changes.any { it.pressed && !it.previousPressed }) {
-                                userInteractionActive = true
-                                lastUserInteractionAtMillis = now
-                            }
-                            if (event.changes.any { !it.pressed && it.previousPressed }) {
-                                userInteractionActive = event.changes.any { it.pressed }
-                                if (!userInteractionActive) lastUserInteractionAtMillis = now
-                            }
-                        }
-                    }
-                },
+                .animateContentSize(spring(stiffness = 500f)),
             color = MaterialTheme.colorScheme.background,
         ) {
             AnimatedContent(
@@ -411,21 +375,17 @@ private fun FitLogAppContent(
             ) { screen ->
                 when (screen) {
                     MainScreen.WORKOUT_COMPLETE -> WorkoutCompleteScreen()
-                    MainScreen.WORKOUT_DOCK -> WorkoutDock(displayName = displayName)
                     MainScreen.SETTINGS -> SettingsScreen(
                         viewModel = viewModel,
                         exercises = exercises,
                         presets = presets,
                         onAddExercise = { showAddExercise = true },
-                        flatModeEnabled = flatModeEnabled,
-                        displayName = displayName,
                         weightStepKg = weightStepKg,
                         exerciseWeightSteps = exerciseWeightSteps,
                         restDurationSeconds = restDurationSeconds,
                         exerciseRestDurations = exerciseRestDurations,
                         sideSwitchRestExerciseIds = sideSwitchRestExerciseIds,
                         leftFirstExerciseIds = leftFirstExerciseIds,
-                        onDisplayNameChange = viewModel::setDisplayName,
                         onWeightStepKgChange = viewModel::setWeightStepKg,
                         onExerciseWeightStepChange = viewModel::setExerciseWeightStepKg,
                         onResetExerciseWeightStep = viewModel::resetExerciseWeightStepKg,
@@ -433,7 +393,6 @@ private fun FitLogAppContent(
                         onExerciseRestDurationChange = viewModel::setExerciseRestDurationSeconds,
                         onExerciseSideSwitchRestChange = viewModel::setExerciseSideSwitchRestEnabled,
                         onExerciseStartSideChange = viewModel::setExerciseStartsLeft,
-                        onFlatModeEnabledChange = viewModel::setFlatModeEnabled,
                     )
                     MainScreen.HOME -> RecordScreen(
                         viewModel = viewModel,
@@ -2401,130 +2360,6 @@ private fun RestTimerCard(
 }
 
 @Composable
-private fun WorkoutDock(
-    displayName: String,
-) {
-    Column(
-        Modifier.fillMaxSize().padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        val nameSize = when {
-            displayName.length <= 4 -> 88.sp
-            displayName.length <= 8 -> 72.sp
-            displayName.length <= 14 -> 56.sp
-            else -> 40.sp
-        }
-        Text(
-            displayName,
-            style = MaterialTheme.typography.displayLarge.copy(fontSize = nameSize, fontWeight = FontWeight.Bold),
-            maxLines = 1,
-            softWrap = false,
-        )
-    }
-}
-
-@Composable
-private fun rememberFlatDeviceCandidate(
-    enabled: Boolean,
-    workoutActive: Boolean,
-    lastUserInteractionAtMillis: Long,
-    userInteractionActive: Boolean,
-): Boolean {
-    val context = LocalContext.current
-    val lifecycleOwner = LocalLifecycleOwner.current
-    val latestLastUserInteractionAtMillis by rememberUpdatedState(lastUserInteractionAtMillis)
-    val latestUserInteractionActive by rememberUpdatedState(userInteractionActive)
-    val isFlat = androidx.compose.runtime.remember { mutableStateOf(false) }
-    DisposableEffect(
-        context,
-        lifecycleOwner,
-        enabled,
-        workoutActive,
-    ) {
-        isFlat.value = false
-        if (!enabled || !workoutActive) {
-            onDispose { }
-        } else {
-            val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
-            val accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
-            if (accelerometer == null) {
-                onDispose { }
-            } else {
-                val listener = object : SensorEventListener {
-                    var flatSinceMillis = 0L
-                    var tiltedSinceMillis = 0L
-                    var isCurrentlyFlat = false
-
-                    override fun onSensorChanged(event: SensorEvent) {
-                        val now = SystemClock.elapsedRealtime()
-                        val x = abs(event.values[0])
-                        val y = abs(event.values[1])
-                        val z = event.values[2]
-                        if (!isCurrentlyFlat) {
-                            val interactionCooldownActive = latestUserInteractionActive ||
-                                (latestLastUserInteractionAtMillis > 0L && now - latestLastUserInteractionAtMillis < 5_000L)
-                            if (interactionCooldownActive) {
-                                flatSinceMillis = 0L
-                                return
-                            }
-                            val flatEnoughToEnter = x < 1.8f && y < 1.8f && z > 8.8f
-                            if (flatEnoughToEnter) {
-                                if (flatSinceMillis == 0L) flatSinceMillis = now
-                                if (now - flatSinceMillis >= 1_000L) {
-                                    isCurrentlyFlat = true
-                                    tiltedSinceMillis = 0L
-                                    isFlat.value = true
-                                }
-                            } else {
-                                flatSinceMillis = 0L
-                            }
-                        } else {
-                            val remainsFlat = x < 3.8f && y < 3.8f && z > 7.0f
-                            if (remainsFlat) {
-                                tiltedSinceMillis = 0L
-                            } else {
-                                if (tiltedSinceMillis == 0L) tiltedSinceMillis = now
-                                if (now - tiltedSinceMillis >= 500L) {
-                                    isCurrentlyFlat = false
-                                    flatSinceMillis = 0L
-                                    isFlat.value = false
-                                }
-                            }
-                        }
-                    }
-
-                    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
-                }
-                var listening = false
-                fun startListening() {
-                    if (!listening) listening = sensorManager.registerListener(listener, accelerometer, SensorManager.SENSOR_DELAY_UI)
-                }
-                fun stopListening() {
-                    if (listening) sensorManager.unregisterListener(listener)
-                    listening = false
-                    listener.flatSinceMillis = 0L
-                    listener.tiltedSinceMillis = 0L
-                    listener.isCurrentlyFlat = false
-                    isFlat.value = false
-                }
-                val observer = LifecycleEventObserver { _, event ->
-                    if (event == Lifecycle.Event.ON_RESUME) startListening()
-                    if (event == Lifecycle.Event.ON_PAUSE) stopListening()
-                }
-                lifecycleOwner.lifecycle.addObserver(observer)
-                if (lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) startListening()
-                onDispose {
-                    lifecycleOwner.lifecycle.removeObserver(observer)
-                    stopListening()
-                }
-            }
-        }
-    }
-    return isFlat.value
-}
-
-@Composable
 private fun NumberRow(label: String, value: String, keyboard: KeyboardType, onChange: (String) -> Unit) {
     OutlinedTextField(
         value = value,
@@ -2552,15 +2387,12 @@ private fun SettingsScreen(
     exercises: List<ExerciseEntity>,
     presets: List<WorkoutPreset>,
     onAddExercise: () -> Unit,
-    flatModeEnabled: Boolean,
-    displayName: String,
     weightStepKg: Double,
     exerciseWeightSteps: Map<Long, Double>,
     restDurationSeconds: Long,
     exerciseRestDurations: Map<Long, Long>,
     sideSwitchRestExerciseIds: Set<Long>,
     leftFirstExerciseIds: Set<Long>,
-    onDisplayNameChange: (String) -> Unit,
     onWeightStepKgChange: (Double) -> Unit,
     onExerciseWeightStepChange: (Long, Double) -> Unit,
     onResetExerciseWeightStep: (Long) -> Unit,
@@ -2568,10 +2400,8 @@ private fun SettingsScreen(
     onExerciseRestDurationChange: (Long, Long?) -> Unit,
     onExerciseSideSwitchRestChange: (Long, Boolean) -> Unit,
     onExerciseStartSideChange: (Long, Boolean) -> Unit,
-    onFlatModeEnabledChange: (Boolean) -> Unit,
 ) {
     val routineExerciseIds by viewModel.routineExerciseIds.collectAsStateWithLifecycle()
-    var displayNameDraft by rememberSaveable { mutableStateOf(displayName) }
     var weightStepDraft by rememberSaveable { mutableStateOf(weightStepKg.toInput()) }
     var restDurationDraft by rememberSaveable { mutableStateOf(restDurationSeconds.toMinutesInput()) }
     var editingWeightStepExerciseId by rememberSaveable { mutableStateOf<Long?>(null) }
@@ -2582,7 +2412,6 @@ private fun SettingsScreen(
     var editingPresetId by rememberSaveable { mutableStateOf<String?>(null) }
     var showAddPreset by rememberSaveable { mutableStateOf(false) }
     var newPresetName by rememberSaveable { mutableStateOf("") }
-    LaunchedEffect(displayName) { displayNameDraft = displayName }
     LaunchedEffect(weightStepKg) { weightStepDraft = weightStepKg.toInput() }
     LaunchedEffect(restDurationSeconds) { restDurationDraft = restDurationSeconds.toMinutesInput() }
     val parsedWeightStep = weightStepDraft.toDoubleOrNull()
@@ -2593,22 +2422,6 @@ private fun SettingsScreen(
         ?.takeIf { it.isFinite() && it in 0.01..1_000.0 }
     val parsedExerciseRestDuration = exerciseRestDurationDraft.toRestSecondsOrNull()
     LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item { Text("表示名", style = MaterialTheme.typography.titleLarge) }
-        item {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                OutlinedTextField(
-                    value = displayNameDraft,
-                    onValueChange = { displayNameDraft = it.take(24) },
-                    label = { Text("水平に置いた時の名前") },
-                    singleLine = true,
-                    modifier = Modifier.weight(1f),
-                )
-                Button(
-                    onClick = { onDisplayNameChange(displayNameDraft) },
-                    enabled = displayNameDraft.trim().isNotEmpty() && displayNameDraft.trim() != displayName,
-                ) { Text("保存") }
-            }
-        }
         item { Text("基本の重量増減幅", style = MaterialTheme.typography.titleLarge) }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -2722,16 +2535,6 @@ private fun SettingsScreen(
                         IconButton(onClick = { viewModel.archiveExercise(exercise) }) { Icon(Icons.Default.Delete, "非表示") }
                     }
                 }
-            }
-        }
-        item { Divider() }
-        item {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("スマホを水平に置いたら休憩表示", style = MaterialTheme.typography.titleSmall)
-                    Text("記録中、画面を上向きでしばらく安定して置くと表示が切り替わります。小さな揺れでは戻りません。", style = MaterialTheme.typography.bodySmall)
-                }
-                Switch(checked = flatModeEnabled, onCheckedChange = onFlatModeEnabledChange)
             }
         }
         item { Text("このアプリは筋トレ記録を端末内に保存し、外部へ送信しません。", style = MaterialTheme.typography.bodySmall) }

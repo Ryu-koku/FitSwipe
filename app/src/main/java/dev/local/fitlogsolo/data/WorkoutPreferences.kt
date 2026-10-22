@@ -29,12 +29,6 @@ class WorkoutPreferences(context: Context) {
     private val _routineExerciseIds = MutableStateFlow(readRoutineExerciseIds())
     val routineExerciseIds: StateFlow<List<Long>> = _routineExerciseIds.asStateFlow()
 
-    private val _flatModeEnabled = MutableStateFlow(preferences.getBoolean(KEY_FLAT_MODE, true))
-    val flatModeEnabled: StateFlow<Boolean> = _flatModeEnabled.asStateFlow()
-
-    private val _displayName = MutableStateFlow(preferences.getString(KEY_DISPLAY_NAME, null) ?: "あなた")
-    val displayName: StateFlow<String> = _displayName.asStateFlow()
-
     private val _weightStepKg = MutableStateFlow(
         preferences.getString(KEY_WEIGHT_STEP_KG, null)?.toDoubleOrNull()
             ?.takeIf { it.isFinite() && it in MIN_WEIGHT_STEP_KG..MAX_WEIGHT_STEP_KG }
@@ -76,17 +70,6 @@ class WorkoutPreferences(context: Context) {
         }
         preferences.edit().putString(KEY_ROUTINE_EXERCISES, updated.joinToString(",")).apply()
         _routineExerciseIds.value = updated
-    }
-
-    fun setFlatModeEnabled(enabled: Boolean) {
-        preferences.edit().putBoolean(KEY_FLAT_MODE, enabled).apply()
-        _flatModeEnabled.value = enabled
-    }
-
-    fun setDisplayName(name: String) {
-        val updated = name.trim().ifEmpty { "あなた" }.take(24)
-        preferences.edit().putString(KEY_DISPLAY_NAME, updated).apply()
-        _displayName.value = updated
     }
 
     fun setWeightStepKg(weightStepKg: Double) {
@@ -289,8 +272,6 @@ class WorkoutPreferences(context: Context) {
 
     private companion object {
         const val KEY_ROUTINE_EXERCISES = "routine_exercise_ids"
-        const val KEY_FLAT_MODE = "flat_mode_enabled"
-        const val KEY_DISPLAY_NAME = "display_name"
         const val KEY_WEIGHT_STEP_KG = "weight_step_kg"
         const val KEY_EXERCISE_WEIGHT_STEPS = "exercise_weight_steps"
         const val KEY_REST_DURATION_SECONDS = "rest_duration_seconds"
