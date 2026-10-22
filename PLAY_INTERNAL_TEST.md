@@ -29,7 +29,13 @@ export FITLOG_UPLOAD_PASSWORD="$(tr -d '\n' < /home/mame/.local/share/Google/fit
 unset FITLOG_UPLOAD_PASSWORD
 ```
 
-次回のアップロード前にversionCodeを3以上へ増やす。Play ConsoleのAPI要件に合わせ、現在はcompileSdk/targetSdk 36、Android Gradle Plugin 8.10.0を使用する。既存のConsoleアプリにすでに別のアップロード鍵が登録済みの場合は、この新規鍵をそのまま使用できない。既存登録の有無はConsoleで確認する。
+現在の更新版はバージョン2.7、versionCode 20。次回以降のアップロード前には、Play Consoleで使用済みの番号より大きいversionCodeに増やす。Play ConsoleのAPI要件に合わせ、現在はcompileSdk/targetSdk 36、Android Gradle Plugin 8.10.0を使用する。既存のConsoleアプリにすでに別のアップロード鍵が登録済みの場合は、この新規鍵をそのまま使用できない。既存登録の有無はConsoleで確認する。
+
+## バージョン2.7の更新内容
+
+[release-notes/2.7-ja-JP.txt](release-notes/2.7-ja-JP.txt) の内容を内部テストのリリースノートに使用する。
+
+既存の本人専用アプリの「内部テスト」に署名済みAABをアップロードし、配信状態を確認する。テスターや公開範囲は既存設定を維持する。
 
 ## 検証範囲
 
