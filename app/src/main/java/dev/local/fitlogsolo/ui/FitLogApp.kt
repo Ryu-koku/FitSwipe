@@ -579,7 +579,10 @@ private fun RecordScreen(
     onBack: () -> Unit,
     onAddExercise: () -> Unit,
 ) {
-    val sessionSets by (activeSessionId?.let(viewModel::sessionSets) ?: kotlinx.coroutines.flow.flowOf(emptyList()))
+    val sessionSetsFlow = remember(viewModel, activeSessionId) {
+        activeSessionId?.let(viewModel::sessionSets) ?: kotlinx.coroutines.flow.flowOf(emptyList())
+    }
+    val sessionSets by sessionSetsFlow
         .collectAsStateWithLifecycle(emptyList())
     val sessionExerciseIds = presetExerciseOrder.ifEmpty {
         sessionSets.sortedBy { it.createdAt }.map { it.exerciseId }.distinct()
@@ -1031,7 +1034,10 @@ private fun ExerciseEditor(
     onFinishSession: () -> Unit,
     onWorkoutComplete: () -> Unit,
 ) {
-    val sets by viewModel.exerciseSets(sessionId, exercise.id).collectAsStateWithLifecycle()
+    val exerciseSetsFlow = remember(viewModel, sessionId, exercise.id) {
+        viewModel.exerciseSets(sessionId, exercise.id)
+    }
+    val sets by exerciseSetsFlow.collectAsStateWithLifecycle()
     // Keep the current card visible while this exercise-specific Room flow starts collecting.
     val exerciseSets = sets.ifEmpty { allSessionSets.filter { it.exerciseId == exercise.id } }
     var currentSetId by rememberSaveable(sessionId, exercise.id) { mutableLongStateOf(-1L) }
