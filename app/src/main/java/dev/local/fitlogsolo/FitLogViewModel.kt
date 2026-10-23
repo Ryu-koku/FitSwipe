@@ -227,11 +227,9 @@ class FitLogViewModel(
 
     fun finishSession(
         sessionId: Long,
-        announce: Boolean = true,
         onFinished: () -> Unit = {},
     ) = viewModelScope.launch {
         repository.finishSession(sessionId)
-        if (announce) _message.value = "トレーニングを保存しました"
         onFinished()
     }
 

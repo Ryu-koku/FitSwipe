@@ -1,12 +1,16 @@
 package dev.local.fitlogsolo
 
 import android.app.AlarmManager
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.media.AudioManager
 import android.media.ToneGenerator
+import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -17,6 +21,8 @@ private const val ACTION_REST_TIMER_FINISHED = "dev.local.fitlogsolo.REST_TIMER_
 private const val EXTRA_END_TIME = "rest_end_time"
 private const val PREFS_NAME = "rest_timer_alarm"
 private const val KEY_SCHEDULED_END_TIME = "scheduled_end_time"
+private const val REST_NOTIFICATION_CHANNEL_ID = "rest_timer_finished_v2"
+private const val REST_NOTIFICATION_ID = 4501
 
 object RestTimerAlarm {
 
@@ -89,6 +95,9 @@ class RestTimerAlarmReceiver : BroadcastReceiver() {
         }
         preferences.edit().remove(KEY_SCHEDULED_END_TIME).apply()
 
+        val app = context.applicationContext as? FitLogApplication
+        if (app?.isAppInForeground != true) showRestFinishedNotification(context)
+
         val receiverResult = goAsync()
         val tone = runCatching { ToneGenerator(AudioManager.STREAM_ALARM, 90) }.getOrNull()
         val handler = Handler(Looper.getMainLooper())
@@ -106,5 +115,46 @@ class RestTimerAlarmReceiver : BroadcastReceiver() {
             runCatching { tone?.release() }
             receiverResult.finish()
         }, if (toneStarted) 260L else 50L)
+    }
+
+    private fun showRestFinishedNotification(context: Context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            context.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) return
+
+        val manager = context.getSystemService(NotificationManager::class.java) ?: return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            manager.createNotificationChannel(
+                NotificationChannel(
+                    REST_NOTIFICATION_CHANNEL_ID,
+                    "休憩タイマー",
+                    NotificationManager.IMPORTANCE_DEFAULT,
+                ).apply {
+                    description = "休憩時間が終わった時にお知らせします"
+                    setSound(null, null)
+                    enableVibration(false)
+                },
+            )
+        }
+        val openAppIntent = PendingIntent.getActivity(
+            context,
+            REST_NOTIFICATION_ID,
+            Intent(context, MainActivity::class.java),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        val notification = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            Notification.Builder(context, REST_NOTIFICATION_CHANNEL_ID)
+        } else {
+            @Suppress("DEPRECATION")
+            Notification.Builder(context)
+        }
+            .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
+            .setContentTitle("休憩終了")
+            .setContentText("次のセットを始めましょう")
+            .setContentIntent(openAppIntent)
+            .setAutoCancel(true)
+            .setCategory(Notification.CATEGORY_REMINDER)
+            .build()
+        manager.notify(REST_NOTIFICATION_ID, notification)
     }
 }

@@ -343,6 +343,15 @@ private fun FitLogAppContent(
 
     LaunchedEffect(Unit) { viewModel.initializeDefaultPresets() }
 
+    fun startWithExactAlarmPermission(action: () -> Unit) {
+        if (RestTimerAlarm.canScheduleExactAlarms(context)) {
+            action()
+        } else {
+            pendingWorkoutStart = action
+            showExactAlarmPermissionDialog = true
+        }
+    }
+
     val exactAlarmPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
     ) {
@@ -357,12 +366,22 @@ private fun FitLogAppContent(
         }
     }
 
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) {
+        val action = pendingWorkoutStart
+        pendingWorkoutStart = null
+        action?.let(::startWithExactAlarmPermission)
+    }
+
     fun startWorkoutWithBackgroundAlerts(action: () -> Unit) {
-        if (RestTimerAlarm.canScheduleExactAlarms(context)) {
-            action()
-        } else {
+        val needsNotificationPermission = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU &&
+            context.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED
+        if (needsNotificationPermission) {
             pendingWorkoutStart = action
-            showExactAlarmPermissionDialog = true
+            notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            startWithExactAlarmPermission(action)
         }
     }
 
@@ -589,7 +608,7 @@ private fun FitLogAppContent(
                             completionStats = stats
                             workoutCompletionSaved = false
                             activeSession?.id?.let { sessionId ->
-                                viewModel.finishSession(sessionId, announce = false) { workoutCompletionSaved = true }
+                                viewModel.finishSession(sessionId) { workoutCompletionSaved = true }
                             } ?: run { workoutCompletionSaved = true }
                             selectedExerciseId = null
                             RestTimerAlarm.cancel(context)
