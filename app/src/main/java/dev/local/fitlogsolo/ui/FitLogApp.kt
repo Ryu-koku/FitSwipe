@@ -756,7 +756,6 @@ private fun RecordScreen(
                 leftFirstExerciseIds = leftFirstExerciseIds,
                 onSetCompleted = onSetCompleted,
                 onSkipRest = onSkipRest,
-                onBack = onBack,
                 onNextExercise = { nextId -> exercises.firstOrNull { it.id == nextId }?.let(onSelectExercise) },
                 onFinishSession = onFinishSession,
                 onWorkoutComplete = {
@@ -1571,7 +1570,6 @@ private fun ExerciseEditor(
     leftFirstExerciseIds: Set<Long>,
     onSetCompleted: (Long) -> Unit,
     onSkipRest: () -> Unit,
-    onBack: () -> Unit,
     onNextExercise: (Long) -> Unit,
     onFinishSession: () -> Unit,
     onWorkoutComplete: () -> Unit,
@@ -1625,7 +1623,13 @@ private fun ExerciseEditor(
     val completedExerciseIds = allSessionSets.groupBy { it.exerciseId }
         .filterValues { setsForExercise -> setsForExercise.isNotEmpty() && setsForExercise.all { it.isCompleted } }
         .keys
-    val upcomingExerciseIds = orderedIds.filter { it != exercise.id && it !in completedExerciseIds }
+    fun nextPendingExerciseId(afterExerciseId: Long): Long? {
+        val idsAfterCurrent = orderedIds.dropWhile { it != afterExerciseId }.drop(1) +
+            orderedIds.takeWhile { it != afterExerciseId }
+        return idsAfterCurrent.firstOrNull { nextId ->
+            allSessionSets.any { it.exerciseId == nextId && !it.isCompleted }
+        }
+    }
     val nextSetInExercise = currentSet?.let { current ->
         exerciseSets.filter { it.setOrder > current.setOrder && !it.isCompleted }
             .minByOrNull { it.setOrder }
@@ -1637,8 +1641,7 @@ private fun ExerciseEditor(
         null -> true
     }
     val upcomingExerciseId = if (currentSet != null && nextSetInExercise == null && activeSide != firstSide) {
-        orderedIds.dropWhile { it != exercise.id }.drop(1)
-            .firstOrNull { nextId -> allSessionSets.any { it.exerciseId == nextId && !it.isCompleted } }
+        nextPendingExerciseId(exercise.id)
     } else {
         null
     }
@@ -1665,8 +1668,60 @@ private fun ExerciseEditor(
         }
         else -> null
     }
+    fun completedSide(exercise: ExerciseEntity, set: WorkoutSetEntity): ExerciseSide? {
+        if (exercise.mode != ExerciseMode.BILATERAL) return null
+        return when {
+            set.leftCompleted && set.rightCompleted ->
+                if (exercise.id in leftFirstExerciseIds) ExerciseSide.RIGHT else ExerciseSide.LEFT
+            set.leftCompleted -> ExerciseSide.LEFT
+            set.rightCompleted -> ExerciseSide.RIGHT
+            exercise.id in leftFirstExerciseIds -> ExerciseSide.LEFT
+            else -> ExerciseSide.RIGHT
+        }
+    }
+    val previousSetInExercise = currentSet?.let { activeSet ->
+        exerciseSets.filter { it.isCompleted && it.setOrder < activeSet.setOrder }
+            .maxByOrNull { it.setOrder }
+    }
+    val previousExerciseCard = currentSet?.let {
+        orderedIds.takeWhile { id -> id != exercise.id }.asReversed().firstNotNullOfOrNull { previousExerciseId ->
+            val previousExercise = allExercises.firstOrNull { it.id == previousExerciseId }
+            val previousSet = allSessionSets.filter {
+                it.exerciseId == previousExerciseId && it.isCompleted
+            }.maxByOrNull { it.setOrder }
+            if (previousExercise != null && previousSet != null) {
+                WorkoutCardRef(previousExercise, previousSet, completedSide(previousExercise, previousSet))
+            } else null
+        }
+    }
+    val previousCard = when {
+        currentSet == null -> null
+        exercise.mode == ExerciseMode.BILATERAL && activeSide != null && activeSide != firstSide ->
+            WorkoutCardRef(exercise, currentSet, firstSide)
+        previousSetInExercise != null ->
+            WorkoutCardRef(exercise, previousSetInExercise, completedSide(exercise, previousSetInExercise))
+        else -> previousExerciseCard
+    }
+    var showingPreviousCard by rememberSaveable(sessionId, exercise.id) { mutableStateOf(false) }
+    LaunchedEffect(exercise.id, currentSet?.id, activeSide) {
+        showingPreviousCard = false
+    }
     val effectiveRestSeconds = exerciseRestDurations[exercise.id] ?: restDurationSeconds
     val cardScene = when {
+        showingPreviousCard && previousCard != null -> {
+            val previousExercise = previousCard.exercise
+            val previousSet = previousCard.set
+            EditorCardScene(
+                key = "previous:${previousExercise.id}:${previousSet.id}:${previousCard.side?.name ?: "all"}",
+                exercise = previousExercise,
+                set = previousSet,
+                side = previousCard.side,
+                exerciseColorIndex = orderedIds.indexOf(previousExercise.id).coerceAtLeast(0),
+                totalSets = allSessionSets.count { it.exerciseId == previousExercise.id }
+                    .coerceAtLeast(previousSet.setOrder + 1),
+                enabled = false,
+            )
+        }
         restEndsAtMillis > 0L && currentSet != null -> EditorCardScene(
             key = "rest:$restEndsAtMillis",
             restEndsAtMillis = restEndsAtMillis,
@@ -1704,8 +1759,7 @@ private fun ExerciseEditor(
             currentSetId = nextSet.id
             currentSideName = firstSide.name
         } else {
-            val nextExerciseId = orderedIds.dropWhile { it != exercise.id }.drop(1)
-                .firstOrNull { nextId -> allSessionSets.any { it.exerciseId == nextId && !it.isCompleted } }
+            val nextExerciseId = nextPendingExerciseId(exercise.id)
             if (nextExerciseId != null) onNextExercise(nextExerciseId) else onWorkoutComplete()
         }
     }
@@ -1770,7 +1824,7 @@ private fun ExerciseEditor(
     if (showExerciseOrder) {
         WorkoutExerciseOrderScreen(
             exerciseOrderIds = orderedIds,
-            upcomingExerciseIds = upcomingExerciseIds,
+            pendingExerciseIds = orderedIds.filterNot { it in completedExerciseIds },
             completedExerciseIds = completedExerciseIds,
             currentExerciseId = exercise.id,
             exercises = allExercises,
@@ -1779,18 +1833,25 @@ private fun ExerciseEditor(
         )
     } else {
         Column(Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 4.dp)) {
-            val exercisePosition = (orderedIds.indexOf(exercise.id) + 1).coerceAtLeast(1)
+            val displayedExerciseId = if (showingPreviousCard) previousCard?.exercise?.id ?: exercise.id else exercise.id
+            val exercisePosition = (orderedIds.indexOf(displayedExerciseId) + 1).coerceAtLeast(1)
             val exerciseCount = orderedIds.size.coerceAtLeast(1)
             Row(
                 Modifier.fillMaxWidth().height(48.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                IconButton(onClick = hapticClick(onFinishSession), modifier = Modifier.size(48.dp)) {
+                TextButton(
+                    onClick = hapticClick { showingPreviousCard = !showingPreviousCard },
+                    enabled = previousCard != null || showingPreviousCard,
+                ) {
                     Icon(
-                        Icons.Default.Close,
-                        contentDescription = "トレーニングを終了",
+                        Icons.Default.ArrowBack,
+                        contentDescription = if (showingPreviousCard) "現在のカードに戻る" else "前のカードに戻る",
                         tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp),
                     )
+                    Spacer(Modifier.width(2.dp))
+                    Text(if (showingPreviousCard) "現在へ" else "前のカード")
                 }
                 Text(
                     presetName ?: "トレーニング",
@@ -1805,6 +1866,13 @@ private fun ExerciseEditor(
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                IconButton(onClick = hapticClick(onFinishSession), modifier = Modifier.size(48.dp)) {
+                    Icon(
+                        Icons.Default.Close,
+                        contentDescription = "トレーニングを終了",
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                }
             }
             WorkoutProgressBar(progress = workoutProgress)
             Box(Modifier.weight(1f).fillMaxWidth()) {
@@ -1884,7 +1952,7 @@ private fun WorkoutProgressBar(progress: Float) {
 @Composable
 private fun WorkoutExerciseOrderScreen(
     exerciseOrderIds: List<Long>,
-    upcomingExerciseIds: List<Long>,
+    pendingExerciseIds: List<Long>,
     completedExerciseIds: Set<Long>,
     currentExerciseId: Long,
     exercises: List<ExerciseEntity>,
@@ -1893,13 +1961,13 @@ private fun WorkoutExerciseOrderScreen(
 ) {
     val exerciseById = remember(exercises) { exercises.associateBy { it.id } }
     val latestOrder by rememberUpdatedState(exerciseOrderIds)
-    var draftUpcoming by remember(currentExerciseId, upcomingExerciseIds) {
-        mutableStateOf(upcomingExerciseIds)
+    var draftPending by remember(currentExerciseId, pendingExerciseIds) {
+        mutableStateOf(pendingExerciseIds)
     }
-    val latestDraftUpcoming by rememberUpdatedState(draftUpcoming)
-    val completedOrder = exerciseOrderIds.filter { it in completedExerciseIds && it != currentExerciseId }
-    val displayOrder = listOf(currentExerciseId) + draftUpcoming + completedOrder
-    val hasOrderChanges = draftUpcoming != upcomingExerciseIds
+    val latestDraftPending by rememberUpdatedState(draftPending)
+    val completedOrder = exerciseOrderIds.filter { it in completedExerciseIds }
+    val displayOrder = draftPending + completedOrder
+    val hasOrderChanges = draftPending != pendingExerciseIds
     val rowPitchPx = with(LocalDensity.current) { 64.dp.toPx() }
     var draggedExerciseId by remember { mutableStateOf<Long?>(null) }
     val dragFeedbackView = LocalView.current
@@ -1920,7 +1988,7 @@ private fun WorkoutExerciseOrderScreen(
                 val name = exerciseById[exerciseId]?.name ?: "種目"
                 val isCurrent = exerciseId == currentExerciseId
                 val isCompleted = exerciseId in completedExerciseIds
-                val isDraggable = !isCurrent && !isCompleted
+                val isDraggable = !isCompleted
                 val isDragged = draggedExerciseId == exerciseId
                 val cardScale by animateFloatAsState(
                     targetValue = if (isDragged) 1.035f else 1f,
@@ -1957,7 +2025,7 @@ private fun WorkoutExerciseOrderScreen(
                                     var draggedDistance = 0f
                                     detectDragGestures(
                                         onDragStart = {
-                                            startIndex = latestDraftUpcoming.indexOf(exerciseId)
+                                            startIndex = latestDraftPending.indexOf(exerciseId)
                                             draggedDistance = 0f
                                             draggedExerciseId = exerciseId
                                             dragFeedbackView.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
@@ -1965,13 +2033,13 @@ private fun WorkoutExerciseOrderScreen(
                                         onDrag = { change, amount ->
                                             change.consume()
                                             draggedDistance += amount.y
-                                            val currentUpcoming = latestDraftUpcoming
-                                            val currentIndex = currentUpcoming.indexOf(exerciseId)
-                                            if (startIndex >= 0 && currentIndex >= 0 && currentUpcoming.isNotEmpty()) {
+                                            val currentPending = latestDraftPending
+                                            val currentIndex = currentPending.indexOf(exerciseId)
+                                            if (startIndex >= 0 && currentIndex >= 0 && currentPending.isNotEmpty()) {
                                                 val targetIndex = (startIndex + (draggedDistance / rowPitchPx).roundToInt())
-                                                    .coerceIn(0, currentUpcoming.lastIndex)
+                                                    .coerceIn(0, currentPending.lastIndex)
                                                 if (targetIndex != currentIndex) {
-                                                    draftUpcoming = currentUpcoming.toMutableList().apply {
+                                                    draftPending = currentPending.toMutableList().apply {
                                                         add(targetIndex, removeAt(currentIndex))
                                                     }
                                                     dragFeedbackView.performHapticFeedback(HapticFeedbackConstants.TEXT_HANDLE_MOVE)
@@ -2034,7 +2102,7 @@ private fun WorkoutExerciseOrderScreen(
                     }
                 }
             }
-            if (upcomingExerciseIds.isEmpty()) {
+            if (draftPending.size <= 1) {
                 item {
                     Text(
                         "並べ替えできる種目はありません",
@@ -2049,10 +2117,8 @@ private fun WorkoutExerciseOrderScreen(
         Button(
             onClick = hapticClick {
                 if (hasOrderChanges) {
-                    val latestCompleted = latestOrder.filter {
-                        it in completedExerciseIds && it != currentExerciseId
-                    }
-                    onReorder(listOf(currentExerciseId) + draftUpcoming + latestCompleted)
+                    val latestCompleted = latestOrder.filter { it in completedExerciseIds }
+                    onReorder(draftPending + latestCompleted)
                 }
                 onClose()
             },
