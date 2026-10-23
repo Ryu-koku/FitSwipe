@@ -3687,16 +3687,42 @@ private fun SettingsScreen(
             }
             SettingsPage.PRESETS -> {
                 item { Text("プリセット", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold) }
-                items(presets, key = { "preset-${it.id}" }) { preset ->
-                    Card(Modifier.fillMaxWidth().pressMotionClickable { editingPresetId = preset.id }) {
-                        Row(Modifier.padding(start = 16.dp, end = 4.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Column(Modifier.weight(1f)) {
-                                Text(preset.name, style = MaterialTheme.typography.titleMedium)
-                                Text("${preset.exercises.size}種目", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                items(presets.chunked(2), key = { row -> "preset-row-${row.first().id}" }) { rowPresets ->
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        rowPresets.forEach { preset ->
+                            Card(
+                                Modifier.weight(1f).heightIn(min = 104.dp)
+                                    .pressMotionClickable { editingPresetId = preset.id },
+                            ) {
+                                Column(
+                                    Modifier.fillMaxSize().padding(14.dp),
+                                    verticalArrangement = Arrangement.SpaceBetween,
+                                ) {
+                                    Text(
+                                        preset.name,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 2,
+                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                    )
+                                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            "${preset.exercises.size}種目",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                        Spacer(Modifier.weight(1f))
+                                        Icon(
+                                            Icons.Default.Edit,
+                                            contentDescription = "${preset.name}を編集",
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(18.dp),
+                                        )
+                                    }
+                                }
                             }
-                            IconButton(onClick = hapticClick { editingPresetId = preset.id }) { Icon(Icons.Default.Edit, "編集") }
-                            IconButton(onClick = hapticClick { viewModel.setPresets(presets.filterNot { it.id == preset.id }) }) { Icon(Icons.Default.Delete, "削除") }
                         }
+                        if (rowPresets.size == 1) Spacer(Modifier.weight(1f))
                     }
                 }
                 item {
@@ -3847,6 +3873,10 @@ private fun SettingsScreen(
             exerciseRestDurations = exerciseRestDurations,
             onExerciseRestDurationChange = onExerciseRestDurationChange,
             onChange = { updated -> viewModel.setPresets(presets.map { if (it.id == preset.id) updated else it }) },
+            onDelete = {
+                viewModel.setPresets(presets.filterNot { it.id == preset.id })
+                editingPresetId = null
+            },
             onDismiss = { editingPresetId = null },
         )
     }
@@ -3860,10 +3890,12 @@ internal fun PresetEditorDialog(
     exerciseRestDurations: Map<Long, Long>,
     onExerciseRestDurationChange: (Long, Long?) -> Unit,
     onChange: (WorkoutPreset) -> Unit,
+    onDelete: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     val latestPreset by androidx.compose.runtime.rememberUpdatedState(preset)
     var expanded by rememberSaveable(preset.id) { mutableStateOf(false) }
+    var showDeleteConfirmation by rememberSaveable(preset.id) { mutableStateOf(false) }
     var expandedExerciseId by rememberSaveable(preset.id) { mutableStateOf<Long?>(null) }
     var exerciseRestDrafts by remember(preset.id) { mutableStateOf<Map<Long, String>>(emptyMap()) }
     var draggedExerciseId by remember(preset.id) { mutableStateOf<Long?>(null) }
@@ -4134,7 +4166,7 @@ internal fun PresetEditorDialog(
                             exercises.filter { candidate -> preset.exercises.none { it.exerciseId == candidate.id } }.forEach { exercise ->
                                 DropdownMenuItem(
                                     text = { Text(exercise.name) },
-                                onClick = hapticClick {
+                                    onClick = hapticClick {
                                         val defaults = exerciseTrainingDefault(exercise.name)
                                         val defaultWeight = defaults?.tenRepWeightKg?.let(::formatWeight) ?: "0"
                                         onChange(
@@ -4155,8 +4187,37 @@ internal fun PresetEditorDialog(
                         }
                     }
                 }
+                item(key = "preset-delete") {
+                    OutlinedButton(
+                        onClick = hapticClick { showDeleteConfirmation = true },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
+                            contentColor = MaterialTheme.colorScheme.error,
+                        ),
+                    ) {
+                        Icon(Icons.Default.Delete, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("このプリセットを削除")
+                    }
+                }
             }
         }
+    }
+    if (showDeleteConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirmation = false },
+            title = { Text("プリセットを削除") },
+            text = { Text("「${preset.name}」を削除しますか？") },
+            confirmButton = {
+                TextButton(onClick = hapticClick {
+                    showDeleteConfirmation = false
+                    onDelete()
+                }) { Text("削除", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = hapticClick { showDeleteConfirmation = false }) { Text("キャンセル") }
+            },
+        )
     }
 }
 

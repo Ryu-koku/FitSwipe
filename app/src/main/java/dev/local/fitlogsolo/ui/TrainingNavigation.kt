@@ -137,7 +137,6 @@ internal fun TrainingPreparationScreen(
     var editingId by rememberSaveable { mutableStateOf<String?>(null) }
     var adding by rememberSaveable { mutableStateOf(false) }
     var newName by rememberSaveable { mutableStateOf("") }
-    var deletingId by rememberSaveable { mutableStateOf<String?>(null) }
     BackHandler { onBack() }
     val activeIds = exercises.map { it.id }.toSet()
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -148,26 +147,40 @@ internal fun TrainingPreparationScreen(
             }
         }
         item { Text("プリセット", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
-        items(presets, key = { it.id }) { preset ->
-            val selected = preset.id == selectedId
-            val count = preset.exercises.count { it.exerciseId in activeIds }
-            Card(
-                modifier = Modifier.fillMaxWidth().animateContentSize().semantics { this.selected = selected }
-                    .pressMotionClickable { onSelect(preset.id) },
-                colors = CardDefaults.cardColors(containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface),
-                border = BorderStroke(if (selected) 2.dp else 1.dp, if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant),
-            ) {
-                Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 12.dp, bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(if (selected) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked, null,
-                        tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
-                    Column(Modifier.weight(1f).padding(start = 12.dp)) {
-                        Text(preset.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                        Text(if (count == 0) "種目を追加してください" else "${count}種目 · ${preset.exercises.filter { it.exerciseId in activeIds }.sumOf { it.sets.toIntOrNull()?.coerceIn(1, 30) ?: 3 }}セット",
-                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        items(presets.chunked(2), key = { row -> "prepare-preset-row-${row.first().id}" }) { rowPresets ->
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                rowPresets.forEach { preset ->
+                    val selected = preset.id == selectedId
+                    val count = preset.exercises.count { it.exerciseId in activeIds }
+                    Card(
+                        modifier = Modifier.weight(1f).heightIn(min = 132.dp).animateContentSize()
+                            .semantics { this.selected = selected }.pressMotionClickable { onSelect(preset.id) },
+                        colors = CardDefaults.cardColors(containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface),
+                        border = BorderStroke(if (selected) 2.dp else 1.dp, if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant),
+                    ) {
+                        Column(Modifier.fillMaxSize().padding(12.dp), verticalArrangement = Arrangement.SpaceBetween) {
+                            Icon(
+                                if (selected) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
+                                contentDescription = if (selected) "選択中" else null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(22.dp),
+                            )
+                            Column(Modifier.fillMaxWidth()) {
+                                Text(preset.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold,
+                                    maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                Text("${count}種目 · ${preset.exercises.filter { it.exerciseId in activeIds }.sumOf { it.sets.toIntOrNull()?.coerceIn(1, 30) ?: 3 }}セット",
+                                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                                IconButton(onClick = hapticClick { onSelect(preset.id); editingId = preset.id }, modifier = Modifier.size(40.dp)) {
+                                    Icon(Icons.Default.Edit, "${preset.name}を編集", tint = MaterialTheme.colorScheme.primary)
+                                }
+                            }
+                        }
                     }
-                    IconButton(onClick = hapticClick { onSelect(preset.id); editingId = preset.id }) { Icon(Icons.Default.Edit, "${preset.name}を編集") }
-                    IconButton(onClick = hapticClick { deletingId = preset.id }) { Icon(Icons.Default.MoreVert, "${preset.name}の操作") }
                 }
+                if (rowPresets.size == 1) Spacer(Modifier.weight(1f))
             }
         }
         item {
@@ -182,6 +195,7 @@ internal fun TrainingPreparationScreen(
     presets.firstOrNull { it.id == editingId }?.let { preset ->
         PresetEditorDialog(preset, exercises, exerciseRestDurations, onExerciseRestDurationChange,
             onChange = { updated -> onPresetsChange(presets.map { if (it.id == updated.id) updated else it }) },
+            onDelete = { onPresetsChange(presets.filterNot { it.id == preset.id }); editingId = null },
             onDismiss = { editingId = null })
     }
     if (adding) {
@@ -195,11 +209,5 @@ internal fun TrainingPreparationScreen(
                 }, enabled = newName.isNotBlank(), modifier = Modifier.fillMaxWidth()) { Text("作成して編集") }
             }
         }
-    }
-    presets.firstOrNull { it.id == deletingId }?.let { preset ->
-        AlertDialog(onDismissRequest = { deletingId = null }, title = { Text("${preset.name}を削除しますか？") },
-            text = { Text("これまでのトレーニング記録は残ります。") },
-            confirmButton = { TextButton(onClick = hapticClick { onPresetsChange(presets.filterNot { it.id == preset.id }); deletingId = null }) { Text("削除") } },
-            dismissButton = { TextButton(onClick = hapticClick { deletingId = null }) { Text("キャンセル") } })
     }
 }
