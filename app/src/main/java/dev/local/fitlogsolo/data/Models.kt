@@ -66,6 +66,18 @@ data class WorkoutSetEntity(
 )
 
 data class WorkoutPoint(val date: String, val value: Double)
+data class WorkoutHistoryEntry(
+    val sessionId: Long,
+    val startedAt: Instant,
+    val setOrder: Int,
+    val normalWeightKg: Double?,
+    val normalReps: Int?,
+    val leftWeightKg: Double?,
+    val leftReps: Int?,
+    val rightWeightKg: Double?,
+    val rightReps: Int?,
+)
+
 data class BilateralWorkoutPoints(
     val left: List<WorkoutPoint>,
     val right: List<WorkoutPoint>,

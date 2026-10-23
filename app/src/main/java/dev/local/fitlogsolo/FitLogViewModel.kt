@@ -14,6 +14,7 @@ import org.json.JSONObject
 import dev.local.fitlogsolo.data.WorkoutPreferences
 import dev.local.fitlogsolo.data.WorkoutPreset
 import dev.local.fitlogsolo.data.WorkoutSetEntity
+import dev.local.fitlogsolo.data.WorkoutHistoryEntry
 import dev.local.fitlogsolo.data.exerciseTrainingDefault
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -68,6 +69,10 @@ class FitLogViewModel(
 
     fun previousWorkoutSets(sessionId: Long, exerciseId: Long): StateFlow<List<WorkoutSetEntity>> =
         repository.observePreviousWorkoutSets(sessionId, exerciseId)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    fun workoutHistory(sessionId: Long, exerciseId: Long): StateFlow<List<WorkoutHistoryEntry>> =
+        repository.observeWorkoutHistory(sessionId, exerciseId)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     fun startSession(onReady: (Long) -> Unit = {}) = viewModelScope.launch {
@@ -136,6 +141,46 @@ class FitLogViewModel(
 
     fun addExercise(name: String, mode: ExerciseMode) = viewModelScope.launch {
         runCatching { repository.addExercise(name, mode) }.onFailure { _message.value = it.message }
+    }
+
+    fun addExerciseToSession(
+        sessionId: Long,
+        name: String,
+        mode: ExerciseMode,
+        onAdded: (ExerciseEntity) -> Unit,
+    ) = viewModelScope.launch {
+        runCatching { repository.addExerciseToSession(sessionId, name, mode) }
+            .onSuccess(onAdded)
+            .onFailure {
+                if (it is kotlinx.coroutines.CancellationException) throw it
+                _message.value = it.message ?: "種目を追加できませんでした"
+            }
+    }
+
+    fun addExistingExerciseToSession(
+        sessionId: Long,
+        exercise: ExerciseEntity,
+        onAdded: () -> Unit,
+    ) = viewModelScope.launch {
+        runCatching { repository.ensureSet(sessionId, exercise) }
+            .onSuccess { onAdded() }
+            .onFailure {
+                if (it is kotlinx.coroutines.CancellationException) throw it
+                _message.value = it.message ?: "種目を追加できませんでした"
+            }
+    }
+
+    fun removeExerciseFromSession(
+        sessionId: Long,
+        exerciseId: Long,
+        onRemoved: () -> Unit = {},
+    ) = viewModelScope.launch {
+        runCatching { repository.removeExerciseFromSession(sessionId, exerciseId) }
+            .onSuccess { onRemoved() }
+            .onFailure {
+                if (it is kotlinx.coroutines.CancellationException) throw it
+                _message.value = it.message ?: "種目を削除できませんでした"
+            }
     }
 
     fun renameExercise(exercise: ExerciseEntity, name: String) = viewModelScope.launch {

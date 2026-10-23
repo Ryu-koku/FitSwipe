@@ -21,12 +21,24 @@ class FitLogRepository(private val database: AppDatabase) {
         sets.observeForExercise(sessionId, exerciseId)
     fun observePreviousWorkoutSets(sessionId: Long, exerciseId: Long): Flow<List<WorkoutSetEntity>> =
         sets.observePreviousWorkoutSets(sessionId, exerciseId)
+    fun observeWorkoutHistory(sessionId: Long, exerciseId: Long): Flow<List<WorkoutHistoryEntry>> =
+        sets.observeWorkoutHistory(sessionId, exerciseId)
 
-    suspend fun addExercise(name: String, mode: ExerciseMode) {
+    suspend fun addExercise(name: String, mode: ExerciseMode): ExerciseEntity {
         val cleaned = name.trim()
         require(cleaned.isNotEmpty()) { "種目名を入力してください" }
-        val order = exercises.observeAll().first().maxOfOrNull { it.sortOrder }?.plus(1) ?: 0
-        exercises.insert(ExerciseEntity(name = cleaned, mode = mode, sortOrder = order))
+        val order = exercises.findAll().maxOfOrNull { it.sortOrder }?.plus(1) ?: 0
+        val exercise = ExerciseEntity(name = cleaned, mode = mode, sortOrder = order)
+        return exercise.copy(id = exercises.insert(exercise))
+    }
+
+    suspend fun addExerciseToSession(sessionId: Long, name: String, mode: ExerciseMode): ExerciseEntity =
+        database.withTransaction {
+            addExercise(name, mode).also { exercise -> addSet(sessionId, exercise) }
+        }
+
+    suspend fun removeExerciseFromSession(sessionId: Long, exerciseId: Long) {
+        database.withTransaction { sets.deleteForSessionExercise(sessionId, exerciseId) }
     }
 
     suspend fun renameExercise(exercise: ExerciseEntity, name: String) {

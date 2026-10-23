@@ -18,6 +18,9 @@ interface ExerciseDao {
     @Query("SELECT * FROM exercises ORDER BY sortOrder, name")
     fun observeAll(): Flow<List<ExerciseEntity>>
 
+    @Query("SELECT * FROM exercises ORDER BY sortOrder, name")
+    suspend fun findAll(): List<ExerciseEntity>
+
     @Query("SELECT * FROM exercises WHERE id = :id")
     suspend fun findById(id: Long): ExerciseEntity?
 
@@ -86,6 +89,30 @@ interface WorkoutSetDao {
 
     @Query("SELECT * FROM workout_sets WHERE exerciseId = :exerciseId AND isCompleted = 1 ORDER BY updatedAt DESC")
     suspend fun findCompletedForExercise(exerciseId: Long): List<WorkoutSetEntity>
+
+    @Query("""
+        SELECT workout_sessions.id AS sessionId,
+               workout_sessions.startedAt AS startedAt,
+               workout_sets.setOrder AS setOrder,
+               workout_sets.normalWeightKg AS normalWeightKg,
+               workout_sets.normalReps AS normalReps,
+               workout_sets.leftWeightKg AS leftWeightKg,
+               workout_sets.leftReps AS leftReps,
+               workout_sets.rightWeightKg AS rightWeightKg,
+               workout_sets.rightReps AS rightReps
+        FROM workout_sets
+        INNER JOIN workout_sessions ON workout_sessions.id = workout_sets.sessionId
+        WHERE workout_sets.exerciseId = :exerciseId
+          AND workout_sets.sessionId != :currentSessionId
+          AND workout_sets.isCompleted = 1
+          AND workout_sessions.status = 'COMPLETED'
+        ORDER BY COALESCE(workout_sessions.endedAt, workout_sessions.startedAt) DESC,
+                 workout_sessions.id DESC, workout_sets.setOrder, workout_sets.id
+    """)
+    fun observeWorkoutHistory(currentSessionId: Long, exerciseId: Long): Flow<List<WorkoutHistoryEntry>>
+
+    @Query("DELETE FROM workout_sets WHERE sessionId = :sessionId AND exerciseId = :exerciseId")
+    suspend fun deleteForSessionExercise(sessionId: Long, exerciseId: Long)
 
     @Query("""
         SELECT current_set.* FROM workout_sets AS current_set
