@@ -60,6 +60,15 @@ interface SessionDao {
 
 @Dao
 interface WorkoutSetDao {
+    @Query("""
+        SELECT workout_sets.exerciseId, workout_sets.normalWeightKg, workout_sets.normalReps,
+               workout_sessions.startedAt AS sessionStartedAt
+        FROM workout_sets
+        INNER JOIN workout_sessions ON workout_sessions.id = workout_sets.sessionId
+        WHERE workout_sets.isCompleted = 1 AND workout_sessions.status = 'COMPLETED'
+    """)
+    fun observeCompletedTrainingSets(): Flow<List<CompletedTrainingSet>>
+
     @Query("SELECT * FROM workout_sets WHERE sessionId = :sessionId ORDER BY exerciseId, setOrder, id")
     fun observeForSession(sessionId: Long): Flow<List<WorkoutSetEntity>>
 

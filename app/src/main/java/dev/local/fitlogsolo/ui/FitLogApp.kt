@@ -776,7 +776,7 @@ private fun RecordScreen(
             )
         } else {
             Column(
-                Modifier.fillMaxSize().padding(horizontal = 16.dp),
+                Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Row(
@@ -823,7 +823,8 @@ private fun RecordScreen(
                 Text("カレンダー", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(top = 8.dp, bottom = 2.dp))
                 WorkoutCalendar(completedSessions, allExercises, viewModel, weekStartsMonday)
-                Spacer(Modifier.weight(1f))
+                HomeAchievements(viewModel, allExercises, weekStartsMonday)
+                Spacer(Modifier.height(16.dp))
             }
         }
     }

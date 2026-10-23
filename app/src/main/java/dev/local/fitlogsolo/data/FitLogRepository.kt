@@ -14,6 +14,7 @@ class FitLogRepository(private val database: AppDatabase) {
     fun observeAllExercises(): Flow<List<ExerciseEntity>> = exercises.observeAll()
     fun observeInProgressSession(): Flow<WorkoutSessionEntity?> = sessions.observeInProgress()
     fun observeCompletedSessions(): Flow<List<WorkoutSessionEntity>> = sessions.observeCompleted()
+    fun observeCompletedTrainingSets(): Flow<List<CompletedTrainingSet>> = sets.observeCompletedTrainingSets()
     fun observeSession(id: Long): Flow<WorkoutSessionEntity?> = sessions.observeById(id)
     fun observeSets(sessionId: Long): Flow<List<WorkoutSetEntity>> = sets.observeForSession(sessionId)
     fun observeExerciseSets(sessionId: Long, exerciseId: Long): Flow<List<WorkoutSetEntity>> =

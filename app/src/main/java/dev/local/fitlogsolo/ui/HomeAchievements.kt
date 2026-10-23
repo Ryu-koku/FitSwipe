@@ -1,0 +1,224 @@
+package dev.local.fitlogsolo.ui
+
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.repeatOnLifecycle
+import dev.local.fitlogsolo.FitLogViewModel
+import dev.local.fitlogsolo.data.BigThreeLift
+import dev.local.fitlogsolo.data.ExerciseEntity
+import dev.local.fitlogsolo.data.TrainingAchievements
+import dev.local.fitlogsolo.data.TrainingAchievementsAggregator
+import java.time.LocalDate
+import java.util.Locale
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+
+@Composable
+internal fun HomeAchievements(
+    viewModel: FitLogViewModel,
+    exercises: List<ExerciseEntity>,
+    weekStartsMonday: Boolean,
+) {
+    val records by viewModel.completedTrainingSets.collectAsStateWithLifecycle()
+    var today by remember { mutableStateOf(LocalDate.now()) }
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(lifecycle) {
+        lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            while (isActive) {
+                today = LocalDate.now()
+                delay(60_000)
+            }
+        }
+    }
+    val achievements = remember(records, exercises, weekStartsMonday, today) {
+        records?.let { TrainingAchievementsAggregator.aggregate(it, exercises, weekStartsMonday, today) }
+    }
+    var details by remember { mutableStateOf<String?>(null) }
+
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(
+            "これまでの頑張り",
+            Modifier.padding(top = 10.dp, bottom = 2.dp),
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+        )
+        Card(
+            onClick = hapticClick { details = "big3" },
+            modifier = Modifier.fillMaxWidth().animateContentSize(),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFFFFFEFA)),
+            border = BorderStroke(1.dp, Color(0xFFF0E9DE)),
+        ) {
+            Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text("BIG3トータル", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                    Text("推定1RM", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                }
+                Crossfade(achievements, animationSpec = tween(250), label = "big three total") { summary ->
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text(
+                                summary?.bigThreeTotalKg?.let(::achievementWeight) ?: "—",
+                                style = MaterialTheme.typography.headlineLarge,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                            Text("kg", Modifier.padding(bottom = 5.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Spacer(Modifier.weight(1f))
+                            Text(
+                                when {
+                                    summary == null -> "読み込み中"
+                                    summary.bigThreeTotalKg == null -> "${summary.bestEstimatedKg.size}/3種目を記録"
+                                    else -> "自己ベストの合計"
+                                },
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            BigThreeLift.entries.forEach { lift ->
+                                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Text(
+                                        if (lift == BigThreeLift.BENCH) "ベンチ" else lift.label,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                    Text(
+                                        summary?.bestEstimatedKg?.get(lift)?.let { "${achievementWeight(it)} kg" }
+                                            ?: if (summary == null) "—" else "未記録",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.SemiBold,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Card(
+            onClick = hapticClick { details = "streak" },
+            modifier = Modifier.fillMaxWidth().animateContentSize(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+        ) {
+            Column(
+                Modifier.fillMaxWidth()
+                    .background(Brush.horizontalGradient(listOf(Color(0xFFE5F3ED), Color(0xFFD5EBE6))))
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("継続週数", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                        Text(
+                            streakMessage(achievements),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        )
+                    }
+                    Crossfade(achievements?.consecutiveWeeks, animationSpec = tween(250), label = "weekly streak") { weeks ->
+                        Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                weeks?.toString() ?: "—",
+                                style = MaterialTheme.typography.headlineLarge,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                            Text("週間", Modifier.padding(bottom = 5.dp), style = MaterialTheme.typography.labelMedium)
+                        }
+                    }
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    repeat(7) { index ->
+                        val week = achievements?.recentWeekStarts?.get(index)
+                        val trained = week != null && achievements?.trainedWeeks?.contains(week) == true
+                        val label = if (index == 6) "今週" else "${6 - index}週前"
+                        Column(
+                            Modifier.weight(1f).semantics {
+                                contentDescription = "$label、${if (achievements == null) "読み込み中" else if (trained) "達成" else "記録なし"}"
+                            },
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(5.dp),
+                        ) {
+                            Box(
+                                Modifier.size(18.dp).background(
+                                    if (trained) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.65f),
+                                    CircleShape,
+                                ),
+                            )
+                            Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    details?.let { selection ->
+        AlertDialog(
+            onDismissRequest = { details = null },
+            title = { Text(if (selection == "big3") "BIG3トータルについて" else "継続週数について") },
+            text = {
+                Text(
+                    if (selection == "big3") {
+                        "ベンチプレス・スクワット・デッドリフトの最高推定1RMの合計です。\n\n" +
+                            "終了したトレーニングの、1〜10回・重量ありの完了セットが対象です。" +
+                            "1回の記録は実際の重量、2〜10回はEpley式（重量 × (1 + 回数 ÷ 30)）で推定します。" +
+                            "3種目すべてが記録されると合計を表示します。\n\n" +
+                            "日本語・英語の基本種目名とバーベル種目名に対応しています。" +
+                            "マシンやダンベルなどの別種目は合算しません。"
+                    } else {
+                        "週に1回以上、1セット以上完了して終了したトレーニングがあると達成です。" +
+                            "カレンダーの設定に合わせて、週は${if (weekStartsMonday) "月曜" else "日曜"}から数えます。\n\n" +
+                            "今週がまだ未達成でも、先週までの継続週数は保持します。" +
+                            "1週間まるごと記録がなければ、継続週数はリセットされます。"
+                    },
+                )
+            },
+            confirmButton = { TextButton(onClick = hapticClick { details = null }) { Text("閉じる") } },
+        )
+    }
+}
+
+private fun achievementWeight(value: Double): String = String.format(Locale.JAPAN, "%.1f", value)
+
+private fun streakMessage(summary: TrainingAchievements?): String = when {
+    summary == null -> "記録を読み込み中"
+    summary.recentWeekStarts.last() in summary.trainedWeeks -> "今週も達成！"
+    summary.consecutiveWeeks > 0 -> "今週の記録で継続しよう"
+    else -> "今週から積み重ねよう"
+}

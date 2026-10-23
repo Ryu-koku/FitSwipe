@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import dev.local.fitlogsolo.data.ExerciseEntity
+import dev.local.fitlogsolo.data.CompletedTrainingSet
 import dev.local.fitlogsolo.data.ExerciseMode
 import dev.local.fitlogsolo.data.FitLogRepository
 import dev.local.fitlogsolo.data.SessionStatus
@@ -37,6 +38,8 @@ class FitLogViewModel(
     val allExercises = repository.observeAllExercises().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     val activeSession = repository.observeInProgressSession().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
     val completedSessions = repository.observeCompletedSessions().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    val completedTrainingSets: StateFlow<List<CompletedTrainingSet>?> = repository.observeCompletedTrainingSets()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
     val weekStartsMonday = workoutPreferences.weekStartsMonday
     val weightStepKg = workoutPreferences.weightStepKg
     val exerciseWeightSteps = workoutPreferences.exerciseWeightSteps
