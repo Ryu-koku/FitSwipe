@@ -1688,6 +1688,15 @@ private fun ExerciseEditor(
         }
         else -> null
     }
+    val previousWorkoutSetsFlow = remember(viewModel, sessionId, cardScene?.exercise?.id) {
+        cardScene?.exercise?.id?.let { viewModel.previousWorkoutSets(sessionId, it) }
+            ?: kotlinx.coroutines.flow.flowOf(emptyList())
+    }
+    val previousWorkoutSets by previousWorkoutSetsFlow.collectAsStateWithLifecycle(emptyList())
+    val previousWorkoutSet = cardScene?.set?.let { visibleSet ->
+        previousWorkoutSets.firstOrNull { it.setOrder == visibleSet.setOrder }
+            ?: previousWorkoutSets.lastOrNull()
+    }
 
     fun proceedFrom(set: WorkoutSetEntity) {
         val nextSet = exerciseSets.firstOrNull { it.setOrder > set.setOrder && !it.isCompleted }
@@ -1822,6 +1831,7 @@ private fun ExerciseEditor(
                             scene.exercise != null && scene.set != null -> SetEditorCard(
                                 exercise = scene.exercise,
                                 set = scene.set,
+                                previousSet = previousWorkoutSet,
                                 side = scene.side,
                                 exerciseColorIndex = scene.exerciseColorIndex,
                                 totalSets = scene.totalSets,
@@ -2250,6 +2260,7 @@ private fun PreviewSideValue(label: String, weightKg: Double?, reps: Int?, modif
 private fun SetEditorCard(
     exercise: ExerciseEntity,
     set: WorkoutSetEntity,
+    previousSet: WorkoutSetEntity?,
     side: ExerciseSide?,
     exerciseColorIndex: Int,
     totalSets: Int,
@@ -2515,29 +2526,45 @@ private fun SetEditorCard(
                         color = Color.Transparent,
                         tonalElevation = 0.dp,
                     ) {
-                        Row(
+                        Column(
                             Modifier.fillMaxSize().padding(horizontal = 5.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center,
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center,
                         ) {
-                            Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(
-                                    set.normalWeightKg?.let(::formatWeight) ?: "—",
-                                    style = MaterialTheme.typography.displayLarge.copy(fontWeight = FontWeight.ExtraBold),
-                                    maxLines = 1,
-                                    softWrap = false,
-                                )
-                                Text("kg", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Row(
+                                Modifier.weight(1f).fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center,
+                            ) {
+                                Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text(
+                                        set.normalWeightKg?.let(::formatWeight) ?: "—",
+                                        style = MaterialTheme.typography.displayLarge.copy(fontWeight = FontWeight.ExtraBold),
+                                        maxLines = 1,
+                                        softWrap = false,
+                                    )
+                                    Text("kg", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                                Text("×", style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold), color = MaterialTheme.colorScheme.primary)
+                                Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text(
+                                        set.normalReps?.toString() ?: "—",
+                                        style = MaterialTheme.typography.displayLarge.copy(fontWeight = FontWeight.ExtraBold),
+                                        maxLines = 1,
+                                        softWrap = false,
+                                    )
+                                    Text("回", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
                             }
-                            Text("×", style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold), color = MaterialTheme.colorScheme.primary)
-                            Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                            val previousWeight = previousSet?.normalWeightKg
+                            val previousReps = previousSet?.normalReps
+                            if (previousWeight != null || previousReps != null) {
                                 Text(
-                                    set.normalReps?.toString() ?: "—",
-                                    style = MaterialTheme.typography.displayLarge.copy(fontWeight = FontWeight.ExtraBold),
-                                    maxLines = 1,
-                                    softWrap = false,
+                                    "前回  ${previousWeight?.let(::formatWeight) ?: "—"}kg × ${previousReps?.let { "${it}回" } ?: "—"}",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(bottom = 8.dp),
                                 )
-                                Text("回", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
                     }
@@ -2597,6 +2624,8 @@ private fun SetEditorCard(
                         enabled,
                         weightStepKg,
                         Modifier.weight(1f).fillMaxWidth(),
+                        previousWeightKg = if (isRight) previousSet?.rightWeightKg else previousSet?.leftWeightKg,
+                        previousReps = if (isRight) previousSet?.rightReps else previousSet?.leftReps,
                     ) { weight, reps ->
                         onUpdate { latest ->
                             if (isRight) latest.copy(rightWeightKg = weight, rightReps = reps)
@@ -2607,10 +2636,18 @@ private fun SetEditorCard(
             } else {
                 Column(Modifier.weight(1f).fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    BilateralTapControls("左", set.leftWeightKg, set.leftReps, enabled, weightStepKg, Modifier.weight(1f)) { weight, reps ->
+                    BilateralTapControls(
+                        "左", set.leftWeightKg, set.leftReps, enabled, weightStepKg, Modifier.weight(1f),
+                        previousWeightKg = previousSet?.leftWeightKg,
+                        previousReps = previousSet?.leftReps,
+                    ) { weight, reps ->
                         onUpdate { latest -> latest.copy(leftWeightKg = weight, leftReps = reps) }
                     }
-                    BilateralTapControls("右", set.rightWeightKg, set.rightReps, enabled, weightStepKg, Modifier.weight(1f)) { weight, reps ->
+                    BilateralTapControls(
+                        "右", set.rightWeightKg, set.rightReps, enabled, weightStepKg, Modifier.weight(1f),
+                        previousWeightKg = previousSet?.rightWeightKg,
+                        previousReps = previousSet?.rightReps,
+                    ) { weight, reps ->
                         onUpdate { latest -> latest.copy(rightWeightKg = weight, rightReps = reps) }
                     }
                 }
@@ -2703,6 +2740,8 @@ private fun BilateralTapControls(
     enabled: Boolean,
     weightStepKg: Double,
     modifier: Modifier = Modifier,
+    previousWeightKg: Double? = null,
+    previousReps: Int? = null,
     onChange: (Double, Int) -> Unit,
 ) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -2714,14 +2753,24 @@ private fun BilateralTapControls(
                 color = Color.Transparent,
                 tonalElevation = 0.dp,
             ) {
-                Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(weightKg?.let(::formatWeight) ?: "—", style = MaterialTheme.typography.displayMedium, maxLines = 1, softWrap = false)
-                        Text("kg", style = MaterialTheme.typography.labelLarge)
+                Column(Modifier.fillMaxSize().padding(horizontal = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Row(Modifier.weight(1f).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(weightKg?.let(::formatWeight) ?: "—", style = MaterialTheme.typography.displayMedium, maxLines = 1, softWrap = false)
+                            Text("kg", style = MaterialTheme.typography.labelLarge)
+                        }
+                        Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(reps?.toString() ?: "—", style = MaterialTheme.typography.displayMedium, maxLines = 1, softWrap = false)
+                            Text("回", style = MaterialTheme.typography.labelLarge)
+                        }
                     }
-                    Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(reps?.toString() ?: "—", style = MaterialTheme.typography.displayMedium, maxLines = 1, softWrap = false)
-                        Text("回", style = MaterialTheme.typography.labelLarge)
+                    if (previousWeightKg != null || previousReps != null) {
+                        Text(
+                            "前回  ${previousWeightKg?.let(::formatWeight) ?: "—"}kg × ${previousReps?.let { "${it}回" } ?: "—"}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                        )
                     }
                 }
             }

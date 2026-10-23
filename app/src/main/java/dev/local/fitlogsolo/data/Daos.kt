@@ -78,6 +78,27 @@ interface WorkoutSetDao {
     @Query("SELECT * FROM workout_sets WHERE exerciseId = :exerciseId AND isCompleted = 1 ORDER BY updatedAt DESC")
     suspend fun findCompletedForExercise(exerciseId: Long): List<WorkoutSetEntity>
 
+    @Query("""
+        SELECT current_set.* FROM workout_sets AS current_set
+        INNER JOIN workout_sessions AS current_session ON current_session.id = current_set.sessionId
+        WHERE current_set.exerciseId = :exerciseId
+          AND current_set.sessionId = (
+              SELECT previous_set.sessionId FROM workout_sets AS previous_set
+              INNER JOIN workout_sessions AS previous_session ON previous_session.id = previous_set.sessionId
+              WHERE previous_set.exerciseId = :exerciseId
+                AND previous_set.isCompleted = 1
+                AND previous_set.sessionId != :currentSessionId
+                AND previous_session.status = 'COMPLETED'
+              ORDER BY COALESCE(previous_session.endedAt, previous_session.startedAt) DESC,
+                       previous_session.id DESC
+              LIMIT 1
+          )
+          AND current_set.isCompleted = 1
+          AND current_session.status = 'COMPLETED'
+        ORDER BY current_set.setOrder, current_set.id
+    """)
+    fun observePreviousWorkoutSets(currentSessionId: Long, exerciseId: Long): Flow<List<WorkoutSetEntity>>
+
     @Insert
     suspend fun insert(set: WorkoutSetEntity): Long
 

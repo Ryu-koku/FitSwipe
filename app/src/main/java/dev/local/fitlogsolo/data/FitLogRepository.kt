@@ -18,6 +18,8 @@ class FitLogRepository(private val database: AppDatabase) {
     fun observeSets(sessionId: Long): Flow<List<WorkoutSetEntity>> = sets.observeForSession(sessionId)
     fun observeExerciseSets(sessionId: Long, exerciseId: Long): Flow<List<WorkoutSetEntity>> =
         sets.observeForExercise(sessionId, exerciseId)
+    fun observePreviousWorkoutSets(sessionId: Long, exerciseId: Long): Flow<List<WorkoutSetEntity>> =
+        sets.observePreviousWorkoutSets(sessionId, exerciseId)
 
     suspend fun addExercise(name: String, mode: ExerciseMode) {
         val cleaned = name.trim()

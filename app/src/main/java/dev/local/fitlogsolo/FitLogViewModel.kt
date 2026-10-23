@@ -63,6 +63,10 @@ class FitLogViewModel(
     fun exerciseSets(sessionId: Long, exerciseId: Long): StateFlow<List<WorkoutSetEntity>> =
         repository.observeExerciseSets(sessionId, exerciseId).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
+    fun previousWorkoutSets(sessionId: Long, exerciseId: Long): StateFlow<List<WorkoutSetEntity>> =
+        repository.observePreviousWorkoutSets(sessionId, exerciseId)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
     fun startSession(onReady: (Long) -> Unit = {}) = viewModelScope.launch {
         onReady(repository.startOrResumeSession())
     }
