@@ -8,6 +8,7 @@ import android.view.HapticFeedbackConstants
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.core.view.WindowCompat
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
@@ -84,6 +85,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Divider
 import androidx.compose.material3.DropdownMenu
@@ -111,6 +113,7 @@ import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -129,6 +132,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
@@ -142,6 +146,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.text.input.KeyboardType
@@ -156,6 +161,7 @@ import dev.local.fitlogsolo.FitLogViewModel
 import dev.local.fitlogsolo.R
 import dev.local.fitlogsolo.RestTimerAlarm
 import dev.local.fitlogsolo.data.PresetExerciseConfig
+import dev.local.fitlogsolo.data.AppThemeMode
 import dev.local.fitlogsolo.data.WorkoutPreset
 import dev.local.fitlogsolo.data.ExerciseEntity
 import dev.local.fitlogsolo.data.ExerciseMode
@@ -248,7 +254,7 @@ private fun hapticChange(onChange: (Boolean) -> Unit): (Boolean) -> Unit {
     }
 }
 
-private val FitLogColors = lightColorScheme(
+private val FitLogLightColors = lightColorScheme(
     primary = Color(0xFF147C73),
     onPrimary = Color.White,
     primaryContainer = Color(0xFFDCEFEB),
@@ -278,6 +284,40 @@ private val FitLogColors = lightColorScheme(
     outlineVariant = Color(0xFFE5EEEB),
 )
 
+private val FitLogDarkColors = darkColorScheme(
+    primary = Color(0xFF72D6C9),
+    onPrimary = Color(0xFF003731),
+    primaryContainer = Color(0xFF0B554D),
+    onPrimaryContainer = Color(0xFFB5F4E8),
+    secondary = Color(0xFFADCBC5),
+    onSecondary = Color(0xFF18332F),
+    secondaryContainer = Color(0xFF324B46),
+    onSecondaryContainer = Color(0xFFD0E7E1),
+    tertiary = Color(0xFFB0D0A0),
+    onTertiary = Color(0xFF22351C),
+    tertiaryContainer = Color(0xFF3A5133),
+    onTertiaryContainer = Color(0xFFCEE8BF),
+    background = Color(0xFF101A1C),
+    surface = Color(0xFF172326),
+    surfaceVariant = Color(0xFF263537),
+    onSurface = Color(0xFFE2ECEA),
+    onSurfaceVariant = Color(0xFFA8BCB8),
+    surfaceTint = Color(0xFF72D6C9),
+    surfaceDim = Color(0xFF101A1C),
+    surfaceBright = Color(0xFF394748),
+    surfaceContainerLowest = Color(0xFF111C1E),
+    surfaceContainerLow = Color(0xFF172326),
+    surfaceContainer = Color(0xFF1B2A2C),
+    surfaceContainerHigh = Color(0xFF233234),
+    surfaceContainerHighest = Color(0xFF2A3A3C),
+    outline = Color(0xFF536966),
+    outlineVariant = Color(0xFF3A4D4B),
+    error = Color(0xFFFFB4AB),
+    onError = Color(0xFF690005),
+    errorContainer = Color(0xFF93000A),
+    onErrorContainer = Color(0xFFFFDAD6),
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FitLogApp(
@@ -285,7 +325,24 @@ fun FitLogApp(
     inviteCode: String? = null,
     onInviteConsumed: () -> Unit = {},
 ) {
-    MaterialTheme(colorScheme = FitLogColors) {
+    val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
+    val darkTheme = when (themeMode) {
+        AppThemeMode.SYSTEM -> isSystemInDarkTheme()
+        AppThemeMode.LIGHT -> false
+        AppThemeMode.DARK -> true
+    }
+    val view = LocalView.current
+    MaterialTheme(colorScheme = if (darkTheme) FitLogDarkColors else FitLogLightColors) {
+        val systemBarColor = MaterialTheme.colorScheme.background.toArgb()
+        SideEffect {
+            val window = (view.context as? Activity)?.window ?: return@SideEffect
+            window.statusBarColor = systemBarColor
+            window.navigationBarColor = systemBarColor
+            WindowCompat.getInsetsController(window, view).apply {
+                isAppearanceLightStatusBars = !darkTheme
+                isAppearanceLightNavigationBars = !darkTheme
+            }
+        }
         FitLogAppContent(viewModel, inviteCode, onInviteConsumed)
     }
 }
@@ -323,6 +380,7 @@ private fun FitLogAppContent(
     val activeSession by viewModel.activeSession.collectAsStateWithLifecycle()
     val sessions by viewModel.completedSessions.collectAsStateWithLifecycle()
     val weekStartsMonday by viewModel.weekStartsMonday.collectAsStateWithLifecycle()
+    val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
     val selectedExercise = allExercises.firstOrNull { it.id == selectedExerciseId }
     val workoutFullscreen = activeSession != null && selectedExercise != null
     val weightStepKg by viewModel.weightStepKg.collectAsStateWithLifecycle()
@@ -516,6 +574,8 @@ private fun FitLogAppContent(
                         onAddExercise = { showAddExercise = true },
                         weekStartsMonday = weekStartsMonday,
                         onWeekStartsMondayChange = viewModel::setWeekStartsMonday,
+                        themeMode = themeMode,
+                        onThemeModeChange = viewModel::setThemeMode,
                         weightStepKg = weightStepKg,
                         exerciseWeightSteps = exerciseWeightSteps,
                         restDurationSeconds = restDurationSeconds,
@@ -1267,9 +1327,9 @@ private fun WorkoutCalendar(
                     },
                 )
             },
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFFEFA)),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        border = BorderStroke(1.dp, Color(0xFFF0E9DE)),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
         AnimatedContent(
             targetState = yearMonth,
@@ -1543,7 +1603,7 @@ private fun ExercisePictogramThumbnail(exerciseName: String, modifier: Modifier 
     Surface(
         modifier = modifier,
         shape = MaterialTheme.shapes.medium,
-        color = Color(0xFFFFF6F2),
+        color = MaterialTheme.colorScheme.surfaceVariant,
     ) {
         Image(
             painter = painterResource(pictogram),
@@ -2306,17 +2366,17 @@ private fun RestTimerPreviewCard(restSeconds: Long, swipeOffset: Offset) {
                     }
                 },
             elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFEDF5F2)),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
         ) {
             Column(Modifier.fillMaxSize()) {
                 Row(
-                    Modifier.fillMaxWidth().background(Color(0xFF0F665F)).padding(horizontal = 20.dp, vertical = 16.dp),
+                    Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.primary).padding(horizontal = 20.dp, vertical = 16.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
                         "休憩",
                         style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.ExtraBold),
-                        color = Color.White,
+                        color = MaterialTheme.colorScheme.onPrimary,
                     )
                 }
                 Column(
@@ -2327,12 +2387,12 @@ private fun RestTimerPreviewCard(restSeconds: Long, swipeOffset: Offset) {
                     Text(
                         "次のセットまで",
                         style = MaterialTheme.typography.titleLarge,
-                        color = Color(0xFF5C7774),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Text(
                         "${restSeconds / 60}:${(restSeconds % 60).toString().padStart(2, '0')}",
                         style = MaterialTheme.typography.displayLarge.copy(fontSize = 76.sp, fontWeight = FontWeight.ExtraBold),
-                        color = Color(0xFF193039),
+                        color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 1,
                     )
                 }
@@ -2340,13 +2400,13 @@ private fun RestTimerPreviewCard(restSeconds: Long, swipeOffset: Offset) {
                     "スライドして休憩を終了",
                     Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 18.dp),
                     style = MaterialTheme.typography.titleMedium,
-                    color = Color(0xFF5C7774),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                 )
                 Text(
                     "スキップ",
                     Modifier.align(Alignment.CenterHorizontally).padding(vertical = 8.dp),
-                    color = Color(0xFF147C73),
+                    color = MaterialTheme.colorScheme.primary,
                 )
             }
         }
@@ -3321,7 +3381,7 @@ private fun RestTimerCard(
                     }
                 },
             elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFFE2F0EE)),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
         ) {
           Column(
               Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 12.dp),
@@ -3337,7 +3397,7 @@ private fun RestTimerCard(
                       progress = 1f - timerProgress,
                       modifier = Modifier.size(restRingDiameter),
                       color = primaryColor,
-                      trackColor = Color.White.copy(alpha = 0.9f),
+                      trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
                       strokeWidth = 7.dp,
                   ) {
                       Text(
@@ -3355,7 +3415,7 @@ private fun RestTimerCard(
               }
               Card(
                   Modifier.fillMaxWidth(),
-                  colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.8f)),
+                  colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
               ) {
                   Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 9.dp)) {
                       Text("NEXT SET", style = MaterialTheme.typography.labelSmall, color = primaryColor, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.5.sp)
@@ -3539,6 +3599,8 @@ private fun SettingsScreen(
     onAddExercise: () -> Unit,
     weekStartsMonday: Boolean,
     onWeekStartsMondayChange: (Boolean) -> Unit,
+    themeMode: AppThemeMode,
+    onThemeModeChange: (AppThemeMode) -> Unit,
     weightStepKg: Double,
     exerciseWeightSteps: Map<Long, Double>,
     restDurationSeconds: Long,
@@ -3594,7 +3656,7 @@ private fun SettingsScreen(
         when (page) {
             SettingsPage.MENU -> {
                 item {
-                    SettingsNavigationCard("基本設定", "曜日・重量・休憩") {
+                    SettingsNavigationCard("基本設定", "外観・曜日・重量・休憩") {
                         onPageChange(SettingsPage.BASIC)
                     }
                 }
@@ -3612,6 +3674,22 @@ private fun SettingsScreen(
                 }
             }
             SettingsPage.BASIC -> {
+                item { Text("外観", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold) }
+                item {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("テーマ", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                            AppThemeMode.entries.forEachIndexed { index, mode ->
+                                SegmentedButton(
+                                    selected = themeMode == mode,
+                                    onClick = hapticClick { onThemeModeChange(mode) },
+                                    shape = SegmentedButtonDefaults.itemShape(index, AppThemeMode.entries.size),
+                                ) { Text(mode.label) }
+                            }
+                        }
+                        Text("システムを選ぶと、端末の設定に合わせて切り替わります。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
                 item { Text("カレンダー", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold) }
                 item {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {

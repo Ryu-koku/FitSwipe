@@ -13,6 +13,7 @@ import dev.local.fitlogsolo.data.RoomsRepository
 import org.json.JSONArray
 import org.json.JSONObject
 import dev.local.fitlogsolo.data.WorkoutPreferences
+import dev.local.fitlogsolo.data.AppThemeMode
 import dev.local.fitlogsolo.data.WorkoutPreset
 import dev.local.fitlogsolo.data.WorkoutSetEntity
 import dev.local.fitlogsolo.data.WorkoutHistoryEntry
@@ -45,6 +46,7 @@ class FitLogViewModel(
     val weekStartsMonday = workoutPreferences.weekStartsMonday
     val visibleAchievementMetrics = workoutPreferences.visibleAchievementMetrics
     fun setVisibleAchievementMetrics(metrics: Set<AchievementMetric>) = workoutPreferences.setVisibleAchievementMetrics(metrics)
+    val themeMode = workoutPreferences.themeMode
     val weightStepKg = workoutPreferences.weightStepKg
     val exerciseWeightSteps = workoutPreferences.exerciseWeightSteps
     val restDurationSeconds = workoutPreferences.restDurationSeconds
@@ -194,6 +196,8 @@ class FitLogViewModel(
 
     fun setWeekStartsMonday(weekStartsMonday: Boolean) =
         workoutPreferences.setWeekStartsMonday(weekStartsMonday)
+
+    fun setThemeMode(themeMode: AppThemeMode) = workoutPreferences.setThemeMode(themeMode)
 
     fun togglePresetExercise(gym: Boolean, exerciseId: Long) = workoutPreferences.togglePresetExercise(gym, exerciseId)
 

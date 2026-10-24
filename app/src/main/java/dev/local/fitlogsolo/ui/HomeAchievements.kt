@@ -97,8 +97,8 @@ internal fun HomeAchievements(
         if (AchievementMetric.BIG_THREE in visibleMetrics) Card(
             onClick = hapticClick { details = "big3" },
             modifier = Modifier.fillMaxWidth().animateContentSize(),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFFFFFEFA)),
-            border = BorderStroke(1.dp, Color(0xFFF0E9DE)),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         ) {
             Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -154,7 +154,7 @@ internal fun HomeAchievements(
         ) {
             Column(
                 Modifier.fillMaxWidth()
-                    .background(Brush.horizontalGradient(listOf(Color(0xFFE5F3ED), Color(0xFFD5EBE6))))
+                    .background(Brush.horizontalGradient(listOf(MaterialTheme.colorScheme.primaryContainer, MaterialTheme.colorScheme.secondaryContainer)))
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {

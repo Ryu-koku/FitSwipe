@@ -23,6 +23,17 @@ data class WorkoutPreset(
     val exercises: List<PresetExerciseConfig> = emptyList(),
 )
 
+enum class AppThemeMode(val storageValue: String, val label: String) {
+    SYSTEM("system", "システム"),
+    LIGHT("light", "ライト"),
+    DARK("dark", "ダーク");
+
+    companion object {
+        fun fromStorage(value: String?): AppThemeMode =
+            entries.firstOrNull { it.storageValue == value } ?: SYSTEM
+    }
+}
+
 class WorkoutPreferences(context: Context) {
     private val preferences = context.getSharedPreferences("workout_preferences", Context.MODE_PRIVATE)
 
@@ -37,6 +48,11 @@ class WorkoutPreferences(context: Context) {
         preferences.edit().putStringSet("visible_achievement_metrics", metrics.map { it.key }.toSet()).apply()
         _visibleAchievementMetrics.value = metrics.toSet()
     }
+
+    private val _themeMode = MutableStateFlow(
+        AppThemeMode.fromStorage(preferences.getString(KEY_THEME_MODE, null)),
+    )
+    val themeMode: StateFlow<AppThemeMode> = _themeMode.asStateFlow()
 
     private val _weekStartsMonday = MutableStateFlow(
         preferences.getBoolean(KEY_WEEK_STARTS_MONDAY, false),
@@ -89,6 +105,11 @@ class WorkoutPreferences(context: Context) {
     fun setWeekStartsMonday(weekStartsMonday: Boolean) {
         preferences.edit().putBoolean(KEY_WEEK_STARTS_MONDAY, weekStartsMonday).apply()
         _weekStartsMonday.value = weekStartsMonday
+    }
+
+    fun setThemeMode(themeMode: AppThemeMode) {
+        preferences.edit().putString(KEY_THEME_MODE, themeMode.storageValue).apply()
+        _themeMode.value = themeMode
     }
 
     fun setWeightStepKg(weightStepKg: Double) {
@@ -286,6 +307,7 @@ class WorkoutPreferences(context: Context) {
     }.toString()
 
     private companion object {
+        const val KEY_THEME_MODE = "theme_mode"
         const val KEY_WEEK_STARTS_MONDAY = "week_starts_monday"
         const val KEY_WEIGHT_STEP_KG = "weight_step_kg"
         const val KEY_EXERCISE_WEIGHT_STEPS = "exercise_weight_steps"
