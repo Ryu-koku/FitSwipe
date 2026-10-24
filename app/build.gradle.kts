@@ -13,7 +13,7 @@ android {
         applicationId = "dev.local.fitlogsolo"
         minSdk = 28
         targetSdk = 36
-        versionCode = 20
+        versionCode = 34
         versionName = "2.7"
         val roomsUrl = providers.gradleProperty("fitSwipeRoomsUrl")
             .orElse(providers.environmentVariable("FITSWIPE_ROOMS_URL")).getOrElse("")

@@ -191,6 +191,33 @@ class FitLogRepository(private val database: AppDatabase) {
         )
     }
 
+    suspend fun resizeExerciseSets(sessionId: Long, exerciseId: Long, requestedCount: Int) = database.withTransaction {
+        val current = sets.findForSession(sessionId).filter { it.exerciseId == exerciseId }.sortedBy { it.setOrder }
+        if (current.isEmpty()) return@withTransaction
+        val minimumCount = current.count { it.isCompleted || it.leftCompleted || it.rightCompleted }
+        val targetCount = requestedCount.coerceIn(minimumCount.coerceAtLeast(1), 30)
+        if (targetCount < current.size) {
+            current.filterNot { it.isCompleted || it.leftCompleted || it.rightCompleted }
+                .takeLast(current.size - targetCount).forEach { sets.deleteById(it.id) }
+        } else if (targetCount > current.size) {
+            var previous = current.last()
+            repeat(targetCount - current.size) {
+                val now = Instant.now()
+                previous = previous.copy(
+                    id = 0,
+                    setOrder = previous.setOrder + 1,
+                    leftCompleted = false,
+                    rightCompleted = false,
+                    isCompleted = false,
+                    createdAt = now,
+                    updatedAt = now,
+                )
+                val newId = sets.insert(previous)
+                previous = previous.copy(id = newId)
+            }
+        }
+    }
+
     suspend fun updateSet(setId: Long, transform: (WorkoutSetEntity) -> WorkoutSetEntity) =
         database.withTransaction {
             val previous = sets.findById(setId) ?: return@withTransaction

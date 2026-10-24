@@ -144,4 +144,7 @@ interface WorkoutSetDao {
 
     @Update
     suspend fun update(set: WorkoutSetEntity)
+
+    @Query("DELETE FROM workout_sets WHERE id = :setId")
+    suspend fun deleteById(setId: Long)
 }

@@ -776,6 +776,9 @@ private fun RecordScreen(
 ) {
     val initialSessionId = remember { activeSessionId }
     val displayedSessionId = activeSessionId ?: initialSessionId
+    val cardHistory = remember(displayedSessionId) {
+        androidx.compose.runtime.mutableStateListOf<WorkoutCardRef>()
+    }
     val sessionSetsFlow = remember(viewModel, displayedSessionId) {
         displayedSessionId?.let(viewModel::sessionSets) ?: kotlinx.coroutines.flow.flowOf(emptyList())
     }
@@ -820,6 +823,7 @@ private fun RecordScreen(
             ExerciseEditor(
                 viewModel = viewModel,
                 sessionId = editorRoute.first,
+                cardHistory = cardHistory,
                 exercise = editorExercise,
                 workoutProgress = workoutProgress,
                 presetName = activePresetName,
@@ -1590,32 +1594,33 @@ private fun ExerciseCard(
 @Composable
 private fun ExercisePictogramThumbnail(exerciseName: String, modifier: Modifier = Modifier) {
     val pictogram = exerciseName.pictogramResource() ?: return
-    val motion by rememberInfiniteTransition(label = "exercise pictogram motion")
-        .animateFloat(
-            initialValue = -1f,
-            targetValue = 1f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(durationMillis = 680),
-                repeatMode = RepeatMode.Reverse,
-            ),
-            label = "exercise pictogram motion",
-        )
     Surface(
         modifier = modifier,
         shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surfaceVariant,
     ) {
-        Image(
-            painter = painterResource(pictogram),
-            contentDescription = "${exerciseName}のピクトグラム",
-            contentScale = ContentScale.Fit,
-            modifier = Modifier.fillMaxSize().padding(4.dp).graphicsLayer {
-                translationY = motion * 3.dp.toPx()
-                rotationZ = motion * 4f
-                scaleX = 1f + kotlin.math.abs(motion) * 0.02f
-                scaleY = 1f + kotlin.math.abs(motion) * 0.02f
-            },
-        )
+        if (pictogram == R.drawable.incline_dumbbell_press) {
+            InclinePressPictogram()
+        } else {
+            val motion by rememberInfiniteTransition(label = "exercise pictogram motion")
+                .animateFloat(
+                    initialValue = -1f,
+                    targetValue = 1f,
+                    animationSpec = infiniteRepeatable(tween(680), RepeatMode.Reverse),
+                    label = "exercise pictogram motion",
+                )
+            Image(
+                painter = painterResource(pictogram),
+                contentDescription = "${exerciseName}のピクトグラム",
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.fillMaxSize().padding(4.dp).graphicsLayer {
+                    translationY = motion * 3.dp.toPx()
+                    rotationZ = motion * 4f
+                    scaleX = 1f + kotlin.math.abs(motion) * 0.02f
+                    scaleY = 1f + kotlin.math.abs(motion) * 0.02f
+                },
+            )
+        }
     }
 }
 
@@ -1635,6 +1640,7 @@ private fun String.pictogramResource(): Int? = when (trim().lowercase()) {
 private fun ExerciseEditor(
     viewModel: FitLogViewModel,
     sessionId: Long,
+    cardHistory: androidx.compose.runtime.snapshots.SnapshotStateList<WorkoutCardRef>,
     exercise: ExerciseEntity,
     workoutProgress: Float,
     presetName: String?,
@@ -1790,6 +1796,9 @@ private fun ExerciseEditor(
         workoutCards.indexOfFirst { "${it.exercise.id}:${it.set.id}:${it.side?.name ?: "all"}" == key }
     } ?: -1
     val browsingCard = workoutCards.getOrNull(browsingCardIndex)
+    val previousCard = workoutCards.getOrNull(currentCardIndex - 1)
+    val undoScope = rememberCoroutineScope()
+    var restoringCard by remember(sessionId) { mutableStateOf(false) }
     val effectiveRestSeconds = exerciseRestDurations[exercise.id] ?: restDurationSeconds
     val cardScene = when {
         browsingCard != null -> {
@@ -1807,6 +1816,8 @@ private fun ExerciseEditor(
                 valueEditingEnabled = true,
             )
         }
+    val effectiveRestSeconds = exerciseRestDurations[exercise.id] ?: restDurationSeconds
+    val cardScene = when {
         restEndsAtMillis > 0L && currentSet != null -> EditorCardScene(
             key = "rest:$restEndsAtMillis",
             restEndsAtMillis = restEndsAtMillis,
@@ -1823,7 +1834,7 @@ private fun ExerciseEditor(
                 exerciseColorIndex = orderedIds.indexOf(displayedExercise.id).coerceAtLeast(0),
                 totalSets = allSessionSets.count { it.exerciseId == displayedExercise.id }
                     .coerceAtLeast(displayedSet.setOrder + 1),
-                enabled = currentSet?.id == displayedSet.id && activeSide == displayedCard.side,
+                enabled = !restoringCard && currentSet?.id == displayedSet.id && activeSide == displayedCard.side,
                 valueEditingEnabled = currentSet?.id == displayedSet.id && activeSide == displayedCard.side,
             )
         }
@@ -1856,6 +1867,7 @@ private fun ExerciseEditor(
     }
 
     fun advance(set: WorkoutSetEntity) {
+        cardHistory.add(WorkoutCardRef(exercise, set, activeSide))
         if (exercise.mode == ExerciseMode.BILATERAL && activeSide != null) {
             if (!otherSideCompleted) {
                 viewModel.updateSet(set.id) { latest ->
@@ -1886,6 +1898,7 @@ private fun ExerciseEditor(
     }
 
     fun skip(set: WorkoutSetEntity) {
+        cardHistory.add(WorkoutCardRef(exercise, set, activeSide))
         if (exercise.mode == ExerciseMode.BILATERAL && activeSide != null) {
             if (!otherSideCompleted) {
                 viewModel.updateSet(set.id) { latest ->
@@ -1914,23 +1927,25 @@ private fun ExerciseEditor(
     BackHandler(enabled = showExerciseOrder) { showExerciseOrder = false }
     if (showExerciseOrder) {
         WorkoutExerciseOrderScreen(
+            sessionId = sessionId,
             exerciseOrderIds = orderedIds,
-            pendingExerciseIds = orderedIds.filterNot { it in completedExerciseIds },
             completedExerciseIds = completedExerciseIds,
             currentExerciseId = exercise.id,
             exercises = allExercises,
-            onReorder = onExerciseOrderChange,
-            onAddExisting = { exerciseToAdd ->
-                viewModel.addExistingExerciseToSession(sessionId, exerciseToAdd) {
-                    onExerciseOrderChange((orderedIds + exerciseToAdd.id).distinct())
-                }
-            },
+            sessionSets = allSessionSets,
+            onUpdateSet = viewModel::updateSet,
+            onSetCountChange = viewModel::resizeExerciseSets,
             onAddNew = { name, mode ->
                 viewModel.addExerciseToSession(sessionId, name, mode) { addedExercise ->
                     onExerciseOrderChange((orderedIds + addedExercise.id).distinct())
                 }
             },
-            onRemove = { removedId ->
+            onAddExercise = { addedExercise ->
+                viewModel.addExistingExerciseToSession(sessionId, addedExercise) {
+                    onExerciseOrderChange((orderedIds + addedExercise.id).distinct())
+                }
+            },
+            onRemoveExercise = { removedId ->
                 val remainingOrder = orderedIds.filterNot { it == removedId }
                 val nextExerciseId = remainingOrder.firstOrNull { id ->
                     allSessionSets.any { it.exerciseId == id && !it.isCompleted }
@@ -1953,6 +1968,44 @@ private fun ExerciseEditor(
                 Modifier.fillMaxWidth().height(48.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                IconButton(
+                    onClick = hapticClick {
+                        val previous = cardHistory.lastOrNull() ?: previousCard
+                        if (previous != null && !restoringCard) {
+                            restoringCard = true
+                            undoScope.launch {
+                                try {
+                                    // History preserves entered values even when the card was skipped.
+                                    val snapshot = if (cardHistory.isNotEmpty()) previous.set else {
+                                        when (previous.side) {
+                                            ExerciseSide.RIGHT -> previous.set.copy(isCompleted = false, rightCompleted = false)
+                                            ExerciseSide.LEFT -> previous.set.copy(isCompleted = false, leftCompleted = false)
+                                            null -> previous.set.copy(isCompleted = false)
+                                        }
+                                    }
+                                    viewModel.updateSet(snapshot.id) { snapshot }.join()
+                                    if (cardHistory.isNotEmpty()) cardHistory.removeAt(cardHistory.lastIndex)
+                                    onSkipRest()
+                                    if (previous.exercise.id != exercise.id) {
+                                        onNextExercise(previous.exercise.id)
+                                    } else {
+                                        currentSetId = snapshot.id
+                                        currentSideName = previous.side?.name ?: firstSide.name
+                                    }
+                                } finally {
+                                    restoringCard = false
+                                }
+                            }
+                        }
+                    },
+                    enabled = !restoringCard && (cardHistory.isNotEmpty() || previousCard != null),
+                ) {
+                    Icon(
+                        Icons.Default.ArrowBack,
+                        contentDescription = "前のカードに戻る",
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                }
                 Text(
                     presetName ?: "トレーニング",
                     modifier = Modifier.weight(1f),
@@ -2016,8 +2069,8 @@ private fun ExerciseEditor(
                                 weightStepKg = exerciseWeightSteps[scene.exercise.id]
                                     ?: weightStepKg,
                                 onUpdate = { transform -> viewModel.updateSet(scene.set.id, transform) },
-                                onAdvance = { if (currentSet?.id == scene.set.id) advance(scene.set) },
-                                onSkip = { if (currentSet?.id == scene.set.id) skip(scene.set) },
+                                onAdvance = { if (!restoringCard && currentSet?.id == scene.set.id && activeSide == scene.side) advance(scene.set) },
+                                onSkip = { if (!restoringCard && currentSet?.id == scene.set.id && activeSide == scene.side) skip(scene.set) },
                                 onSwipeOffsetChanged = { _, _ -> },
                             )
                         }
@@ -2094,36 +2147,45 @@ private fun WorkoutProgressBar(progress: Float) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun WorkoutExerciseOrderScreen(
+    sessionId: Long,
     exerciseOrderIds: List<Long>,
-    pendingExerciseIds: List<Long>,
     completedExerciseIds: Set<Long>,
     currentExerciseId: Long,
     exercises: List<ExerciseEntity>,
-    onReorder: (List<Long>) -> Unit,
-    onAddExisting: (ExerciseEntity) -> Unit,
+    sessionSets: List<WorkoutSetEntity>,
+    onAddExercise: (ExerciseEntity) -> Unit,
     onAddNew: (String, ExerciseMode) -> Unit,
-    onRemove: (Long) -> Unit,
+    onUpdateSet: (Long, (WorkoutSetEntity) -> WorkoutSetEntity) -> Unit,
+    onSetCountChange: (Long, Long, Int) -> Unit,
+    onRemoveExercise: (Long) -> Unit,
     onClose: () -> Unit,
 ) {
     val exerciseById = remember(exercises) { exercises.associateBy { it.id } }
-    val latestOrder by rememberUpdatedState(exerciseOrderIds)
-    var draftPending by remember(currentExerciseId) {
-        mutableStateOf(pendingExerciseIds)
-    }
-    LaunchedEffect(pendingExerciseIds) {
-        draftPending = draftPending.filter { it in pendingExerciseIds } +
-            pendingExerciseIds.filterNot { it in draftPending }
-    }
-    val latestDraftPending by rememberUpdatedState(draftPending)
-    val completedOrder = exerciseOrderIds.filter { it in completedExerciseIds }
-    val displayOrder = draftPending + completedOrder
-    val hasOrderChanges = draftPending != pendingExerciseIds
-    val rowPitchPx = with(LocalDensity.current) { 64.dp.toPx() }
-    var draggedExerciseId by remember { mutableStateOf<Long?>(null) }
-    val dragFeedbackView = LocalView.current
-    var showAddChooser by rememberSaveable { mutableStateOf(false) }
+    val displayOrder = exerciseOrderIds
     var showAddExerciseDialog by rememberSaveable { mutableStateOf(false) }
     var exerciseToDelete by remember { mutableStateOf<ExerciseEntity?>(null) }
+    var editingExerciseId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var revealedExerciseId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var addMenuExpanded by remember { mutableStateOf(false) }
+    var weightDraft by rememberSaveable { mutableStateOf("") }
+    var repsDraft by rememberSaveable { mutableStateOf("") }
+    var leftWeightDraft by rememberSaveable { mutableStateOf("") }
+    var leftRepsDraft by rememberSaveable { mutableStateOf("") }
+    var rightWeightDraft by rememberSaveable { mutableStateOf("") }
+    var rightRepsDraft by rememberSaveable { mutableStateOf("") }
+    val editingExercise = editingExerciseId?.let(exerciseById::get)
+    val editingSets = editingExerciseId?.let { id -> sessionSets.filter { it.exerciseId == id }.sortedBy { it.setOrder } }.orEmpty()
+    val firstPendingSet = editingSets.firstOrNull { !it.isCompleted }
+    LaunchedEffect(editingExerciseId, firstPendingSet) {
+        firstPendingSet?.let { set ->
+            weightDraft = set.normalWeightKg?.toInput().orEmpty()
+            repsDraft = set.normalReps?.toString().orEmpty()
+            leftWeightDraft = set.leftWeightKg?.toInput().orEmpty()
+            leftRepsDraft = set.leftReps?.toString().orEmpty()
+            rightWeightDraft = set.rightWeightKg?.toInput().orEmpty()
+            rightRepsDraft = set.rightReps?.toString().orEmpty()
+        }
+    }
 
     Column(
         Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 8.dp),
@@ -2131,10 +2193,7 @@ private fun WorkoutExerciseOrderScreen(
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = hapticClick(onClose)) { Icon(Icons.Default.ArrowBack, contentDescription = "戻る", tint = MaterialTheme.colorScheme.primary) }
-            Text("種目の順番", Modifier.weight(1f), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.ExtraBold)
-            FilledTonalIconButton(onClick = hapticClick { showAddChooser = true }) {
-                Icon(Icons.Default.Add, contentDescription = "種目を追加")
-            }
+            Text("種目編集", Modifier.weight(1f), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.ExtraBold)
         }
         LazyColumn(
             Modifier.weight(1f).fillMaxWidth(),
@@ -2142,131 +2201,54 @@ private fun WorkoutExerciseOrderScreen(
         ) {
             items(displayOrder, key = { "order-$it" }) { exerciseId ->
                 val name = exerciseById[exerciseId]?.name ?: "種目"
-                val isCurrent = exerciseId == currentExerciseId
+                val count = sessionSets.count { it.exerciseId == exerciseId }
                 val isCompleted = exerciseId in completedExerciseIds
-                val isDraggable = !isCompleted
-                val isDragged = draggedExerciseId == exerciseId
-                val cardScale by animateFloatAsState(
-                    targetValue = if (isDragged) 1.035f else 1f,
-                    animationSpec = spring(dampingRatio = 0.72f, stiffness = 520f),
-                    label = "reorder card scale",
-                )
-                val cardRotation by animateFloatAsState(
-                    targetValue = if (isDragged) -1.2f else 0f,
-                    animationSpec = spring(dampingRatio = 0.72f, stiffness = 520f),
-                    label = "reorder card tilt",
-                )
-                val cardElevation by animateDpAsState(
-                    targetValue = if (isDragged) 14.dp else 1.dp,
-                    animationSpec = spring(dampingRatio = 0.72f, stiffness = 520f),
-                    label = "reorder card elevation",
-                )
-                Card(
-                    Modifier.fillMaxWidth().height(56.dp)
-                        .animateItem(
-                            fadeInSpec = tween(140),
-                            placementSpec = spring(dampingRatio = 0.78f, stiffness = 520f),
-                            fadeOutSpec = tween(110),
-                        )
-                        .zIndex(if (isDragged) 1f else 0f)
-                        .graphicsLayer {
-                            scaleX = cardScale
-                            scaleY = cardScale
-                            rotationZ = cardRotation
+                Row(Modifier.fillMaxWidth().height(68.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.weight(1f)) {
+                        if (revealedExerciseId == exerciseId) {
+                            Button(onClick = hapticClick {
+                                exerciseToDelete = exerciseById[exerciseId]
+                                revealedExerciseId = null
+                            }, modifier = Modifier.align(Alignment.CenterEnd).height(56.dp)) {
+                                Icon(Icons.Default.Delete, contentDescription = null)
+                                Text("削除")
+                            }
                         }
-                        .then(
-                            if (isDraggable) {
-                                Modifier.pointerInput(exerciseId) {
-                                    var startIndex = -1
-                                    var draggedDistance = 0f
-                                    detectDragGestures(
-                                        onDragStart = {
-                                            startIndex = latestDraftPending.indexOf(exerciseId)
-                                            draggedDistance = 0f
-                                            draggedExerciseId = exerciseId
-                                            dragFeedbackView.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                        Card(
+                            Modifier.fillMaxWidth().height(56.dp)
+                                .offset(x = if (revealedExerciseId == exerciseId) (-92).dp else 0.dp)
+                                .animateItem(fadeInSpec = tween(140), placementSpec = spring(), fadeOutSpec = tween(110))
+                                .pointerInput(exerciseId) {
+                                    var total = 0f
+                                    detectHorizontalDragGestures(
+                                        onHorizontalDrag = { change, drag ->
+                                            total += drag
+                                            if (total < -24f) { revealedExerciseId = exerciseId; change.consume() }
+                                            if (total > 24f) { revealedExerciseId = null; change.consume() }
                                         },
-                                        onDrag = { change, amount ->
-                                            change.consume()
-                                            draggedDistance += amount.y
-                                            val currentPending = latestDraftPending
-                                            val currentIndex = currentPending.indexOf(exerciseId)
-                                            if (startIndex >= 0 && currentIndex >= 0 && currentPending.isNotEmpty()) {
-                                                val targetIndex = (startIndex + (draggedDistance / rowPitchPx).roundToInt())
-                                                    .coerceIn(0, currentPending.lastIndex)
-                                                if (targetIndex != currentIndex) {
-                                                    draftPending = currentPending.toMutableList().apply {
-                                                        add(targetIndex, removeAt(currentIndex))
-                                                    }
-                                                    dragFeedbackView.performHapticFeedback(HapticFeedbackConstants.TEXT_HANDLE_MOVE)
-                                                }
-                                            }
-                                        },
-                                        onDragEnd = { draggedExerciseId = null },
-                                        onDragCancel = { draggedExerciseId = null },
                                     )
                                 }
-                            } else Modifier
-                        )
-                        .semantics {
-                            if (isDraggable) contentDescription = "$name、カードを長押しして並べ替え"
-                        },
-                    elevation = CardDefaults.cardElevation(defaultElevation = cardElevation),
-                    border = if (isDragged) BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary) else null,
-                    colors = CardDefaults.cardColors(
-                        containerColor = if (isCurrent) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
-                    ),
-                ) {
-                    Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
-                        if (isDraggable) {
-                            Box(
-                                Modifier.size(width = 46.dp, height = 56.dp),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Icon(Icons.Default.DragHandle, contentDescription = "並べ替え", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                .clickable {
+                                    revealedExerciseId = null
+                                    editingExerciseId = exerciseId
+                                },
+                            colors = CardDefaults.cardColors(containerColor = if (exerciseId == currentExerciseId) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface),
+                        ) {
+                            Row(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(name, style = MaterialTheme.typography.titleMedium)
+                                    Text("${count}セット${if (isCompleted) " · 完了" else " · 編集できます"}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                                Icon(Icons.Default.Edit, contentDescription = "$nameを編集", tint = MaterialTheme.colorScheme.primary)
                             }
-                        } else {
-                            Box(Modifier.size(width = 46.dp, height = 56.dp), contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = if (isCurrent) Icons.Default.PlayArrow else Icons.Default.Check,
-                                    contentDescription = if (isCurrent) "進行中" else "完了",
-                                    tint = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.tertiary,
-                                )
-                            }
-                        }
-                        Text(
-                            name,
-                            Modifier.weight(1f),
-                            style = MaterialTheme.typography.titleMedium,
-                            color = if (isCompleted) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
-                        )
-                        if (isCurrent) {
-                            Text(
-                                "進行中",
-                                Modifier.padding(horizontal = 14.dp),
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.primary,
-                            )
-                        } else if (isCompleted) {
-                            Text(
-                                "完了",
-                                Modifier.padding(horizontal = 14.dp),
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        IconButton(onClick = hapticClick {
-                            exerciseToDelete = exerciseById[exerciseId]
-                        }) {
-                            Icon(Icons.Default.Delete, contentDescription = "$name を削除", tint = MaterialTheme.colorScheme.error)
                         }
                     }
                 }
             }
-            if (draftPending.size <= 1) {
+            if (displayOrder.isEmpty()) {
                 item {
                     Text(
-                        "並べ替えできる種目はありません",
+                        "種目がありません",
                         Modifier.fillMaxWidth().padding(vertical = 16.dp),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -2275,48 +2257,26 @@ private fun WorkoutExerciseOrderScreen(
                 }
             }
         }
-        Button(
-            onClick = hapticClick {
-                if (hasOrderChanges) {
-                    val latestCompleted = latestOrder.filter { it in completedExerciseIds }
-                    onReorder(draftPending + latestCompleted)
-                }
-                onClose()
-            },
-            modifier = Modifier.fillMaxWidth().height(50.dp),
-        ) {
-            Text(if (hasOrderChanges) "順番を適用" else "閉じる")
-        }
-    }
-    if (showAddChooser) {
-        ModalBottomSheet(onDismissRequest = { showAddChooser = false }) {
-            Column(
-                Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 28.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Text("種目を追加", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.ExtraBold)
-                Button(
-                    onClick = hapticClick {
-                        showAddChooser = false
-                        showAddExerciseDialog = true
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Icon(Icons.Default.Add, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("新しい種目を登録")
-                }
-                exercises.filter { !it.archived && it.id !in exerciseOrderIds }.forEach { candidate ->
-                    TextButton(
-                        onClick = hapticClick {
-                            onAddExisting(candidate)
-                            showAddChooser = false
+        Box(Modifier.fillMaxWidth()) {
+            Button(onClick = hapticClick { addMenuExpanded = true }, modifier = Modifier.fillMaxWidth().height(56.dp)) {
+                Icon(Icons.Default.Add, contentDescription = null)
+                Text("種目を追加")
+            }
+            DropdownMenu(expanded = addMenuExpanded, onDismissRequest = { addMenuExpanded = false }) {
+                DropdownMenuItem(
+                    text = { Text("新しい種目を登録") },
+                    onClick = { addMenuExpanded = false; showAddExerciseDialog = true },
+                    leadingIcon = { Icon(Icons.Default.Add, contentDescription = null) },
+                )
+                val availableExercises = exercises.filterNot { it.id in displayOrder }
+                availableExercises.forEach { candidate ->
+                    DropdownMenuItem(
+                        text = { Text(candidate.name) },
+                        onClick = {
+                            onAddExercise(candidate)
+                            addMenuExpanded = false
                         },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text(candidate.name, Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Start)
-                        Icon(Icons.Default.Add, contentDescription = null)
-                    }
+                    )
                 }
             }
         }
@@ -2337,11 +2297,57 @@ private fun WorkoutExerciseOrderScreen(
             text = { Text("${target.name}を今回のトレーニングから削除しますか？ 記録済みのセットもこのトレーニングから外れます。") },
             confirmButton = {
                 TextButton(onClick = hapticClick {
-                    onRemove(target.id)
+                    onRemoveExercise(target.id)
                     exerciseToDelete = null
                 }) { Text("削除", color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = { TextButton(onClick = hapticClick { exerciseToDelete = null }) { Text("キャンセル") } },
+        )
+    }
+    editingExercise?.let { exercise ->
+        val isBilateral = exercise.mode == ExerciseMode.BILATERAL
+        AlertDialog(
+            onDismissRequest = { editingExerciseId = null },
+            title = { Text(exercise.name) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("未完了セットに共通の値を設定", style = MaterialTheme.typography.bodySmall)
+                    if (isBilateral) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedTextField(leftWeightDraft, { leftWeightDraft = it.filter { c -> c.isDigit() || c == '.' }.take(7) }, label = { Text("左 kg") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.weight(1f), singleLine = true)
+                            OutlinedTextField(leftRepsDraft, { leftRepsDraft = it.filter(Char::isDigit).take(3) }, label = { Text("左 回") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.weight(1f), singleLine = true)
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedTextField(rightWeightDraft, { rightWeightDraft = it.filter { c -> c.isDigit() || c == '.' }.take(7) }, label = { Text("右 kg") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.weight(1f), singleLine = true)
+                            OutlinedTextField(rightRepsDraft, { rightRepsDraft = it.filter(Char::isDigit).take(3) }, label = { Text("右 回") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.weight(1f), singleLine = true)
+                        }
+                    } else {
+                        OutlinedTextField(weightDraft, { weightDraft = it.filter { c -> c.isDigit() || c == '.' }.take(7) }, label = { Text("重量 kg") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth(), singleLine = true)
+                        OutlinedTextField(repsDraft, { repsDraft = it.filter(Char::isDigit).take(3) }, label = { Text("回数") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth(), singleLine = true)
+                    }
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("セット数: ${editingSets.size}")
+                        Row {
+                            IconButton(onClick = hapticClick { onSetCountChange(sessionId, exercise.id, (editingSets.size - 1).coerceAtLeast(1)) }) { Text("−") }
+                            IconButton(onClick = hapticClick { onSetCountChange(sessionId, exercise.id, (editingSets.size + 1).coerceAtMost(30)) }) { Icon(Icons.Default.Add, contentDescription = "セット追加") }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = hapticClick {
+                    editingSets.filterNot { it.isCompleted }.forEach { set ->
+                        onUpdateSet(set.id) { latest ->
+                            if (isBilateral) latest.copy(
+                                leftWeightKg = leftWeightDraft.toDoubleOrNull(), leftReps = leftRepsDraft.toIntOrNull(),
+                                rightWeightKg = rightWeightDraft.toDoubleOrNull(), rightReps = rightRepsDraft.toIntOrNull(),
+                            ) else latest.copy(normalWeightKg = weightDraft.toDoubleOrNull(), normalReps = repsDraft.toIntOrNull())
+                        }
+                    }
+                    editingExerciseId = null
+                }) { Text("保存") }
+            },
+            dismissButton = { TextButton(onClick = hapticClick { editingExerciseId = null }) { Text("閉じる") } },
         )
     }
 }

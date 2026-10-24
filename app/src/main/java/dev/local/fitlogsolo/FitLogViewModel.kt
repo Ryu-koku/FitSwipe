@@ -229,6 +229,10 @@ class FitLogViewModel(
         repository.duplicateSet(sessionId, exerciseId)
     }
 
+    fun resizeExerciseSets(sessionId: Long, exerciseId: Long, count: Int) = viewModelScope.launch {
+        repository.resizeExerciseSets(sessionId, exerciseId, count)
+    }
+
     fun updateSet(setId: Long, transform: (WorkoutSetEntity) -> WorkoutSetEntity) =
         viewModelScope.launch { repository.updateSet(setId, transform) }
 
