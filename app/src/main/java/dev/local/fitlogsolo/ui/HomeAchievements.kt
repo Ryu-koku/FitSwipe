@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -24,6 +26,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -40,13 +43,16 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import dev.local.fitlogsolo.FitLogViewModel
 import dev.local.fitlogsolo.data.BigThreeLift
+import dev.local.fitlogsolo.data.AchievementMetric
 import dev.local.fitlogsolo.data.ExerciseEntity
 import dev.local.fitlogsolo.data.TrainingAchievements
 import dev.local.fitlogsolo.data.TrainingAchievementsAggregator
 import java.time.LocalDate
 import java.util.Locale
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.withContext
 
 @Composable
 internal fun HomeAchievements(
@@ -55,6 +61,8 @@ internal fun HomeAchievements(
     weekStartsMonday: Boolean,
 ) {
     val records by viewModel.completedTrainingSets.collectAsStateWithLifecycle()
+    val visibleMetrics by viewModel.visibleAchievementMetrics.collectAsStateWithLifecycle()
+    var editing by remember { mutableStateOf(false) }
     var today by remember { mutableStateOf(LocalDate.now()) }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     LaunchedEffect(lifecycle) {
@@ -65,19 +73,28 @@ internal fun HomeAchievements(
             }
         }
     }
-    val achievements = remember(records, exercises, weekStartsMonday, today) {
-        records?.let { TrainingAchievementsAggregator.aggregate(it, exercises, weekStartsMonday, today) }
+    val achievements by produceState<TrainingAchievements?>(null, records, exercises, weekStartsMonday, today) {
+        value = withContext(Dispatchers.Default) {
+            records?.let { TrainingAchievementsAggregator.aggregate(it, exercises, weekStartsMonday, today) }
+        }
     }
     var details by remember { mutableStateOf<String?>(null) }
 
-    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text(
-            "これまでの頑張り",
-            Modifier.padding(top = 10.dp, bottom = 2.dp),
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-        )
-        Card(
+    Column(Modifier.fillMaxWidth().animateContentSize(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "これまでの頑張り",
+                Modifier.weight(1f).padding(top = 10.dp, bottom = 2.dp),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+            )
+            TextButton(onClick = hapticClick { editing = true }) { Text("編集") }
+        }
+        AchievementMetricsGrid(achievements, visibleMetrics, today) { details = it }
+        if (visibleMetrics.isEmpty()) {
+            Text("編集から表示する項目を選べます", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        if (AchievementMetric.BIG_THREE in visibleMetrics) Card(
             onClick = hapticClick { details = "big3" },
             modifier = Modifier.fillMaxWidth().animateContentSize(),
             colors = CardDefaults.cardColors(containerColor = Color(0xFFFFFEFA)),
@@ -130,7 +147,7 @@ internal fun HomeAchievements(
                 }
             }
         }
-        Card(
+        if (AchievementMetric.WEEK_STREAK in visibleMetrics) Card(
             onClick = hapticClick { details = "streak" },
             modifier = Modifier.fillMaxWidth().animateContentSize(),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
@@ -188,10 +205,12 @@ internal fun HomeAchievements(
         }
     }
 
+    if (editing) AchievementDisplayEditor(visibleMetrics, viewModel::setVisibleAchievementMetrics) { editing = false }
     details?.let { selection ->
+        val metric = AchievementMetric.entries.firstOrNull { it.key == selection }
         AlertDialog(
             onDismissRequest = { details = null },
-            title = { Text(if (selection == "big3") "BIG3トータルについて" else "継続週数について") },
+            title = { Text("${metric?.label ?: "記録"}について") },
             text = {
                 Text(
                     if (selection == "big3") {
@@ -201,12 +220,13 @@ internal fun HomeAchievements(
                             "3種目すべてが記録されると合計を表示します。\n\n" +
                             "日本語・英語の基本種目名とバーベル種目名に対応しています。" +
                             "マシンやダンベルなどの別種目は合算しません。"
-                    } else {
+                    } else if (selection == "streak") {
                         "週に1回以上、1セット以上完了して終了したトレーニングがあると達成です。" +
                             "カレンダーの設定に合わせて、週は${if (weekStartsMonday) "月曜" else "日曜"}から数えます。\n\n" +
                             "今週がまだ未達成でも、先週までの継続週数は保持します。" +
                             "1週間まるごと記録がなければ、継続週数はリセットされます。"
-                    },
+                    } else metric?.let(::achievementMetricExplanation).orEmpty(),
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
                 )
             },
             confirmButton = { TextButton(onClick = hapticClick { details = null }) { Text("閉じる") } },

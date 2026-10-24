@@ -65,9 +65,13 @@ interface SessionDao {
 interface WorkoutSetDao {
     @Query("""
         SELECT workout_sets.exerciseId, workout_sets.normalWeightKg, workout_sets.normalReps,
-               workout_sessions.startedAt AS sessionStartedAt
+               workout_sessions.startedAt AS sessionStartedAt,
+               workout_sets.sessionId, workout_sets.id AS setId,
+               workout_sets.leftWeightKg, workout_sets.leftReps,
+               workout_sets.rightWeightKg, workout_sets.rightReps, exercises.mode AS exerciseMode
         FROM workout_sets
         INNER JOIN workout_sessions ON workout_sessions.id = workout_sets.sessionId
+        INNER JOIN exercises ON exercises.id = workout_sets.exerciseId
         WHERE workout_sets.isCompleted = 1 AND workout_sessions.status = 'COMPLETED'
     """)
     fun observeCompletedTrainingSets(): Flow<List<CompletedTrainingSet>>

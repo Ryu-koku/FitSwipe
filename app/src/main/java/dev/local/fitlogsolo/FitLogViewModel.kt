@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import dev.local.fitlogsolo.data.ExerciseEntity
 import dev.local.fitlogsolo.data.CompletedTrainingSet
+import dev.local.fitlogsolo.data.AchievementMetric
 import dev.local.fitlogsolo.data.ExerciseMode
 import dev.local.fitlogsolo.data.FitLogRepository
 import dev.local.fitlogsolo.data.SessionStatus
@@ -42,6 +43,8 @@ class FitLogViewModel(
     val completedTrainingSets: StateFlow<List<CompletedTrainingSet>?> = repository.observeCompletedTrainingSets()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
     val weekStartsMonday = workoutPreferences.weekStartsMonday
+    val visibleAchievementMetrics = workoutPreferences.visibleAchievementMetrics
+    fun setVisibleAchievementMetrics(metrics: Set<AchievementMetric>) = workoutPreferences.setVisibleAchievementMetrics(metrics)
     val weightStepKg = workoutPreferences.weightStepKg
     val exerciseWeightSteps = workoutPreferences.exerciseWeightSteps
     val restDurationSeconds = workoutPreferences.restDurationSeconds

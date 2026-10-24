@@ -26,6 +26,18 @@ data class WorkoutPreset(
 class WorkoutPreferences(context: Context) {
     private val preferences = context.getSharedPreferences("workout_preferences", Context.MODE_PRIVATE)
 
+    private val _visibleAchievementMetrics = MutableStateFlow(
+        preferences.getStringSet("visible_achievement_metrics", null)?.let { saved ->
+            AchievementMetric.entries.filterTo(mutableSetOf()) { it.key in saved }.toSet()
+        } ?: AchievementMetric.entries.toSet(),
+    )
+    val visibleAchievementMetrics: StateFlow<Set<AchievementMetric>> = _visibleAchievementMetrics.asStateFlow()
+
+    fun setVisibleAchievementMetrics(metrics: Set<AchievementMetric>) {
+        preferences.edit().putStringSet("visible_achievement_metrics", metrics.map { it.key }.toSet()).apply()
+        _visibleAchievementMetrics.value = metrics.toSet()
+    }
+
     private val _weekStartsMonday = MutableStateFlow(
         preferences.getBoolean(KEY_WEEK_STARTS_MONDAY, false),
     )
