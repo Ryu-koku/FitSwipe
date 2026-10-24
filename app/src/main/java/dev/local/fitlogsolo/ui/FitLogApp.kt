@@ -1816,8 +1816,6 @@ private fun ExerciseEditor(
                 valueEditingEnabled = true,
             )
         }
-    val effectiveRestSeconds = exerciseRestDurations[exercise.id] ?: restDurationSeconds
-    val cardScene = when {
         restEndsAtMillis > 0L && currentSet != null -> EditorCardScene(
             key = "rest:$restEndsAtMillis",
             restEndsAtMillis = restEndsAtMillis,
@@ -2239,7 +2237,7 @@ private fun WorkoutExerciseOrderScreen(
                                     Text(name, style = MaterialTheme.typography.titleMedium)
                                     Text("${count}セット${if (isCompleted) " · 完了" else " · 編集できます"}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
-                                Icon(Icons.Default.Edit, contentDescription = "$nameを編集", tint = MaterialTheme.colorScheme.primary)
+                                Icon(Icons.Default.Edit, contentDescription = "${name}を編集", tint = MaterialTheme.colorScheme.primary)
                             }
                         }
                     }
