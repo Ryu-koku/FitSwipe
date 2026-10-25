@@ -20,7 +20,7 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "dev.local.fitlogsolo",
-      "versionCode": 35
+      "versionCode": 37
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -29,6 +29,17 @@
     "plugins": [
       "expo-router",
       "expo-status-bar"
-    ]
+    ],
+    "extra": {
+      "router": {
+        "asyncRoutes": {
+          "web": true
+        }
+      },
+      "eas": {
+        "projectId": "d7d3cff1-10ff-41a7-9df0-8f55b85834bc"
+      }
+    },
+    "owner": "mame749"
   }
 }
