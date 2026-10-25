@@ -1,0 +1,22 @@
+import React, { useEffect, useState } from 'react';
+import { Alert, Text, View } from 'react-native';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useApp } from '../context';
+import { createRoom, joinRoom, listRooms, registerRoomAccount, roomPosts, shareWorkout } from '../rooms';
+import { RoomPost } from '../types';
+import { Button, Card, Chip, Field, Screen, SectionTitle, styles } from '../ui';
+
+export default function RoomsScreen() {
+  const { state, update } = useApp();
+  const params = useLocalSearchParams<{ shareSessionId?: string }>();
+  const [name, setName] = useState(''); const [roomName, setRoomName] = useState(''); const [code, setCode] = useState(''); const [posts, setPosts] = useState<RoomPost[]>([]); const [busy, setBusy] = useState(false); const [message, setMessage] = useState('');
+  const activeRoom = state.rooms.find((room) => room.id === state.activeRoomId);
+  useEffect(() => { if (state.roomIdentity) void refresh(); }, [state.roomIdentity]);
+  async function refresh() { try { const rooms = await listRooms(state.roomIdentity); update((current) => ({ ...current, rooms })); } catch (error) { setMessage(error instanceof Error ? error.message : 'ルームを取得できません'); } }
+  async function withBusy(action: () => Promise<void>) { setBusy(true); setMessage(''); try { await action(); } catch (error) { setMessage(error instanceof Error ? error.message : '通信に失敗しました'); } finally { setBusy(false); } }
+  return <Screen title="ルーム"><Text style={styles.body}>トレーニングを共有するルームです。アカウントとサーバー接続が必要です。</Text>{message ? <Card><Text style={{ color: '#c53b3b' }}>{message}</Text></Card> : null}
+    {!state.roomIdentity ? <Card><SectionTitle>ルームアカウント</SectionTitle><Field value={name} onChangeText={setName} placeholder="表示名" /><Button label={busy ? '作成中…' : 'アカウントを作成'} disabled={busy || !name.trim()} onPress={() => withBusy(async () => { const identity = await registerRoomAccount(name.trim()); update((current) => ({ ...current, roomIdentity: identity })); })} /><Text style={styles.small}>認証トークンは端末内に保存し、チャットには表示しません。</Text></Card> : <Card><Text style={styles.body}>こんにちは、{state.roomIdentity.name}さん</Text><Button label="ルーム一覧を更新" secondary onPress={() => withBusy(refresh)} /></Card>}
+    {state.roomIdentity && <><SectionTitle>ルームを作る・参加する</SectionTitle><Card><Field value={roomName} onChangeText={setRoomName} placeholder="新しいルーム名" /><Button label="ルームを作成" disabled={busy || !roomName.trim()} onPress={() => withBusy(async () => { const room = await createRoom(state.roomIdentity!, roomName.trim()); update((current) => ({ ...current, rooms: [...current.rooms, room], activeRoomId: room.id })); setRoomName(''); })} /><View style={styles.divider} /><Field value={code} onChangeText={setCode} placeholder="参加コード" /><Button label="コードで参加" secondary disabled={busy || !code.trim()} onPress={() => withBusy(async () => { const room = await joinRoom(state.roomIdentity!, code.trim()); update((current) => ({ ...current, rooms: [...current.rooms.filter((item) => item.id !== room.id), room], activeRoomId: room.id })); setCode(''); })} /></Card><SectionTitle>参加中のルーム</SectionTitle>{state.rooms.length === 0 ? <Card><Text style={styles.muted}>参加中のルームはありません。</Text></Card> : state.rooms.map((room) => <Card key={room.id}><View style={styles.row}><View><Text style={styles.body}>{room.name}</Text><Text style={styles.small}>コード: {room.code}</Text></View><Chip label="表示" active={room.id === activeRoom?.id} onPress={() => update((current) => ({ ...current, activeRoomId: room.id }))} /></View></Card>)}
+      {activeRoom && <Card><Text style={styles.metric}>{activeRoom.name}</Text><Button label="投稿を読み込む" secondary onPress={() => withBusy(async () => setPosts(await roomPosts(state.roomIdentity!, activeRoom.id)))} />{posts.map((post) => <View key={post.id} style={{ marginTop: 12 }}><Text style={styles.body}>{post.authorName} · {new Date(post.createdAt).toLocaleDateString('ja-JP')}</Text><Text style={styles.small}>{post.presetName ?? 'ワークアウト'} · {post.exercises.length}種目</Text></View>)}{params.shareSessionId ? <Button label="今回のワークアウトを共有" onPress={() => withBusy(async () => { await shareWorkout(state, activeRoom.id, state.presets.find((p) => p.id === state.sessions.find((s) => s.id === Number(params.shareSessionId))?.presetId)?.name ?? 'ワークアウト', Number(params.shareSessionId)); Alert.alert('共有しました', 'ルームにワークアウトを投稿しました。'); })} /> : null}</Card>}</>}
+    <Button label="ホームへ" secondary onPress={() => router.back()} /></Screen>;
+}

@@ -17,7 +17,7 @@
 
 ## 共有サーバー
 
-[rooms-server/README.md](rooms-server/README.md) に起動・HTTPS公開・バックアップの手順があります。接続先は `FITSWIPE_ROOMS_URL` 環境変数または `-PfitSwipeRoomsUrl=...` でビルド時に指定します。未設定のビルドではルームは準備中になります。
+[rooms-server/README.md](rooms-server/README.md) にセルフホスト用の起動・HTTPS公開・バックアップ手順があります。Cloudflareで公開するWorker実装は [rooms-server/cloudflare/README.md](rooms-server/cloudflare/README.md) を参照してください。接続先は `FITSWIPE_ROOMS_URL` 環境変数または `-PfitSwipeRoomsUrl=...` でビルド時に指定します。未設定のビルドではルームは準備中になります。
 
 ## ビルド環境
 
