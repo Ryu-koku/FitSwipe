@@ -2,7 +2,7 @@
   "expo": {
     "name": "FitLog Solo",
     "slug": "fitlog-solo",
-    "version": "2.7.0",
+    "version": "2.7.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -20,7 +20,7 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "dev.local.fitlogsolo",
-      "versionCode": 34
+      "versionCode": 35
     },
     "web": {
       "favicon": "./assets/favicon.png"

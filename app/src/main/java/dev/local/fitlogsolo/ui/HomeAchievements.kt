@@ -4,21 +4,21 @@ import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -31,10 +31,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -150,57 +146,42 @@ internal fun HomeAchievements(
         if (AchievementMetric.WEEK_STREAK in visibleMetrics) Card(
             onClick = hapticClick { details = "streak" },
             modifier = Modifier.fillMaxWidth().animateContentSize(),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         ) {
             Column(
-                Modifier.fillMaxWidth()
-                    .background(Brush.horizontalGradient(listOf(MaterialTheme.colorScheme.primaryContainer, MaterialTheme.colorScheme.secondaryContainer)))
-                    .padding(16.dp),
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 22.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("継続週数", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                Text("ストリーク", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Crossfade(achievements?.consecutiveWeeks, animationSpec = tween(250), label = "weekly streak") { weeks ->
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Icon(
+                            imageVector = Icons.Default.LocalFireDepartment,
+                            contentDescription = "ストリーク",
+                            modifier = Modifier.size(96.dp),
+                            tint = MaterialTheme.colorScheme.primary,
+                        )
                         Text(
-                            streakMessage(achievements),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            weeks?.toString() ?: "—",
+                            style = MaterialTheme.typography.displayMedium,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = MaterialTheme.colorScheme.primary,
                         )
                     }
-                    Crossfade(achievements?.consecutiveWeeks, animationSpec = tween(250), label = "weekly streak") { weeks ->
-                        Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text(
-                                weeks?.toString() ?: "—",
-                                style = MaterialTheme.typography.headlineLarge,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = MaterialTheme.colorScheme.primary,
-                            )
-                            Text("週間", Modifier.padding(bottom = 5.dp), style = MaterialTheme.typography.labelMedium)
-                        }
-                    }
                 }
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    repeat(7) { index ->
-                        val week = achievements?.recentWeekStarts?.get(index)
-                        val trained = week != null && achievements?.trainedWeeks?.contains(week) == true
-                        val label = if (index == 6) "今週" else "${6 - index}週前"
-                        Column(
-                            Modifier.weight(1f).semantics {
-                                contentDescription = "$label、${if (achievements == null) "読み込み中" else if (trained) "達成" else "記録なし"}"
-                            },
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(5.dp),
-                        ) {
-                            Box(
-                                Modifier.size(18.dp).background(
-                                    if (trained) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.65f),
-                                    CircleShape,
-                                ),
-                            )
-                            Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onPrimaryContainer)
-                        }
-                    }
-                }
+                Text(
+                    "週",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Text(
+                    streakMessage(achievements),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
     }
