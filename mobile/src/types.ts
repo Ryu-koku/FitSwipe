@@ -32,6 +32,8 @@ export type WorkoutSet = {
   leftCompleted: boolean;
   rightCompleted: boolean;
   isCompleted: boolean;
+  createdAt?: string;
+  updatedAt?: string;
 };
 
 export type PresetExerciseConfig = {
@@ -50,13 +52,45 @@ export type WorkoutPreset = {
 };
 
 export type RoomIdentity = { id: string; name: string; token: string };
-export type Room = { id: string; name: string; code: string; memberCount?: number };
+export type Room = {
+  id: string;
+  name: string;
+  ownerId: string;
+  inviteCode: string;
+  memberCount: number;
+};
+export type SharedWorkout = {
+  clientId: string;
+  presetName: string;
+  startedAt: string;
+  endedAt: string;
+  durationMinutes?: number;
+  exercises: {
+    name: string;
+    sets: { weightKg?: number; reps: number; order: number; side?: string }[];
+  }[];
+};
 export type RoomPost = {
   id: string;
-  authorName: string;
+  userId: string;
+  name: string;
   createdAt: string;
-  presetName?: string;
-  exercises: Array<{ name: string; sets: Array<{ weightKg?: number; reps?: number; order: number; side?: string }> }>;
+  workout: SharedWorkout;
+};
+export type RoomDetail = {
+  members: { id: string; name: string }[];
+  posts: RoomPost[];
+  nextCursor?: string | null;
+};
+export type PendingPost = { roomId: string; workout: SharedWorkout };
+export type WorkoutCard = { setId: number; side?: 'left' | 'right' };
+export type WorkoutProgress = {
+  sessionId: number;
+  exerciseOrder: number[];
+  card?: WorkoutCard;
+  history: { card: WorkoutCard; set: WorkoutSet }[];
+  restStartedAt?: number;
+  restEndsAt?: number;
 };
 
 export type AppState = {
@@ -71,6 +105,14 @@ export type AppState = {
   weightStepKg: number;
   restDurationSeconds: number;
   visibleAchievementMetrics: string[];
+  exerciseWeightSteps: Record<number, number>;
+  exerciseRestDurations: Record<number, number>;
+  sideSwitchRestExerciseIds: number[];
+  leftFirstExerciseIds: number[];
+  workout?: WorkoutProgress;
+  installationId: string;
+  pendingPosts: PendingPost[];
+  roomDetails: Record<string, RoomDetail>;
   roomIdentity?: RoomIdentity;
   rooms: Room[];
   activeRoomId?: string;
@@ -85,4 +127,6 @@ export type AchievementSummary = {
   liftedWeightKg: number;
   totalRepetitions: number;
   personalBestUpdates: number;
+  big3Lifts: { bench: number; squat: number; deadlift: number };
+  recordHistoryLabel: string;
 };

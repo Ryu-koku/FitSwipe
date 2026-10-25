@@ -2,6 +2,25 @@
 
 オフライン優先の筋トレ記録アプリです。トレーニング記録は端末内に保存し、ルームに投稿した記録だけをメンバーに共有します。
 
+## React Native版（Android・iOS）
+
+共通アプリの実装は `mobile/` にあります。`app/` は移植元のKotlin版です。
+
+```sh
+cd mobile
+pnpm install --frozen-lockfile
+pnpm typecheck
+pnpm lint
+pnpm test
+pnpm start
+```
+
+ネイティブ実行は `mobile/` で `pnpm android`、macOSでは `pnpm ios`。以前の生成済みネイティブディレクトリを使う場合は、先に `pnpm exec expo prebuild --platform android --no-install`（iOSは `--platform ios`）で設定を反映し、再ビルドしてください。生成されたネイティブファイルは手編集しません。
+ルーム接続先はRN版では `EXPO_PUBLIC_ROOMS_URL` に設定します。既存のサーバーAPIをそのまま使います。未設定の場合は「準備中」と表示します。
+保存は既存RN版と同じAsyncStorageです。旧Kotlin版の端末データ移行は追加していません。
+
+以下のGradle環境・コマンドはKotlin版向けです。
+
 ## 画面と操作
 
 - ホームはカレンダーを中心に表示し、設定は右上の丸い歯車から開きます。

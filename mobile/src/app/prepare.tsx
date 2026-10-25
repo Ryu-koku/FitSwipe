@@ -1,21 +1,126 @@
-import React from 'react';
-import { Text, View } from 'react-native';
+import React, { useState } from 'react';
+import { Pressable, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { useApp } from '../context';
-import { activeExercises, selectedPreset } from '../logic';
-import { Button, Card, Chip, Screen, SectionTitle, styles } from '../ui';
+import {
+  Button,
+  Card,
+  Field,
+  IconButton,
+  Screen,
+  SectionTitle,
+  Sheet,
+  useTheme,
+} from '../ui';
+import { PresetEditor } from '../components/PresetEditor';
+import { ExerciseEditor } from '../components/ExerciseEditor';
 
 export default function PrepareScreen() {
-  const { state, update, startWorkout } = useApp();
-  const selected = selectedPreset(state);
-  return <Screen title="準備">
-    <Text style={styles.body}>プリセットを選択して、いつものメニューをすぐに開始できます。</Text>
-    <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginTop: 14 }}>{state.presets.map((preset) => <Chip key={preset.id} label={preset.name} active={preset.id === selected?.id} onPress={() => update((current) => ({ ...current, selectedPresetId: preset.id }))} />)}</View>
-    {selected && <Card><Text style={styles.metric}>{selected.name}</Text><Text style={styles.small}>{selected.exercises.length}種目</Text>{selected.exercises.map((config) => { const exercise = state.exercises.find((e) => e.id === config.exerciseId); return <View key={config.exerciseId} style={[styles.row, { marginTop: 12 }]}><Text style={styles.body}>{exercise?.name}</Text><Text style={styles.muted}>{config.sets}セット × {config.reps ?? 0}回</Text></View>; })}<Button label="このメニューで開始" onPress={() => { startWorkout(selected.id); router.replace('/workout'); }} /></Card>}
-    <SectionTitle>プリセットを編集</SectionTitle>
-    {state.presets.map((preset) => <Card key={preset.id}><View style={styles.row}><View><Text style={styles.body}>{preset.name}</Text><Text style={styles.small}>{preset.exercises.map((c) => state.exercises.find((e) => e.id === c.exerciseId)?.name).filter(Boolean).join('・')}</Text></View><Text style={styles.tab} onPress={() => update((current) => ({ ...current, selectedPresetId: preset.id }))}>選択</Text></View></Card>)}
-    <SectionTitle>種目一覧</SectionTitle>
-    <Card>{activeExercises(state).map((exercise) => <Text key={exercise.id} style={[styles.body, { marginBottom: 8 }]}>{exercise.mode === 'BILATERAL' ? '左右' : '通常'}　{exercise.name}</Text>)}</Card>
-    <Button label="ホームに戻る" secondary onPress={() => router.back()} />
-  </Screen>;
+  const { state, update } = useApp();
+  const { colors, styles } = useTheme();
+  const [editing, setEditing] = useState<string>();
+  const [adding, setAdding] = useState(false);
+  const [name, setName] = useState('');
+  const [exercise, setExercise] = useState(false);
+  return (
+    <Screen title="トレーニング" onBack={() => router.replace('/')}>
+      <SectionTitle>プリセット</SectionTitle>
+      <View style={[styles.wrap, { gap: 10 }]}>
+        {state.presets.map((preset) => {
+          const selected = preset.id === state.selectedPresetId;
+          const configs = preset.exercises.filter((c) =>
+            state.exercises.some((e) => e.id === c.exerciseId && !e.archived),
+          );
+          return (
+            <Pressable
+              key={preset.id}
+              accessibilityRole="button"
+              accessibilityLabel={preset.name}
+              accessibilityState={{ selected }}
+              onPress={() =>
+                update((s) => ({ ...s, selectedPresetId: preset.id }))
+              }
+              style={{ width: '48%' }}
+            >
+              <Card
+                style={{
+                  minHeight: 150,
+                  backgroundColor: selected ? colors.soft : colors.surface,
+                  borderColor: selected ? colors.primary : colors.line,
+                  borderWidth: selected ? 2 : 1,
+                }}
+              >
+                <Text style={{ color: colors.primary, fontSize: 24 }}>
+                  {selected ? '●' : '○'}
+                </Text>
+                <Text
+                  style={[styles.body, { fontWeight: '800', marginTop: 10 }]}
+                >
+                  {preset.name}
+                </Text>
+                <Text style={styles.small}>
+                  {configs.length}種目 ·{' '}
+                  {configs.reduce((sum, c) => sum + Math.max(1, c.sets), 0)}
+                  セット
+                </Text>
+                <View style={{ alignItems: 'flex-end' }}>
+                  <IconButton
+                    label={`${preset.name}を編集`}
+                    symbol="✎"
+                    onPress={() => {
+                      update((s) => ({ ...s, selectedPresetId: preset.id }));
+                      setEditing(preset.id);
+                    }}
+                  />
+                </View>
+              </Card>
+            </Pressable>
+          );
+        })}
+      </View>
+      <Button
+        label="＋ プリセットを追加"
+        secondary
+        onPress={() => {
+          setName('');
+          setAdding(true);
+        }}
+      />
+      <Button label="種目を追加" secondary onPress={() => setExercise(true)} />
+      {editing && (
+        <PresetEditor
+          presetId={editing}
+          onClose={() => setEditing(undefined)}
+        />
+      )}
+      {exercise && <ExerciseEditor onClose={() => setExercise(false)} />}
+      {adding && (
+        <Sheet title="プリセットを追加" onClose={() => setAdding(false)}>
+          <Field
+            label="名前"
+            value={name}
+            onChangeText={setName}
+            maxLength={24}
+          />
+          <Button
+            label="作成して編集"
+            disabled={!name.trim()}
+            onPress={() => {
+              const id = `preset-${Date.now()}`;
+              update((s) => ({
+                ...s,
+                presets: [
+                  ...s.presets,
+                  { id, name: name.trim(), exercises: [] },
+                ],
+                selectedPresetId: id,
+              }));
+              setAdding(false);
+              setEditing(id);
+            }}
+          />
+        </Sheet>
+      )}
+    </Screen>
+  );
 }

@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "FitLog Solo",
+    "name": "FitSwipe",
     "slug": "fitlog-solo",
     "version": "2.7.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "dev.local.fitlogsolo",
@@ -20,15 +20,18 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "dev.local.fitlogsolo",
+      "permissions": ["android.permission.SCHEDULE_EXACT_ALARM"],
       "versionCode": 37
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "scheme": "fitlogsolo",
+    "scheme": ["fitlogsolo", "fitswipe"],
     "plugins": [
       "expo-router",
-      "expo-status-bar"
+      "expo-status-bar",
+      "expo-system-ui",
+      ["expo-notifications", { "enableRemoteNotifications": false }]
     ],
     "extra": {
       "router": {

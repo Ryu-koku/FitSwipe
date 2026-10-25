@@ -14,6 +14,10 @@ export async function loadState(): Promise<AppState> {
   }
 }
 
+let pending = Promise.resolve();
+
 export function saveState(state: AppState) {
-  return AsyncStorage.setItem(KEY, JSON.stringify(state));
+  const raw = JSON.stringify(state);
+  pending = pending.catch(() => {}).then(() => AsyncStorage.setItem(KEY, raw));
+  return pending;
 }

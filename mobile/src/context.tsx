@@ -1,50 +1,75 @@
-import React, { PropsWithChildren, createContext, useContext, useEffect, useMemo, useState } from 'react';
+import React, {
+  PropsWithChildren,
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
 import { loadState, saveState } from './storage';
 import { AppState } from './types';
-import { now, seedState } from './logic';
+import { seedState } from './logic';
+import { finishWorkout, startWorkout } from './workout';
 
 type AppContextValue = {
   state: AppState;
   ready: boolean;
   update: (updater: (state: AppState) => AppState) => void;
-  startWorkout: (presetId?: string) => number;
+  startWorkout: (presetId?: string) => void;
   finishWorkout: (sessionId: number) => void;
+  getState: () => AppState;
+  persist: (updater: (state: AppState) => AppState) => Promise<void>;
+  error?: string;
 };
 
 const Context = createContext<AppContextValue | null>(null);
 
 export function AppProvider({ children }: PropsWithChildren) {
-  const [state, setState] = useState<AppState>(seedState());
+  const [state, setState] = useState<AppState>(seedState);
   const [ready, setReady] = useState(false);
-  useEffect(() => { loadState().then((loaded) => { setState(loaded); setReady(true); }); }, []);
-  useEffect(() => { if (ready) void saveState(state); }, [state, ready]);
-  const value = useMemo<AppContextValue>(() => ({
+  const [error, setError] = useState<string>();
+  const current = useRef(state);
+  useEffect(() => {
+    loadState()
+      .then((loaded) => {
+        current.current = loaded;
+        setState(loaded);
+        setReady(true);
+      })
+      .catch(() =>
+        setError('記録を読み込めませんでした。アプリを開き直してください。'),
+      );
+  }, []);
+  const getState = useCallback(() => current.current, []);
+  const persist = useCallback((updater: (state: AppState) => AppState) => {
+    const next = updater(current.current);
+    current.current = next;
+    setState(next);
+    return saveState(next);
+  }, []);
+  const update = useCallback(
+    (updater: (state: AppState) => AppState) => {
+      void persist(updater).catch(() =>
+        setError(
+          '記録を保存できませんでした。端末の空き容量を確認してください。',
+        ),
+      );
+    },
+    [persist],
+  );
+  const value: AppContextValue = {
     state,
     ready,
-    update: (updater) => setState((current) => updater(current)),
-    startWorkout: (presetId) => {
-      let id = 0;
-      setState((current) => {
-        const existing = current.sessions.find((session) => session.status === 'IN_PROGRESS');
-        if (existing) { id = existing.id; return current; }
-        id = current.nextId;
-        const preset = current.presets.find((item) => item.id === (presetId ?? current.selectedPresetId)) ?? current.presets[0];
-        const session = { id, startedAt: now(), status: 'IN_PROGRESS' as const, presetId: preset?.id };
-        const newSets = (preset?.exercises ?? []).flatMap((config) => Array.from({ length: Math.max(1, config.sets) }, (_, index) => ({
-          id: id + index + 1 + (config.exerciseId * 1000), sessionId: id, exerciseId: config.exerciseId, setOrder: index + 1,
-          normalWeightKg: config.weightKg, normalReps: config.reps, leftWeightKg: config.leftWeightKg, leftReps: config.reps, rightWeightKg: config.rightWeightKg, rightReps: config.reps,
-          leftCompleted: false, rightCompleted: false, isCompleted: false,
-        })));
-        return { ...current, nextId: id + 1, sessions: [...current.sessions, session], sets: [...current.sets, ...newSets] };
-      });
-      return id;
-    },
-    finishWorkout: (sessionId) => setState((current) => ({
-      ...current,
-      sessions: current.sessions.map((session) => session.id === sessionId ? { ...session, status: 'COMPLETED', endedAt: now() } : session),
-      sets: current.sets.map((set) => set.sessionId === sessionId ? { ...set, isCompleted: true, leftCompleted: true, rightCompleted: true } : set),
-    })),
-  }), [state, ready]);
+    update,
+    startWorkout: (presetId) =>
+      update((current) => startWorkout(current, presetId)),
+    finishWorkout: (sessionId) =>
+      update((current) => finishWorkout(current, sessionId)),
+    getState,
+    persist,
+    error,
+  };
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }
 

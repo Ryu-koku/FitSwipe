@@ -1,16 +1,69 @@
 import React from 'react';
-import { Text } from 'react-native';
+import { Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useApp } from '../context';
-import { achievementSummary, formatWeight, selectedPreset } from '../logic';
-import { Button, Card, Screen, SectionTitle, styles } from '../ui';
+import { Button, Card, Screen, useTheme } from '../ui';
 
 export default function CompleteScreen() {
   const { state } = useApp();
-  const params = useLocalSearchParams<{ sessionId?: string }>();
-  const sessionId = Number(params.sessionId);
-  const session = state.sessions.find((item) => item.id === sessionId) ?? state.sessions[state.sessions.length - 1];
-  const count = session ? state.sets.filter((set) => set.sessionId === session.id && set.isCompleted).length : 0;
-  const summary = achievementSummary(state);
-  return <Screen title="完了"><Card style={{ alignItems: 'center', paddingVertical: 26 }}><Text style={{ fontSize: 48 }}>🎉</Text><Text style={styles.title}>お疲れさまでした</Text><Text style={styles.body}>{count}セットを記録しました</Text></Card><SectionTitle>今回の記録</SectionTitle><Card><Text style={styles.body}>累計挙上重量　<Text style={styles.metric}>{formatWeight(summary.liftedWeightKg)}</Text></Text><Text style={styles.body}>累計回数　<Text style={styles.metric}>{summary.totalRepetitions}回</Text></Text><Text style={styles.body}>継続週数　<Text style={styles.metric}>{summary.streakWeeks}週</Text></Text></Card><Button label="ルームに共有" onPress={() => router.push({ pathname: '/rooms', params: { shareSessionId: String(session?.id ?? '') } })} /><Button label="ホームへ" secondary onPress={() => router.replace('/')} /><Text style={styles.small}>{selectedPreset(state)?.name ?? 'フリートレーニング'}</Text></Screen>;
+  const { colors, styles } = useTheme();
+  const { sessionId } = useLocalSearchParams<{ sessionId: string }>();
+  const session = state.sessions.find((s) => s.id === Number(sessionId));
+  const sets = state.sets.filter(
+    (s) => s.sessionId === session?.id && s.isCompleted,
+  );
+  const starts = sets.map((s) =>
+    new Date(s.createdAt ?? session!.startedAt).getTime(),
+  );
+  const ends = sets.map((s) =>
+    new Date(s.updatedAt ?? session!.endedAt ?? session!.startedAt).getTime(),
+  );
+  const minutes = sets.length
+    ? Math.max(1, Math.floor((Math.max(...ends) - Math.min(...starts)) / 60000))
+    : 0;
+  return (
+    <Screen title="完了">
+      <View style={{ alignItems: 'center', paddingTop: 36 }}>
+        <View
+          style={{
+            borderRadius: 56,
+            backgroundColor: colors.primary,
+            height: 112,
+            width: 112,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <Text style={{ fontSize: 60, color: colors.bg }}>✓</Text>
+        </View>
+        <Text style={[styles.title, { marginVertical: 24 }]}>
+          おつかれさま！
+        </Text>
+      </View>
+      <View style={[styles.row, { marginBottom: 16 }]}>
+        {[
+          [new Set(sets.map((s) => s.exerciseId)).size, '種目'],
+          [sets.length, 'セット'],
+          [minutes, '分'],
+        ].map(([value, label]) => (
+          <Card key={label} style={{ flex: 1, alignItems: 'center' }}>
+            <Text style={styles.metric}>{value}</Text>
+            <Text style={styles.small}>{label}</Text>
+          </Card>
+        ))}
+      </View>
+      <Button label="ホームに戻る" onPress={() => router.replace('/')} />
+      <Button
+        label="ルームへ共有"
+        secondary
+        disabled={!session}
+        onPress={() =>
+          router.push({
+            pathname: '/rooms',
+            params: { shareSessionId: String(session?.id) },
+          })
+        }
+      />
+    </Screen>
+  );
 }
