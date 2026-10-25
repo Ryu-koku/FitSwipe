@@ -13,8 +13,8 @@ android {
         applicationId = "dev.local.fitlogsolo"
         minSdk = 28
         targetSdk = 36
-        versionCode = 34
-        versionName = "2.7"
+        versionCode = 35
+        versionName = "2.7.1"
         val roomsUrl = providers.gradleProperty("fitSwipeRoomsUrl")
             .orElse(providers.environmentVariable("FITSWIPE_ROOMS_URL")).getOrElse("")
         require(roomsUrl.isEmpty() || roomsUrl.startsWith("https://") || roomsUrl.startsWith("http://10.0.2.2:") || roomsUrl.startsWith("http://127.0.0.1:"))
