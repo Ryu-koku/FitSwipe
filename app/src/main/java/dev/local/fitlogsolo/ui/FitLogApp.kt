@@ -38,6 +38,11 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.drag
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.background
 import androidx.compose.foundation.Canvas
@@ -1929,6 +1934,13 @@ private fun ExerciseEditor(
             exerciseOrderIds = orderedIds,
             completedExerciseIds = completedExerciseIds,
             currentExerciseId = exercise.id,
+            onOrderChange = { newOrder ->
+                onExerciseOrderChange(newOrder)
+                browsingCardKey = null
+                currentSetId = -1L
+                newOrder.firstOrNull { id -> allSessionSets.any { it.exerciseId == id && !it.isCompleted } }
+                    ?.let { onNextExercise(it) }
+            },
             exercises = allExercises,
             sessionSets = allSessionSets,
             onUpdateSet = viewModel::updateSet,
@@ -2149,6 +2161,7 @@ private fun WorkoutExerciseOrderScreen(
     exerciseOrderIds: List<Long>,
     completedExerciseIds: Set<Long>,
     currentExerciseId: Long,
+    onOrderChange: (List<Long>) -> Unit,
     exercises: List<ExerciseEntity>,
     sessionSets: List<WorkoutSetEntity>,
     onAddExercise: (ExerciseEntity) -> Unit,
@@ -2165,6 +2178,13 @@ private fun WorkoutExerciseOrderScreen(
     var editingExerciseId by rememberSaveable { mutableStateOf<Long?>(null) }
     var revealedExerciseId by rememberSaveable { mutableStateOf<Long?>(null) }
     var addMenuExpanded by remember { mutableStateOf(false) }
+    var draggingId by remember { mutableStateOf<Long?>(null) }
+    var dragDistance by remember { mutableStateOf(0f) }
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val reorderHaptics = androidx.compose.ui.platform.LocalHapticFeedback.current
+    val rowStep = with(density) { 76.dp.toPx() }
+    val latestOrder by rememberUpdatedState(displayOrder)
+    val latestOrderChange by rememberUpdatedState(onOrderChange)
     var weightDraft by rememberSaveable { mutableStateOf("") }
     var repsDraft by rememberSaveable { mutableStateOf("") }
     var leftWeightDraft by rememberSaveable { mutableStateOf("") }
@@ -2174,7 +2194,23 @@ private fun WorkoutExerciseOrderScreen(
     val editingExercise = editingExerciseId?.let(exerciseById::get)
     val editingSets = editingExerciseId?.let { id -> sessionSets.filter { it.exerciseId == id }.sortedBy { it.setOrder } }.orEmpty()
     val firstPendingSet = editingSets.firstOrNull { !it.isCompleted }
-    LaunchedEffect(editingExerciseId, firstPendingSet) {
+    fun applyValue(field: String, input: String) {
+        val number = input.toDoubleOrNull()?.takeIf { it.isFinite() && it >= 0 } ?: return
+        if (field.endsWith("Reps") && (number < 1 || input.toIntOrNull() == null)) return
+        editingSets.filterNot { it.isCompleted }.forEach { set ->
+            onUpdateSet(set.id) { latest ->
+                if (latest.isCompleted) latest else when (field) {
+                    "weight" -> latest.copy(normalWeightKg = number)
+                    "normalReps" -> latest.copy(normalReps = number.toInt())
+                    "leftWeight" -> if (latest.leftCompleted) latest else latest.copy(leftWeightKg = number)
+                    "leftReps" -> if (latest.leftCompleted) latest else latest.copy(leftReps = number.toInt())
+                    "rightWeight" -> if (latest.rightCompleted) latest else latest.copy(rightWeightKg = number)
+                    else -> if (latest.rightCompleted) latest else latest.copy(rightReps = number.toInt())
+                }
+            }
+        }
+    }
+    LaunchedEffect(editingExerciseId) {
         firstPendingSet?.let { set ->
             weightDraft = set.normalWeightKg?.toInput().orEmpty()
             repsDraft = set.normalReps?.toString().orEmpty()
@@ -2202,19 +2238,20 @@ private fun WorkoutExerciseOrderScreen(
                 val count = sessionSets.count { it.exerciseId == exerciseId }
                 val isCompleted = exerciseId in completedExerciseIds
                 Row(Modifier.fillMaxWidth().height(68.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.weight(1f)) {
-                        if (revealedExerciseId == exerciseId) {
+                    Box(Modifier.weight(1f).then(if (draggingId == exerciseId) Modifier else Modifier.clip(RoundedCornerShape(12.dp))).background(MaterialTheme.colorScheme.errorContainer)) {
+                        if (revealedExerciseId == exerciseId && draggingId == null) {
                             Button(onClick = hapticClick {
                                 exerciseToDelete = exerciseById[exerciseId]
                                 revealedExerciseId = null
-                            }, modifier = Modifier.align(Alignment.CenterEnd).height(56.dp)) {
+                            }, modifier = Modifier.align(Alignment.CenterEnd).width(92.dp).height(56.dp), shape = RoundedCornerShape(0.dp)) {
                                 Icon(Icons.Default.Delete, contentDescription = null)
                                 Text("削除")
                             }
                         }
                         Card(
                             Modifier.fillMaxWidth().height(56.dp)
-                                .offset(x = if (revealedExerciseId == exerciseId) (-92).dp else 0.dp)
+                                .offset(x = if (revealedExerciseId == exerciseId) (-92).dp else 0.dp,
+                                    y = if (draggingId == exerciseId) with(density) { dragDistance.toDp() } else 0.dp)
                                 .animateItem(fadeInSpec = tween(140), placementSpec = spring(), fadeOutSpec = tween(110))
                                 .pointerInput(exerciseId) {
                                     var total = 0f
@@ -2225,6 +2262,35 @@ private fun WorkoutExerciseOrderScreen(
                                             if (total > 24f) { revealedExerciseId = null; change.consume() }
                                         },
                                     )
+                                }
+                                .pointerInput(exerciseId) {
+                                    awaitEachGesture {
+                                        val down = awaitFirstDown(requireUnconsumed = false)
+                                        val up = withTimeoutOrNull(250L) { waitForUpOrCancellation() }
+                                        if (up == null && currentEvent.changes.any { it.id == down.id && it.pressed && !it.isConsumed }) {
+                                            draggingId = exerciseId
+                                            reorderHaptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                                            revealedExerciseId = null
+                                            dragDistance = 0f
+                                            try {
+                                                val released = drag(down.id) { change ->
+                                                    dragDistance += change.position.y - change.previousPosition.y
+                                                    change.consume()
+                                                }
+                                                val order = latestOrder.toMutableList()
+                                                val from = order.indexOf(exerciseId)
+                                                val to = (from + (dragDistance / rowStep).roundToInt()).coerceIn(0, order.lastIndex)
+                                                if (released && from >= 0 && from != to) {
+                                                    order.removeAt(from)
+                                                    order.add(to, exerciseId)
+                                                    latestOrderChange(order)
+                                                }
+                                            } finally {
+                                                draggingId = null
+                                                dragDistance = 0f
+                                            }
+                                        }
+                                    }
                                 }
                                 .clickable {
                                     revealedExerciseId = null
@@ -2309,19 +2375,19 @@ private fun WorkoutExerciseOrderScreen(
             title = { Text(exercise.name) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("未完了セットに共通の値を設定", style = MaterialTheme.typography.bodySmall)
+                    Text("未完了セットに共通の値を設定・変更はすぐに反映", style = MaterialTheme.typography.bodySmall)
                     if (isBilateral) {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedTextField(leftWeightDraft, { leftWeightDraft = it.filter { c -> c.isDigit() || c == '.' }.take(7) }, label = { Text("左 kg") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.weight(1f), singleLine = true)
-                            OutlinedTextField(leftRepsDraft, { leftRepsDraft = it.filter(Char::isDigit).take(3) }, label = { Text("左 回") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.weight(1f), singleLine = true)
+                            OutlinedTextField(leftWeightDraft, { leftWeightDraft = it.filter { c -> c.isDigit() || c == '.' }.take(7); applyValue("leftWeight", leftWeightDraft) }, label = { Text("左 kg") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.weight(1f), singleLine = true)
+                            OutlinedTextField(leftRepsDraft, { leftRepsDraft = it.filter(Char::isDigit).take(3); applyValue("leftReps", leftRepsDraft) }, label = { Text("左 回") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.weight(1f), singleLine = true)
                         }
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedTextField(rightWeightDraft, { rightWeightDraft = it.filter { c -> c.isDigit() || c == '.' }.take(7) }, label = { Text("右 kg") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.weight(1f), singleLine = true)
-                            OutlinedTextField(rightRepsDraft, { rightRepsDraft = it.filter(Char::isDigit).take(3) }, label = { Text("右 回") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.weight(1f), singleLine = true)
+                            OutlinedTextField(rightWeightDraft, { rightWeightDraft = it.filter { c -> c.isDigit() || c == '.' }.take(7); applyValue("rightWeight", rightWeightDraft) }, label = { Text("右 kg") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.weight(1f), singleLine = true)
+                            OutlinedTextField(rightRepsDraft, { rightRepsDraft = it.filter(Char::isDigit).take(3); applyValue("rightReps", rightRepsDraft) }, label = { Text("右 回") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.weight(1f), singleLine = true)
                         }
                     } else {
-                        OutlinedTextField(weightDraft, { weightDraft = it.filter { c -> c.isDigit() || c == '.' }.take(7) }, label = { Text("重量 kg") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth(), singleLine = true)
-                        OutlinedTextField(repsDraft, { repsDraft = it.filter(Char::isDigit).take(3) }, label = { Text("回数") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth(), singleLine = true)
+                        OutlinedTextField(weightDraft, { weightDraft = it.filter { c -> c.isDigit() || c == '.' }.take(7); applyValue("weight", weightDraft) }, label = { Text("重量 kg") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth(), singleLine = true)
+                        OutlinedTextField(repsDraft, { repsDraft = it.filter(Char::isDigit).take(3); applyValue("normalReps", repsDraft) }, label = { Text("回数") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth(), singleLine = true)
                     }
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                         Text("セット数: ${editingSets.size}")
@@ -2333,19 +2399,8 @@ private fun WorkoutExerciseOrderScreen(
                 }
             },
             confirmButton = {
-                TextButton(onClick = hapticClick {
-                    editingSets.filterNot { it.isCompleted }.forEach { set ->
-                        onUpdateSet(set.id) { latest ->
-                            if (isBilateral) latest.copy(
-                                leftWeightKg = leftWeightDraft.toDoubleOrNull(), leftReps = leftRepsDraft.toIntOrNull(),
-                                rightWeightKg = rightWeightDraft.toDoubleOrNull(), rightReps = rightRepsDraft.toIntOrNull(),
-                            ) else latest.copy(normalWeightKg = weightDraft.toDoubleOrNull(), normalReps = repsDraft.toIntOrNull())
-                        }
-                    }
-                    editingExerciseId = null
-                }) { Text("保存") }
+                TextButton(onClick = hapticClick { editingExerciseId = null }) { Text("閉じる") }
             },
-            dismissButton = { TextButton(onClick = hapticClick { editingExerciseId = null }) { Text("閉じる") } },
         )
     }
 }
