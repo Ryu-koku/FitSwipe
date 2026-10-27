@@ -16,6 +16,9 @@ jobs:
   publish:
     if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
+    env:
+      FITSWIPE_ROOMS_URL: https://fitswipe-rooms-api.prompt-tem.workers.dev
+      FITLOG_REQUIRE_ROOMS: 'true'
     steps:
       - uses: actions/checkout@v4
         with:
@@ -44,6 +47,9 @@ jobs:
           FITLOG_UPLOAD_PASSWORD: ${{ secrets.FITLOG_UPLOAD_PASSWORD }}
           FITLOG_UPLOAD_KEY_ALIAS: upload
         run: bash ./gradlew testDebugUnitTest bundleRelease
+      - name: Verify release rooms configuration
+        run: |
+          grep -F "\"$FITSWIPE_ROOMS_URL\"" app/build/generated/source/buildConfig/release/dev/local/fitlogsolo/BuildConfig.java
       - name: Publish to internal testing only
         uses: r0adkll/upload-google-play@v1
         with:
