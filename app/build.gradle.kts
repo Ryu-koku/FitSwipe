@@ -30,7 +30,7 @@ android {
             if (keyPath != null) {
                 storeFile = file(keyPath)
                 storePassword = providers.environmentVariable("FITLOG_UPLOAD_PASSWORD").get()
-                keyAlias = "fitlog-upload"
+                keyAlias = providers.environmentVariable("FITLOG_UPLOAD_KEY_ALIAS").getOrElse("fitlog-upload")
                 keyPassword = storePassword
             }
         }
