@@ -8,6 +8,8 @@
 
 ## 初回設定（管理者）
 
+CIでは `FITSWIPE_ROOMS_URL` に本番ルームAPIを設定する。`FITLOG_REQUIRE_ROOMS=true` により接続先未設定・非HTTPSでの配信を防ぎ、ビルド後にもreleaseのBuildConfigを照合する。接続先を変更するときはワークフローも更新する。
+
 GitHub ActionsのRepository Secretsに次を登録する（値はGitやチャットに貼らない）。
 
 | Secret | 内容 |
