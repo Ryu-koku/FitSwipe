@@ -234,8 +234,8 @@ class FitLogRepository(private val database: AppDatabase) {
                 sets.update(
                     nextSet.copy(
                         normalWeightKg = if (carryNormalWeight) set.normalWeightKg else nextSet.normalWeightKg,
-                        leftWeightKg = if (carryLeftWeight) set.leftWeightKg else nextSet.leftWeightKg,
-                        rightWeightKg = if (carryRightWeight) set.rightWeightKg else nextSet.rightWeightKg,
+                        leftWeightKg = if (carryLeftWeight && !nextSet.leftCompleted) set.leftWeightKg else nextSet.leftWeightKg,
+                        rightWeightKg = if (carryRightWeight && !nextSet.rightCompleted) set.rightWeightKg else nextSet.rightWeightKg,
                         updatedAt = updatedAt,
                     ),
                 )
