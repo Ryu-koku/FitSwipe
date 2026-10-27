@@ -1,0 +1,56 @@
+name: Publish Play internal test
+
+on:
+  pull_request:
+    branches: [main]
+    types: [closed]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: play-internal
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Prepare upload signing and version
+        env:
+          KEYSTORE_BASE64: ${{ secrets.FITLOG_UPLOAD_KEYSTORE_BASE64 }}
+          UPLOAD_PASSWORD: ${{ secrets.FITLOG_UPLOAD_PASSWORD }}
+          PLAY_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          test -n "$KEYSTORE_BASE64" && test -n "$UPLOAD_PASSWORD" && test -n "$PLAY_JSON"
+          umask 077
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/upload.p12"
+          echo "FITLOG_UPLOAD_KEYSTORE=$RUNNER_TEMP/upload.p12" >> "$GITHUB_ENV"
+          echo "FITLOG_VERSION_CODE=$(( $(date +%s) - 1577836800 ))" >> "$GITHUB_ENV"
+      - name: Test and build signed bundle
+        env:
+          FITLOG_UPLOAD_PASSWORD: ${{ secrets.FITLOG_UPLOAD_PASSWORD }}
+          FITLOG_UPLOAD_KEY_ALIAS: upload
+        run: bash ./gradlew testDebugUnitTest bundleRelease
+      - name: Publish to internal testing only
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: dev.local.fitlogsolo
+          releaseFiles: app/build/outputs/bundle/release/app-release.aab
+          track: internal
+          status: completed
+          releaseName: internal-${{ env.FITLOG_VERSION_CODE }}
+      - name: Remove upload key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/upload.p12"
