@@ -154,6 +154,40 @@ function performance(set: WorkoutSet, side = 0): [number, number] {
   return [set.normalWeightKg ?? 0, set.normalReps ?? 0];
 }
 
+export function trainingLevel(state: AppState) {
+  const trainingDays = achievementSummary(state).trainingDays;
+  return { trainingDays, level: trainingDays + 1 };
+}
+
+// Daily best estimated 1RM, not an all-time running maximum.
+export function strengthGrowth(
+  state: AppState,
+  exerciseId: number,
+  side = 0,
+  today = new Date(),
+) {
+  const start = new Date(today);
+  start.setDate(start.getDate() - 89);
+  const firstDay = localDay(start);
+  const lastDay = localDay(today);
+  const sessions = new Map(
+    completedSessions(state).map((session) => [session.id, localDay(session.startedAt)]),
+  );
+  const daily = new Map<string, number>();
+  state.sets.forEach((set) => {
+    const date = sessions.get(set.sessionId);
+    if (!date || date < firstDay || date > lastDay ||
+        !set.isCompleted || set.exerciseId !== exerciseId) return;
+    const [weight, reps] = performance(set, side);
+    if (!Number.isFinite(weight) || !Number.isFinite(reps) ||
+        weight <= 0 || reps < 1 || reps > 10 || !Number.isInteger(reps)) return;
+    const value = reps === 1 ? weight : weight * (1 + reps / 30);
+    daily.set(date, Math.max(daily.get(date) ?? 0, value));
+  });
+  return [...daily].sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, value]) => ({ date, value }));
+}
+
 export function achievementSummary(state: AppState): AchievementSummary {
   const sessions = completedSessions(state);
   const finished = completedSets(state).filter((set) =>
