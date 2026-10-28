@@ -183,10 +183,12 @@ export function useRooms() {
         roomIdentity: s.roomIdentity
           ? { ...s.roomIdentity, name: name.trim() }
           : undefined,
+        cloud: s.cloud ? { ...s.cloud, identity: { ...s.cloud.identity, name: name.trim() } } : undefined,
       }));
       await refresh();
     },
     deleteAccount: async () => {
+      if (getState().cloud) throw new Error('Google連携済みです。設定の「アカウントを削除」から削除範囲を確認してください。');
       await client.deleteAccount(identity());
       await persist((s) => ({
         ...s,

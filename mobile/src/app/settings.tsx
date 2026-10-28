@@ -15,6 +15,7 @@ import { ExerciseEditor } from '../components/ExerciseEditor';
 import { ExerciseManagementItem } from '../components/ExerciseManagementItem';
 import { numeric } from '../workout';
 import type { Exercise, ThemeMode } from '../types';
+import { AccountPanel } from '../components/AccountPanel';
 
 export default function SettingsScreen() {
   const { state, update } = useApp();
@@ -45,6 +46,7 @@ export default function SettingsScreen() {
     >
       {page === 'menu' && (
         <>
+          <AccountPanel />
           <Button
             label="基本設定　›"
             secondary
@@ -56,7 +58,7 @@ export default function SettingsScreen() {
             onPress={() => setPage('exercises')}
           />
           <Text style={[styles.small, { marginTop: 20 }]}>
-            記録は端末内に保存します。ルームへ投稿した記録だけがメンバーに共有されます。
+            ログインすると個人記録もアカウントに保存します。ルームへ投稿した記録だけがメンバーに共有されます。
           </Text>
         </>
       )}

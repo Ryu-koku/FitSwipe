@@ -94,6 +94,8 @@ export type WorkoutProgress = {
 };
 
 export type AppState = {
+  cloud?: import('./sync').CloudState;
+  loginPromptDismissed?: boolean;
   nextId: number;
   exercises: Exercise[];
   sessions: WorkoutSession[];

@@ -13,12 +13,20 @@
 - `GET /v1/sync?cursor=0`は本人の変更のみ、100件ずつ取得。`hasMore`の間は続けて取得する。cursorと取得データは端末で原子的に保存する必要がある。
 - 個人データはルームAPIへ公開しない。削除時は同期記録・セッション・再送受付履歴も連鎖削除する。
 
-## まだ実装していない（利用可能とは案内しない）
+## アプリ側の実装（mobile/ Expo版）
 
-- Androidの初回Googleログイン／スキップ画面、Credential Manager、後からの連携。
-- 既存DBへのUUID付与、端末変更の永続outbox、自動同期、取得データの適用、設定の同期。
-- ログイン前の記録の取り込み確認、アカウント単位の端末データ分離、未送信時の切替ブロック。
-- 端末個人記録をゲストへ残すアカウント削除導線、復旧後の削除再適用。
+- 初回Googleログイン／スキップと設定のアカウント管理。Nitro Google Sign-InによるAndroid Credential Manager認証を使用。Expo GoではGoogle認証できず、ネイティブ再ビルドが必要。
+- 種目・セッション・セット・プリセットのUUID変換、設定の同期。ローカル数値IDの衝突を避け、参照関係も変換する。
+- 変更とUUID対応表・永続outboxを同じ端末保存に記録。アプリ起動中は変更後と30秒間隔で同期を試行し、通信できなければ保留する。OSがアプリを停止している間のバックグラウンド送信は保証しない。
+- Googleログイン後に既存記録の取り込みを確認。取り込まない元の個人データは端末へ保管し、ログアウト後に設定から明示的に戻せる（現在のゲストデータとの入替）。別参加者のルーム参加情報は統合しない。
+- ログアウトでは個人・共有の未送信があれば切替を止める。元アカウントのデータは別領域へ保管し、ゲストには空のデータを表示。同じGoogleで再ログインすると保管データと同期を再開する。
+- クラウドアカウント削除の確認画面と、この端末の個人記録をゲストへ残す処理。
+- Google IDトークンは保存せず、アプリのセッショントークンはSecureStoreへ保存する。AsyncStorageの状態・アーカイブにはトークンを含めない。
+
+## 未検証・未実装
+
+- 実Googleアカウントを使った実機認証。公開OAuth ID・署名登録と新しいネイティブビルドが必要で、コードのテストだけでログイン成功を保証しない。
+- 障害復旧後の削除再適用。
 - 30日以内のサーバーバックアップ消去運用。現時点で30日消去を保証しない。
 - 1か月のルーム期間・ランキング・グラフ。
 
@@ -36,3 +44,22 @@ Cloudflareに`GOOGLE_WEB_CLIENT_ID`（Web OAuthクライアントID。秘密で�
 ```sh
 WORKER_URL=http://127.0.0.1:8790 SYNC_TEST_PERSIST=/tmp/opencode/fitswipe-sync-local node --test rooms-server/cloudflare/test/worker.test.mjs
 ```
+
+## アプリの設定と検証
+
+`mobile/`で`EXPO_PUBLIC_ROOMS_URL`と`EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`を設定する。後者はWorkerの`GOOGLE_WEB_CLIENT_ID`と一致させる。Android OAuthクライアントのパッケージ名は`dev.local.fitlogsolo`、開発用・Play署名それぞれのSHA-1をGoogle Cloudへ登録する。iOSも使う場合は`EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID`を設定し、config pluginが対応するURL schemeを生成する。AndroidはFirebase設定ファイルなしで明示的なWeb client IDを使用する。
+
+新しいネイティブ依存があるため、既存APKへのJavaScript更新だけでは動作しない。Expo Goではログインをスキップして使い、Google認証にはEAS等で再ビルドしたAndroidアプリを使う。Google側の認証設定や本番デプロイは自動変更していない。
+
+`mobile/`内で:
+
+```sh
+pnpm install --frozen-lockfile
+pnpm typecheck
+pnpm lint
+pnpm test
+# 同じローカルWorkerとD1を起動済みの場合は実APIでの保存・復元も検証
+WORKER_URL=http://127.0.0.1:8790 SYNC_TEST_PERSIST=/tmp/opencode/fitswipe-sync-local pnpm test
+```
+
+ローカルHTTPはlocalhost/127.0.0.1/Androidエミュレータの10.0.2.2だけ許可し、本番接続はHTTPS必須。旧Kotlin `app/` にはこのGoogle同期UIを追加しておらず、現在の開発対象である `mobile/` に実装している。
