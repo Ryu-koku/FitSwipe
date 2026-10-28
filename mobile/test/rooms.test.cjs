@@ -28,7 +28,7 @@ from wsgiref.simple_server import make_server, WSGIRequestHandler
 from server import Application, Store
 class Quiet(WSGIRequestHandler):
     def log_message(self, *args): pass
-with tempfile.TemporaryDirectory(prefix="rn-rooms-", dir="/tmp/opencode") as directory:
+with tempfile.TemporaryDirectory(prefix="rn-rooms-") as directory:
     app = Application(Store(directory + "/rooms.sqlite3"))
     server = make_server("127.0.0.1", 0, app, handler_class=Quiet)
     print(server.server_port, flush=True)
