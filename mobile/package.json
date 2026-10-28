@@ -3,6 +3,7 @@
   "version": "2.7.4",
   "main": "expo-router/entry",
   "dependencies": {
+    "@appeeky/expo-healthkit": "^0.4.2",
     "@react-native-async-storage/async-storage": "2.2.0",
     "expo": "~58.0.20",
     "expo-constants": "~58.0.13",
@@ -20,7 +21,10 @@
     "react-native": "0.88.0",
     "react-native-nitro-google-signin": "^2.3.0",
     "react-native-nitro-modules": "^0.37.1",
-    "react-native-safe-area-context": "~5.10.1"
+    "react-native-qrcode-svg": "^6.3.41",
+    "react-native-safe-area-context": "~5.10.1",
+    "react-native-svg": "15.16.0",
+    "react-native-view-shot": "6.1.1"
   },
   "devDependencies": {
     "@types/react": "~19.3.0",

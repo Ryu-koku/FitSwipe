@@ -9,7 +9,7 @@ import sqlite3
 import threading
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from contextlib import contextmanager
 from pathlib import Path
 from urllib.parse import parse_qs
@@ -99,6 +99,10 @@ class Store:
                 CREATE INDEX IF NOT EXISTS user_memberships ON members(user_id);
                 CREATE INDEX IF NOT EXISTS user_posts ON posts(user_id,created_at);
             """)
+            migration = Path(__file__).parent / "cloudflare/migrations/0003_automatic_room_sharing.sql"
+            if not migration.exists():
+                migration = Path(__file__).parent / "auto-sharing.sql"
+            db.executescript(migration.read_text().replace("CREATE TABLE ", "CREATE TABLE IF NOT EXISTS ").replace("CREATE INDEX ", "CREATE INDEX IF NOT EXISTS ").replace("CREATE VIEW ", "CREATE VIEW IF NOT EXISTS "))
 
     @contextmanager
     def connect(self):
@@ -138,11 +142,16 @@ class Store:
 
     def rooms(self, user):
         with self.connect() as db:
-            return {"rooms": [dict(row) for row in db.execute("""
+            rows = [dict(row) for row in db.execute("""
                 SELECT r.id,r.name,r.owner_id AS ownerId,r.invite AS inviteCode,
-                    (SELECT count(*) FROM members m WHERE m.room_id=r.id) AS memberCount
+                    (SELECT count(*) FROM members m WHERE m.room_id=r.id) AS memberCount,
+                    (SELECT since_month FROM room_sharing s WHERE s.room_id=r.id AND s.user_id=m.user_id) AS sharingSince,
+                    (SELECT json_group_array(name) FROM (SELECT u.name FROM users u JOIN members preview ON preview.user_id=u.id WHERE preview.room_id=r.id ORDER BY u.name LIMIT 3)) AS memberNames
                 FROM rooms r JOIN members m ON m.room_id=r.id WHERE m.user_id=? ORDER BY r.rowid DESC
-            """, (user,))]}
+            """, (user,))]
+            for row in rows:
+                row["memberNames"] = json.loads(row["memberNames"])
+            return {"rooms": rows}
 
     def create_room(self, user, data):
         name = text(data.get("name"), "ルーム名", 40)
@@ -220,6 +229,94 @@ class Store:
                 raise ApiError(404, "自分の投稿だけを削除できます")
             db.execute("DELETE FROM posts WHERE id=?", (post,))
         return {}
+
+    def sharing(self, user, room, data):
+        enabled = data.get("enabled")
+        if type(enabled) is not bool:
+            raise ApiError(400, "共有設定を確認してください")
+        with self.connect() as db:
+            self.member(db, user, room)
+            if enabled:
+                month = datetime.now(timezone(timedelta(hours=9))).strftime("%Y-%m")
+                db.execute("INSERT OR IGNORE INTO room_sharing VALUES(?,?,?)", (room, user, month))
+            else:
+                db.execute("DELETE FROM room_sharing WHERE room_id=? AND user_id=?", (room, user))
+        return {}
+
+    def automatic(self, user, room, data=None, client_id=None):
+        with self.connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            self.member(db, user, room)
+            if client_id is not None:
+                db.execute("UPDATE auto_workouts SET deleted=1 WHERE room_id=? AND user_id=? AND client_id=?", (room, user, client_id))
+                return {}
+            payload = workout(data)
+            if not re.fullmatch(r"[A-Za-z0-9-]{1,100}", payload["clientId"]):
+                raise ApiError(400, "記録IDを確認してください")
+            consent = db.execute("SELECT since_month FROM room_sharing WHERE room_id=? AND user_id=?", (room, user)).fetchone()
+            if not consent:
+                raise ApiError(403, "このルームの自動共有への同意が必要です")
+            start = datetime.fromisoformat(consent[0] + "-01T00:00:00+09:00")
+            if datetime.fromisoformat(payload["startedAt"]) < start:
+                raise ApiError(400, "同意した月より前の記録は共有できません")
+            legacy = data.get("legacyClientId")
+            if legacy is not None and (not isinstance(legacy, str) or not re.fullmatch(r"[A-Za-z0-9-]{1,100}", legacy)):
+                raise ApiError(400, "記録IDを確認してください")
+            existing = db.execute("SELECT id FROM auto_workouts WHERE room_id=? AND user_id=? AND client_id=?", (room, user, payload["clientId"])).fetchone()
+            if not existing and db.execute("SELECT count(*) FROM auto_workouts WHERE room_id=?", (room,)).fetchone()[0] >= 10000:
+                raise ApiError(400, "このルームの記録数が上限に達しています")
+            db.execute("""INSERT INTO auto_workouts(id,room_id,user_id,client_id,legacy_client_id,created_at,payload,deleted)
+                VALUES(?,?,?,?,?,?,?,0) ON CONFLICT(room_id,user_id,client_id) DO UPDATE SET payload=excluded.payload,
+                deleted=0, legacy_client_id=coalesce(auto_workouts.legacy_client_id,excluded.legacy_client_id)""",
+                (str(uuid.uuid4()), room, user, payload["clientId"], legacy, datetime.now(timezone.utc).isoformat(), json.dumps(payload, ensure_ascii=False)))
+        return {}
+
+    def automatic_keys(self, user, room):
+        with self.connect() as db:
+            self.member(db, user, room)
+            return {"clientIds": [row[0] for row in db.execute("SELECT client_id FROM auto_workouts WHERE room_id=? AND user_id=? AND deleted=0", (room, user))]}
+
+    def comparison(self, user, room, month, cursor=None):
+        if not isinstance(month, str) or not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", month) or not "2000-01" <= month <= "2100-12":
+            raise ApiError(400, "集計月を確認してください")
+        try:
+            offset = int(cursor or "0")
+            if not 0 <= offset <= 20000:
+                raise ValueError()
+        except ValueError:
+            raise ApiError(400, "続きの記録を確認してください") from None
+        year, m = map(int, month.split("-"))
+        zone = timezone(timedelta(hours=9))
+        start = datetime(year, m, 1, tzinfo=zone).isoformat()
+        end = datetime(year + (m == 12), 1 if m == 12 else m + 1, 1, tzinfo=zone).isoformat()
+        now = datetime.now(timezone.utc).isoformat()
+        with self.connect() as db:
+            self.member(db, user, room)
+            totals = {}
+            # Aggregate the full month, not just the first page of detail records.
+            for row in db.execute("""SELECT user_id,payload FROM room_comparison WHERE room_id=?
+                AND datetime(json_extract(payload,'$.startedAt')) >= datetime(?)
+                AND datetime(json_extract(payload,'$.startedAt')) < datetime(?)
+                AND datetime(json_extract(payload,'$.startedAt')) <= datetime(?)""", (room, start, end, now)):
+                count = 0
+                for exercise in json.loads(row["payload"])["exercises"]:
+                    sets = {}
+                    for entry in exercise["sets"]:
+                        if entry["reps"] > 0:
+                            sets.setdefault(entry["order"], set()).add(entry.get("side"))
+                    count += sum(None in sides or {"左", "右"}.issubset(sides) for sides in sets.values())
+                totals[row["user_id"]] = totals.get(row["user_id"], 0) + count
+            rankings = [dict(row) for row in db.execute("SELECT u.id,u.name FROM users u JOIN members m ON m.user_id=u.id WHERE m.room_id=?", (room,))]
+            for member in rankings:
+                member["sets"] = totals.get(member["id"], 0)
+            rankings.sort(key=lambda member: (-member["sets"], member["id"]))
+            for i, member in enumerate(rankings):
+                member["rank"] = rankings[i - 1]["rank"] if i > 0 and member["sets"] == rankings[i - 1]["sets"] else i + 1
+            rows = db.execute("""SELECT w.*,u.name FROM room_comparison w JOIN users u ON u.id=w.user_id WHERE room_id=?
+                AND datetime(json_extract(payload,'$.startedAt')) >= datetime(?) AND datetime(json_extract(payload,'$.startedAt')) < datetime(?)
+                AND datetime(json_extract(payload,'$.startedAt')) <= datetime(?)
+                ORDER BY json_extract(payload,'$.startedAt') DESC,w.id LIMIT 51 OFFSET ?""", (room, start, end, now, offset)).fetchall()
+        return {"month": month, "rankings": rankings, "posts": [{"id": r["id"], "userId": r["user_id"], "name": r["name"], "createdAt": r["created_at"], "automatic": bool(r["automatic"]), "workout": json.loads(r["payload"])} for r in rows[:50]], "nextCursor": str(offset + 50) if len(rows) > 50 else None}
 
     def leave(self, user, room):
         with self.connect() as db:
@@ -309,6 +406,25 @@ class Application:
                 elif path == "/v1/rooms/join" and method == "POST":
                     result = self.store.join(user, data)
                 else:
+                    automatic = re.fullmatch(r"/v1/rooms/([a-f0-9-]{36})/(sharing|comparison|auto-workouts)(?:/([A-Za-z0-9-]{1,100}))?", path)
+                    if automatic:
+                        room, action, client_id = automatic.groups()
+                        if action == "sharing" and method == "PUT" and client_id is None:
+                            result = self.store.sharing(user, room, data)
+                        elif action == "auto-workouts" and method == "PUT" and client_id is None:
+                            result = self.store.automatic(user, room, data)
+                        elif action == "auto-workouts" and method == "GET" and client_id is None:
+                            result = self.store.automatic_keys(user, room)
+                        elif action == "auto-workouts" and method == "DELETE" and client_id is not None:
+                            result = self.store.automatic(user, room, client_id=client_id)
+                        elif action == "comparison" and method == "GET" and client_id is None:
+                            query = parse_qs(environ.get("QUERY_STRING", ""))
+                            result = self.store.comparison(user, room, query.get("month", [None])[0], query.get("cursor", [None])[0])
+                        else:
+                            raise ApiError(405, "この操作はできません")
+                        body = json.dumps(result, ensure_ascii=False).encode("utf-8")
+                        start_response("200 OK", [("Content-Type", "application/json; charset=utf-8"), ("Content-Length", str(len(body))), ("Cache-Control", "no-store"), ("X-Content-Type-Options", "nosniff")])
+                        return [body]
                     match = re.fullmatch(r"/v1/rooms/([a-f0-9-]{36})(?:/posts(?:/([a-f0-9-]{36}))?)?", path)
                     if not match:
                         raise ApiError(404, "見つかりません")
@@ -332,7 +448,7 @@ class Application:
             logging.exception("rooms request failed")
             status, result = 500, {"error": "サーバーに接続できませんでした。再度お試しください"}
         body = json.dumps(result, ensure_ascii=False, allow_nan=False).encode("utf-8")
-        reason = {200: "OK", 400: "Bad Request", 401: "Unauthorized", 404: "Not Found", 405: "Method Not Allowed", 413: "Content Too Large", 429: "Too Many Requests", 500: "Internal Server Error"}[status]
+        reason = {200: "OK", 400: "Bad Request", 401: "Unauthorized", 403: "Forbidden", 404: "Not Found", 405: "Method Not Allowed", 413: "Content Too Large", 429: "Too Many Requests", 500: "Internal Server Error"}[status]
         start_response(f"{status} {reason}", [("Content-Type", "application/json; charset=utf-8"),
             ("Content-Length", str(len(body))), ("Cache-Control", "no-store"), ("X-Content-Type-Options", "nosniff")])
         return [body]

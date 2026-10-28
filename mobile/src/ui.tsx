@@ -10,6 +10,7 @@ import {
   Modal,
   Platform,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -21,14 +22,15 @@ import type { StyleProp, ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { useApp } from './context';
+import { AppIcon, symbolIcons } from './components/AppIcon';
 
 const light = {
   ink: '#193039',
   muted: '#64777b',
   line: '#d5e2de',
   surface: '#ffffff',
-  bg: '#faf7f0',
-  primary: '#147c73',
+  bg: '#f3f6f6',
+  primary: '#087f79',
   soft: '#dcefeb',
   green: '#147c73',
   orange: '#b47731',
@@ -51,16 +53,19 @@ type Palette = typeof light;
 function makeStyles(c: Palette) {
   return StyleSheet.create({
     screen: { flex: 1, backgroundColor: c.bg },
-    content: { paddingHorizontal: 18, paddingTop: 8, paddingBottom: 130 },
+    content: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 104 },
     header: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
       minHeight: 56,
-      marginBottom: 12,
+      paddingHorizontal: 16,
+      backgroundColor: c.surface,
+      borderBottomWidth: 1,
+      borderBottomColor: c.line,
       gap: 12,
     },
-    title: { color: c.ink, fontWeight: '800', fontSize: 24, flexShrink: 1 },
+    title: { color: c.ink, fontWeight: '700', fontSize: 20, flexShrink: 1 },
     sectionTitle: {
       color: c.ink,
       fontSize: 17,
@@ -70,7 +75,7 @@ function makeStyles(c: Palette) {
     },
     card: {
       backgroundColor: c.surface,
-      borderRadius: 22,
+      borderRadius: 18,
       padding: 18,
       marginBottom: 12,
       borderWidth: 1,
@@ -167,11 +172,17 @@ export function Screen({
   right,
   onBack,
   scroll = true,
+  bottomDock = true,
+  onRefresh,
+  refreshing = false,
 }: PropsWithChildren<{
   title?: string;
   right?: React.ReactNode;
   onBack?: () => void;
   scroll?: boolean;
+  bottomDock?: boolean;
+  onRefresh?: () => void;
+  refreshing?: boolean;
 }>) {
   const { styles } = useTheme();
   const header = (
@@ -186,17 +197,17 @@ export function Screen({
       style={styles.screen}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
+      {header}
       {scroll ? (
         <ScrollView
           keyboardShouldPersistTaps="handled"
-          contentContainerStyle={styles.content}
+          contentContainerStyle={[styles.content, !bottomDock && { paddingBottom: 24 }]}
+          refreshControl={onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} /> : undefined}
         >
-          {header}
           {children}
         </ScrollView>
       ) : (
-        <View style={{ flex: 1, paddingHorizontal: 14 }}>
-          {header}
+        <View style={{ flex: 1, paddingHorizontal: 16, paddingTop: 12 }}>
           {children}
         </View>
       )}
@@ -272,14 +283,14 @@ export function IconButton({
         onPress();
       }}
       style={{
-        minWidth: 44,
-        minHeight: 44,
+        minWidth: 48,
+        minHeight: 48,
         alignItems: 'center',
         justifyContent: 'center',
         opacity: disabled ? 0.3 : 1,
       }}
     >
-      <Text style={{ color: colors.primary, fontSize: 26 }}>{symbol}</Text>
+      {symbolIcons[symbol] ? <AppIcon name={symbolIcons[symbol]} color={colors.primary} /> : <Text style={{ color: colors.primary, fontSize: 24 }}>{symbol}</Text>}
     </Pressable>
   );
 }
@@ -401,7 +412,8 @@ export function Sheet({
   title,
   children,
   onClose,
-}: PropsWithChildren<{ title: string; onClose: () => void }>) {
+  scroll = true,
+}: PropsWithChildren<{ title: string; onClose: () => void; scroll?: boolean }>) {
   const { styles, colors } = useTheme();
   const insets = useSafeAreaInsets();
   return (
@@ -427,6 +439,7 @@ export function Sheet({
             borderTopLeftRadius: 28,
             borderTopRightRadius: 28,
             paddingBottom: insets.bottom + 16,
+            ...(scroll ? {} : { height: '90%' }),
           }}
         >
           <View
@@ -435,12 +448,12 @@ export function Sheet({
             <Text style={[styles.title, { flex: 1 }]}>{title}</Text>
             <IconButton label="閉じる" symbol="×" onPress={onClose} />
           </View>
-          <ScrollView
+          {scroll ? <ScrollView
             keyboardShouldPersistTaps="handled"
             contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 12 }}
           >
             {children}
-          </ScrollView>
+          </ScrollView> : children}
         </View>
       </KeyboardAvoidingView>
     </Modal>

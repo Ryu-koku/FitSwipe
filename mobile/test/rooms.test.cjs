@@ -16,7 +16,7 @@ test('existing Kotlin invitation URLs are accepted', () => {
   assert.equal(inviteCode(' ABC123 '), 'ABC123');
 });
 
-test('React Native client interoperates with the unmodified Python rooms API', async (t) => {
+test('React Native client interoperates with the Python rooms API, including automatic sharing', async (t) => {
   const python = spawn(
     'python3',
     [
@@ -94,6 +94,24 @@ with tempfile.TemporaryDirectory(prefix="rn-rooms-") as directory:
   await api.deletePost(alice, created.id, first.id);
   assert.equal((await api.detail(bob, created.id)).posts.length, 0);
   await api.post(alice, entry);
+  const month = require('../src/automatic-sharing.ts').japanMonth();
+  const start = new Date(`${month}-01T00:00:00+09:00`).toISOString();
+  const automatic = { ...entry.workout, clientId: 'automatic-session', startedAt: start, endedAt: start };
+  await assert.rejects(() => api.saveAutomatic(alice, created.id, automatic), (e) => e.status === 403);
+  await api.sharing(alice, created.id, true);
+  assert.equal((await api.list(alice))[0].sharingSince, month);
+  await api.saveAutomatic(alice, created.id, automatic);
+  await api.saveAutomatic(alice, created.id, automatic);
+  assert.deepEqual((await api.automaticKeys(alice, created.id)).clientIds, ['automatic-session']);
+  const compared = await api.comparison(bob, created.id, month);
+  assert.equal(compared.rankings.length, 2);
+  assert.ok(compared.rankings.find((r) => r.id === alice.id).sets > 0);
+  assert.equal(compared.rankings.find((r) => r.id === bob.id).sets, 0);
+  await assert.rejects(() => api.comparison(outsider, created.id, month), (e) => e.status === 404);
+  await api.deleteAutomatic(alice, created.id, automatic.clientId);
+  assert.deepEqual((await api.automaticKeys(alice, created.id)).clientIds, []);
+  await api.sharing(alice, created.id, false);
+  assert.equal((await api.detail(alice, created.id)).posts.length, 1);
   await api.leave(bob, created.id);
   await assert.rejects(
     () => api.detail(bob, created.id),

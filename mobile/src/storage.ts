@@ -59,7 +59,7 @@ export async function removeArchive(id: string) {
 }
 export async function saveGuest(state: AppState) {
   await AsyncStorage.setItem(`${KEY}.guest`, await encode({ ...state, cloud: undefined,
-    roomIdentity: undefined, rooms: [], roomDetails: {}, pendingPosts: [], activeRoomId: undefined }));
+    roomIdentity: undefined, rooms: [], roomDetails: {}, pendingPosts: [], activeRoomId: undefined, automaticRoomReceipts: undefined }));
 }
 export async function loadGuest(): Promise<AppState | undefined> {
   const raw = await AsyncStorage.getItem(`${KEY}.guest`);

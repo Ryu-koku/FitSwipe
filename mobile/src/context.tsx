@@ -4,6 +4,7 @@ import React, {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from 'react';
@@ -15,6 +16,8 @@ import { randomUUID } from 'expo-crypto';
 import { createRoomsClient, RoomsApiError } from './rooms';
 import { acknowledge, emptyCloud, mergeGuest, receive, trackChanges, type SyncPage } from './sync';
 import { googleSignIn } from './google-login';
+import { AppState as NativeAppState } from 'react-native';
+import { synchronizeAutomaticSharing } from './automatic-sharing';
 
 type AppContextValue = {
   state: AppState;
@@ -32,6 +35,8 @@ type AppContextValue = {
   logout: () => Promise<void>;
   deleteCloudAccount: () => Promise<void>;
   restoreGuest: () => Promise<void>;
+  syncRoomsNow: () => Promise<void>;
+  roomSyncError?: string;
 };
 
 const Context = createContext<AppContextValue | null>(null);
@@ -45,6 +50,8 @@ export function AppProvider({ children }: PropsWithChildren) {
   const [syncError, setSyncError] = useState<string>();
   const transition = useRef(false);
   const syncRunning = useRef<Promise<void> | undefined>(undefined);
+  const automaticRunning = useRef<Promise<void> | undefined>(undefined);
+  const [roomSyncError, setRoomSyncError] = useState<string>();
   const client = useRef(createRoomsClient()).current;
   const rawPersist = useCallback(async (updater: (s: AppState) => AppState) => {
     const next = updater(current.current);
@@ -112,6 +119,37 @@ export function AppProvider({ children }: PropsWithChildren) {
     return syncRunning.current;
   }, [client, rawPersist]);
   const cloudId = state.cloud?.identity.id;
+  const syncRoomsNow = useCallback((): Promise<void> => {
+    if (automaticRunning.current) return automaticRunning.current;
+    const work = async () => {
+      const account = current.current.roomIdentity;
+      if (!ready || !account || !client.configured || transition.current) return;
+      const sameAccount = () => current.current.roomIdentity?.id === account.id && !transition.current;
+      // Pull the account's records before reconciling room copies. Otherwise a
+      // second device could upload stale weights or retract unseen new records.
+      if (current.current.cloud) await syncNow();
+      if (!sameAccount()) return;
+      await synchronizeAutomaticSharing({ client, getState: () => current.current, persist: rawPersist, isCurrent: sameAccount });
+      setRoomSyncError(undefined);
+    };
+    automaticRunning.current = work().catch((e: unknown) => {
+      setRoomSyncError(e instanceof Error ? e.message : 'ルームへの自動共有は送信待ちです'); throw e;
+    }).finally(() => { automaticRunning.current = undefined; });
+    return automaticRunning.current;
+  }, [client, rawPersist, ready, syncNow]);
+  const roomAccountId = state.roomIdentity?.id;
+  // Personal sync materializes fresh arrays even for an unchanged pull. Compare
+  // content so the room-sync pull does not schedule itself every second.
+  const roomDataRevision = useMemo(() => JSON.stringify([state.sessions, state.sets, state.exercises, state.presets, state.cloud?.mapping]),
+    [state.sessions, state.sets, state.exercises, state.presets, state.cloud?.mapping]);
+  useEffect(() => {
+    if (!ready || !roomAccountId || cloudBusy) return;
+    const run = () => { if (NativeAppState.currentState === 'active') void syncRoomsNow().catch(() => {}); };
+    const timer = setTimeout(run, 1000);
+    const retry = setInterval(run, 30_000);
+    const subscription = NativeAppState.addEventListener('change', (value) => { if (value === 'active') run(); });
+    return () => { clearTimeout(timer); clearInterval(retry); subscription.remove(); };
+  }, [ready, roomAccountId, roomDataRevision, cloudBusy, syncRoomsNow]);
   const pendingCount = state.cloud?.pending.length ?? 0;
   useEffect(() => {
     if (!ready || !cloudId || cloudBusy) return;
@@ -125,6 +163,7 @@ export function AppProvider({ children }: PropsWithChildren) {
     transition.current = true; setCloudBusy(true);
     try {
       await syncRunning.current?.catch(() => {});
+      await automaticRunning.current?.catch(() => {});
       const before = current.current;
       if (before.pendingPosts.length) throw new Error('ルームへの送信待ちがあります。ルーム画面で再送してからログインしてください。');
       const google = await googleSignIn();
@@ -175,6 +214,8 @@ export function AppProvider({ children }: PropsWithChildren) {
     transition.current = true; setCloudBusy(true);
     try {
       await syncNow();
+      await automaticRunning.current;
+      if (roomSyncError) throw new Error('ルームへの未送信の変更があります。共有を再試行してからログアウトしてください。');
       if (current.current.cloud?.pending.length || current.current.pendingPosts.length) throw new Error('未送信の記録があります。同期後に再試行してください。');
       await archiveState(current.current);
       await rawPersist(() => ({ ...seedState(), loginPromptDismissed: true }));
@@ -186,9 +227,10 @@ export function AppProvider({ children }: PropsWithChildren) {
     transition.current = true; setCloudBusy(true);
     try {
       await syncRunning.current;
+      await automaticRunning.current?.catch(() => {});
       const before = current.current;
       await client.deleteAccount(before.cloud!.identity);
-      const guest = { ...before, cloud: undefined, roomIdentity: undefined, rooms: [], roomDetails: {}, pendingPosts: [], activeRoomId: undefined };
+      const guest = { ...before, cloud: undefined, roomIdentity: undefined, rooms: [], roomDetails: {}, pendingPosts: [], activeRoomId: undefined, automaticRoomReceipts: undefined };
       await rawPersist(() => guest);
       await removeArchive(before.cloud!.identity.id);
       setSyncError(undefined);
@@ -225,7 +267,7 @@ export function AppProvider({ children }: PropsWithChildren) {
     getState,
     persist,
     error,
-    cloudBusy, syncError, syncNow, login, logout, deleteCloudAccount, restoreGuest,
+    cloudBusy, syncError, syncNow, login, logout, deleteCloudAccount, restoreGuest, syncRoomsNow, roomSyncError,
   };
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }

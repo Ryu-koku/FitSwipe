@@ -21,7 +21,7 @@ export function AccountPanel({ onboarding = false }: { onboarding?: boolean }) {
   return <Card>
     <SectionTitle>{onboarding ? 'Googleログインが必要です' : 'アカウント・同期'}</SectionTitle>
     <Text style={styles.body}>{state.cloud ? `${state.cloud.identity.name}でログイン中` : onboarding ? 'FitSwipeのすべての機能を使うには、Googleログインしてください。' : 'Googleログインすると、記録をアカウントに保存できます。'}</Text>
-    <Text style={styles.small}>ログインすると記録・日付・種目・プリセット・設定をアプリのサーバーへ保存します。Google Driveには保存しません。ルームの友達には、自分で共有した記録だけが見えます。</Text>
+    <Text style={styles.small}>ログインすると記録・日付・種目・プリセット・設定をアプリのサーバーへ保存します。Google Driveには保存しません。ルームごとの同意後、その月の1日以降の完了記録の種目・重量・回数・日時を友だちへ自動共有します。同意していないルームへは自動共有しません。</Text>
     {!!state.cloud && <Text style={styles.small}>未送信 {state.cloud.pending.length}件 · 最終同期 {state.cloud.lastSynced ? new Date(state.cloud.lastSynced).toLocaleString() : 'まだ完了していません'}</Text>}
     {(error || syncError) && <Text accessibilityRole="alert" style={styles.small}>{error ?? syncError}</Text>}
     {!cloudBusy && <Button label={state.cloud ? 'Googleで再ログイン' : 'Googleでログイン'} onPress={() => run(() => login(confirm))} />}

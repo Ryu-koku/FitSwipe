@@ -46,6 +46,90 @@ class RoomsApiTests(unittest.TestCase):
         code = self.request("GET", "/v1/rooms", account=self.alice)[1]["rooms"][0]["inviteCode"]
         self.assertEqual(200, self.request("POST", "/v1/rooms/join", {"code": code}, self.bob)[0])
 
+    def enable_automatic(self, account=None):
+        account = account or self.alice
+        self.assertEqual(200, self.request("PUT", f"/v1/rooms/{self.room}/sharing", {"enabled": True}, account)[0])
+        with self.store.connect() as db:
+            db.execute("UPDATE room_sharing SET since_month='2020-10' WHERE room_id=? AND user_id=?", (self.room, account["id"]))
+
+    def automatic_payload(self, client_id="auto-1", started="2020-10-10T00:00:00Z"):
+        return {**copy.deepcopy(self.payload), "clientId": client_id, "startedAt": started, "endedAt": started}
+
+    def compare(self, account=None):
+        status, result = self.request("GET", f"/v1/rooms/{self.room}/comparison?month=2020-10", account=account or self.alice)
+        self.assertEqual(200, status)
+        return result
+
+    def test_automatic_consent_upsert_delete_stop_and_legacy_deduplication(self):
+        self.join_bob()
+        base = f"/v1/rooms/{self.room}"
+        payload = self.automatic_payload()
+        self.assertEqual(403, self.request("PUT", base + "/auto-workouts", payload, self.alice)[0])
+        self.assertEqual(404, self.request("PUT", base + "/sharing", {"enabled": True}, self.eve)[0])
+        self.enable_automatic()
+        manual = {**payload, "clientId": "old-installation-session"}
+        self.request("POST", base + "/posts", manual, self.alice)
+        payload["legacyClientId"] = manual["clientId"]
+        for _ in range(2):
+            self.assertEqual(200, self.request("PUT", base + "/auto-workouts", payload, self.alice)[0])
+        self.assertEqual(1, self.compare()["rankings"][0]["sets"])
+        self.assertEqual(1, len(self.compare()["posts"]))
+        payload["exercises"][0]["sets"].append({"order": 2, "reps": 8, "weightKg": 65})
+        self.request("PUT", base + "/auto-workouts", payload, self.alice)
+        self.assertEqual(2, self.compare(self.bob)["rankings"][0]["sets"])
+        self.assertEqual(0, self.compare()["rankings"][1]["sets"])
+        self.request("DELETE", base + "/auto-workouts/auto-1", account=self.bob)
+        self.assertEqual(2, self.compare()["rankings"][0]["sets"])
+        self.request("DELETE", base + "/auto-workouts/auto-1", account=self.alice)
+        self.assertEqual(0, self.compare()["rankings"][0]["sets"])
+        self.assertEqual([], self.compare()["posts"])
+        self.request("PUT", base + "/sharing", {"enabled": False}, self.alice)
+        self.assertEqual(1, self.compare()["rankings"][0]["sets"])
+        self.assertEqual(1, len(self.request("GET", base + "/posts", account=self.alice)[1]["posts"]))
+        self.assertEqual(403, self.request("PUT", base + "/auto-workouts", payload, self.alice)[0])
+
+    def test_monthly_japan_boundaries_paired_sides_ties_and_whole_month_pagination(self):
+        self.join_bob()
+        self.enable_automatic()
+        self.enable_automatic(self.bob)
+        base = f"/v1/rooms/{self.room}"
+        payload = self.automatic_payload(started="2020-09-30T15:00:00Z")
+        payload["exercises"][0]["sets"] = [
+            {"order": 1, "reps": 10, "side": "左"}, {"order": 1, "reps": 9, "side": "右"},
+            {"order": 2, "reps": 9, "side": "左"}, {"order": 3, "reps": 0},
+        ]
+        self.request("PUT", base + "/auto-workouts", payload, self.alice)
+        self.request("PUT", base + "/auto-workouts", payload, self.bob)
+        result = self.compare()
+        self.assertEqual([1, 1], [m["sets"] for m in result["rankings"]])
+        self.assertEqual([1, 1], [m["rank"] for m in result["rankings"]])
+        self.assertEqual(400, self.request("PUT", base + "/auto-workouts", self.automatic_payload("before", "2020-09-30T14:59:59Z"), self.alice)[0])
+        self.request("PUT", base + "/auto-workouts", self.automatic_payload("after", "2020-10-31T15:00:00Z"), self.alice)
+        with self.store.connect() as db:
+            for i in range(55):
+                item = self.automatic_payload(f"many-{i}")
+                db.execute("INSERT INTO auto_workouts(id,room_id,user_id,client_id,created_at,payload) VALUES(?,?,?,?,?,?)", (f"row-{i}", self.room, self.alice["id"], item["clientId"], item["startedAt"], json.dumps(item)))
+        result = self.compare()
+        self.assertEqual(56, result["rankings"][0]["sets"])
+        self.assertEqual(50, len(result["posts"]))
+        status, page = self.request("GET", base + "/comparison?month=2020-10&cursor=" + result["nextCursor"], account=self.bob)
+        self.assertEqual(200, status)
+        self.assertEqual(7, len(page["posts"]))
+        self.assertEqual(56, page["rankings"][0]["sets"])
+        self.assertEqual(400, self.request("GET", base + "/comparison?month=2020-13", account=self.alice)[0])
+        self.assertEqual(400, self.request("GET", base + "/comparison?month=2020-10&cursor=-1", account=self.alice)[0])
+
+    def test_leaving_and_account_deletion_cascade_automatic_consent_and_copies(self):
+        self.join_bob()
+        self.enable_automatic(self.bob)
+        base = f"/v1/rooms/{self.room}"
+        self.request("PUT", base + "/auto-workouts", self.automatic_payload(), self.bob)
+        self.request("DELETE", base, account=self.bob)
+        with self.store.connect() as db:
+            self.assertEqual(0, db.execute("SELECT count(*) FROM auto_workouts").fetchone()[0])
+            self.assertEqual(0, db.execute("SELECT count(*) FROM room_sharing").fetchone()[0])
+        self.assertEqual(404, self.request("GET", base + "/auto-workouts", account=self.bob)[0])
+
     def test_invitation_and_membership_protect_both_posts_and_members(self):
         for path in (f"/v1/rooms/{self.room}", f"/v1/rooms/{self.room}/posts"):
             self.assertEqual(404, self.request("GET", path, account=self.bob)[0])

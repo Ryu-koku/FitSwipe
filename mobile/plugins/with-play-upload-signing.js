@@ -12,11 +12,21 @@ function blockEnd(source, openingBrace) {
   throw new Error('Could not find the end of an Android Gradle block');
 }
 
-function withPlayUploadSigning(config) {
-  return withAppBuildGradle(config, (config) => {
-    if (!process.env.FITLOG_UPLOAD_KEYSTORE) return config;
-
-    let contents = config.modResults.contents;
+function configureSigning(contents, useUpload) {
+    if (!useUpload) {
+      // Prebuild reuses native files. Remove only the upload block owned by
+      // this plugin, rather than leaving a null keystore reference behind.
+      const uploadStart = contents.indexOf('upload {', contents.indexOf('signingConfigs {'));
+      if (uploadStart >= 0) {
+        const end = blockEnd(contents, contents.indexOf('{', uploadStart));
+        if (contents.slice(uploadStart, end + 1).includes('FITLOG_UPLOAD_KEYSTORE')) {
+          const start = contents.lastIndexOf('\n', uploadStart) + 1;
+          contents = contents.slice(0, start) + contents.slice(end + 1).replace(/^\r?\n/, '');
+          contents = contents.replace('signingConfig signingConfigs.upload', 'signingConfig signingConfigs.debug');
+        }
+      }
+      return contents;
+    }
     const signingStart = contents.indexOf('signingConfigs {');
     if (signingStart < 0) throw new Error('Expo Android Gradle project has no signingConfigs block');
 
@@ -43,9 +53,16 @@ function withPlayUploadSigning(config) {
       throw new Error('Could not set the existing Play upload key on the Expo release build');
     }
 
-    config.modResults.contents = `${contents.slice(0, releaseStart)}${signedRelease}${contents.slice(releaseEnd + 1)}`;
+    return `${contents.slice(0, releaseStart)}${signedRelease}${contents.slice(releaseEnd + 1)}`;
+}
+
+function withPlayUploadSigning(config) {
+  return withAppBuildGradle(config, (config) => {
+    const useUpload = !!process.env.FITLOG_UPLOAD_KEYSTORE && process.env.FITSWIPE_APP_VARIANT !== 'development';
+    config.modResults.contents = configureSigning(config.modResults.contents, useUpload);
     return config;
   });
 }
 
 module.exports = createRunOncePlugin(withPlayUploadSigning, 'with-play-upload-signing', '1.0.0');
+module.exports.configureSigning = configureSigning;
