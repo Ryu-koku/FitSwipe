@@ -25,3 +25,4 @@ rooms-server/.env
 rooms-server/*.sqlite3*
 rooms-server/cloudflare/.wrangler/
 rooms-server/cloudflare/.dev.vars
+akapen

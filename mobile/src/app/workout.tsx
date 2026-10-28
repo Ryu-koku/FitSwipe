@@ -316,7 +316,7 @@ export default function WorkoutScreen() {
           />
         ) : (
           <IconButton
-            label="種目の順番を編集"
+            label="種目を編集"
             symbol="✎"
             onPress={() => setOrderEditor(true)}
           />

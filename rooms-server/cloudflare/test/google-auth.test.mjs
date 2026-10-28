@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { verifyGoogleToken } from "../google-auth.mjs";
+import { googleAndroidPresenters, verifyGoogleToken } from "../google-auth.mjs";
+
+test("Android presenter allowlist retains the legacy ID and accepts comma-separated additional IDs", () => {
+  assert.deepEqual(googleAndroidPresenters({
+    GOOGLE_ANDROID_CLIENT_ID: "play-client-id",
+    GOOGLE_ANDROID_CLIENT_IDS: " dev-client-id, second-dev-client-id ",
+  }), ["play-client-id", "dev-client-id", "second-dev-client-id"]);
+  assert.deepEqual(googleAndroidPresenters({}), []);
+});
 import { validateChanges } from "../personal-sync.mjs";
 
 const pair = await crypto.subtle.generateKey({ name: "RSASSA-PKCS1-v1_5", modulusLength: 2048,
@@ -14,6 +22,21 @@ async function token(overrides = {}, header = {}) {
   return `${prefix}.${Buffer.from(signature).toString("base64url")}`;
 }
 const options = { now: 1500, keys: [jwk] };
+
+test("Google key fetch uses Workers-compatible redirects and rejects redirects", async (t) => {
+  const valid = await token();
+  let status = 302;
+  t.mock.method(globalThis, "fetch", async (url, init) => {
+    assert.equal(url, "https://www.googleapis.com/oauth2/v3/certs");
+    assert.equal(init.redirect, "manual");
+    return status === 200
+      ? Response.json({ keys: [jwk] })
+      : new Response(null, { status, headers: { Location: "https://attacker.test" } });
+  });
+  await assert.rejects(verifyGoogleToken(valid, "web-client-id", { now: 1500 }), /Google keys unavailable/);
+  status = 200;
+  assert.deepEqual(await verifyGoogleToken(valid, "web-client-id", { now: 1500 }), { subject: "google-user" });
+});
 
 test("Google token requires valid signature and exact audience, issuer and lifetime", async () => {
   assert.deepEqual(await verifyGoogleToken(await token(), "web-client-id", options), { subject: "google-user" });

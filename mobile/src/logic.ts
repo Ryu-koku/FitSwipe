@@ -59,6 +59,7 @@ export function seedState(): AppState {
   return {
     nextId: 100,
     exercises: initialExercises,
+    bodyMeasurements: [],
     sessions: [],
     sets: [],
     presets: [
@@ -343,6 +344,20 @@ export function achievementSummary(state: AppState): AchievementSummary {
 export function formatWeight(value?: number) {
   if (value === undefined || Number.isNaN(value)) return '—';
   return `${Number(value.toFixed(2))} kg`;
+}
+
+export function estimatedOneRepMax(weightKg: number, reps: number) {
+  if (!Number.isFinite(weightKg) || weightKg <= 0 || !Number.isInteger(reps) || reps < 1 || reps > 12) return undefined;
+  return Math.round(weightKg * (1 + (reps - 1) / 30) * 10) / 10;
+}
+
+export function lastExerciseTrainingDays(state: AppState, exerciseId: number, today = new Date()) {
+  const sessionIds = new Set(state.sets.filter(set => set.exerciseId === exerciseId && set.isCompleted).map(set => set.sessionId));
+  const latest = completedSessions(state).filter(session => sessionIds.has(session.id)).map(session => session.startedAt).sort().at(-1);
+  if (!latest) return undefined;
+  const start = new Date(latest); start.setHours(0,0,0,0);
+  const end = new Date(today); end.setHours(0,0,0,0);
+  return Math.max(0, Math.floor((end.getTime() - start.getTime()) / 86400000));
 }
 
 export function previousSet(

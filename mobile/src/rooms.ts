@@ -5,6 +5,7 @@ import type {
   RoomDetail,
   RoomIdentity,
   SharedWorkout,
+  RoomComparison,
 } from './types';
 
 export class RoomsApiError extends Error {
@@ -66,6 +67,16 @@ export function createRoomsClient(
     pull: (identity: RoomIdentity, cursor: number) =>
       request<import('./sync').SyncPage>(`/v1/sync?cursor=${cursor}`, identity.token),
     configured: !!endpoint,
+    sharing: (identity: RoomIdentity, roomId: string, enabled: boolean) =>
+      request(`/v1/rooms/${roomId}/sharing`, identity.token, 'PUT', { enabled }),
+    automaticKeys: (identity: RoomIdentity, roomId: string) =>
+      request<{ clientIds: string[] }>(`/v1/rooms/${roomId}/auto-workouts`, identity.token),
+    saveAutomatic: (identity: RoomIdentity, roomId: string, payload: SharedWorkout) =>
+      request(`/v1/rooms/${roomId}/auto-workouts`, identity.token, 'PUT', payload),
+    deleteAutomatic: (identity: RoomIdentity, roomId: string, clientId: string) =>
+      request(`/v1/rooms/${roomId}/auto-workouts/${encodeURIComponent(clientId)}`, identity.token, 'DELETE'),
+    comparison: (identity: RoomIdentity, roomId: string, month: string, cursor?: string | null) =>
+      request<RoomComparison>(`/v1/rooms/${roomId}/comparison?month=${encodeURIComponent(month)}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`, identity.token),
     register: (name: string) =>
       request<RoomIdentity>('/v1/account', undefined, 'POST', {
         name: name.trim(),

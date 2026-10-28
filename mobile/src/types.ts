@@ -8,7 +8,10 @@ export type Exercise = {
   mode: ExerciseMode;
   sortOrder: number;
   archived: boolean;
+  muscleGroup?: string;
 };
+
+export type BodyMeasurement = { id: string; measuredAt: string; weightKg?: number; bodyFatPercent?: number; heightCm?: number };
 
 export type WorkoutSession = {
   id: number;
@@ -58,9 +61,12 @@ export type Room = {
   ownerId: string;
   inviteCode: string;
   memberCount: number;
+  sharingSince?: string | null;
+  memberNames?: string[];
 };
 export type SharedWorkout = {
   clientId: string;
+  legacyClientId?: string;
   presetName: string;
   startedAt: string;
   endedAt: string;
@@ -76,6 +82,7 @@ export type RoomPost = {
   name: string;
   createdAt: string;
   workout: SharedWorkout;
+  automatic?: boolean;
 };
 export type RoomDetail = {
   members: { id: string; name: string }[];
@@ -83,6 +90,12 @@ export type RoomDetail = {
   nextCursor?: string | null;
 };
 export type PendingPost = { roomId: string; workout: SharedWorkout };
+export type RoomComparison = {
+  month: string;
+  rankings: { id: string; name: string; sets: number; rank: number }[];
+  posts: RoomPost[];
+  nextCursor?: string | null;
+};
 export type WorkoutCard = { setId: number; side?: 'left' | 'right' };
 export type WorkoutProgress = {
   sessionId: number;
@@ -98,6 +111,8 @@ export type AppState = {
   loginPromptDismissed?: boolean;
   nextId: number;
   exercises: Exercise[];
+  bodyMeasurements?: BodyMeasurement[];
+  heightCm?: number;
   sessions: WorkoutSession[];
   sets: WorkoutSet[];
   presets: WorkoutPreset[];
@@ -119,6 +134,7 @@ export type AppState = {
   roomIdentity?: RoomIdentity;
   rooms: Room[];
   activeRoomId?: string;
+  automaticRoomReceipts?: Record<string, Record<string, string>>;
 };
 
 export type AchievementSummary = {

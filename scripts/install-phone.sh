@@ -24,7 +24,8 @@ if [[ -z "$serial" ]]; then
 fi
 export EXPO_PUBLIC_ROOMS_URL="${EXPO_PUBLIC_ROOMS_URL:-${FITSWIPE_ROOMS_URL:-https://fitswipe-rooms-api.prompt-tem.workers.dev}}"
 export FITSWIPE_APP_VARIANT=development
-export EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID="${EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID:-}"
+# Do not export an empty Google client ID: an empty inherited variable prevents
+# Expo from loading the configured public client ID from mobile/.env.
 
 pnpm --dir mobile typecheck
 pnpm --dir mobile lint
@@ -35,7 +36,9 @@ gradle_wrapper="mobile/android/gradlew"
 if [[ ! -x "$gradle_wrapper" ]]; then
   chmod +x "$gradle_wrapper"
 fi
-"$gradle_wrapper" -p mobile/android :app:assembleRelease
+# Public Expo environment variables are inlined into the JS bundle. Rebuild it
+# explicitly so changing .env cannot reuse a bundle with stale login/API config.
+"$gradle_wrapper" -p mobile/android :app:createBundleReleaseJsAndAssets --rerun :app:assembleRelease
 
 apk="mobile/android/app/build/outputs/apk/release/app-release.apk"
 package="dev.local.fitlogsolo.expodev"

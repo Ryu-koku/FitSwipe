@@ -1,5 +1,6 @@
-import { GoogleAuthError, verifyGoogleToken } from "./google-auth.mjs";
+import { GoogleAuthError, googleAndroidPresenters, verifyGoogleToken } from "./google-auth.mjs";
 import { SyncError, pullChanges, pushChanges } from "./personal-sync.mjs";
+import { ComparisonError, comparison, deleteAutomatic, saveAutomatic, sharing } from './room-comparison.mjs';
 
 const INVITE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const MAX_BODY_BYTES = 131_072;
@@ -157,11 +158,13 @@ async function register(request, env, data) {
 async function listRooms(env, userId) {
   const { results } = await env.DB.prepare(`
     SELECT r.id, r.name, r.owner_id AS ownerId, r.invite AS inviteCode,
-      (SELECT count(*) FROM members m WHERE m.room_id = r.id) AS memberCount
+      (SELECT count(*) FROM members m WHERE m.room_id = r.id) AS memberCount,
+      (SELECT since_month FROM room_sharing s WHERE s.room_id=r.id AND s.user_id=m.user_id) AS sharingSince,
+      (SELECT json_group_array(name) FROM (SELECT u.name FROM users u JOIN members preview ON preview.user_id=u.id WHERE preview.room_id=r.id ORDER BY u.name LIMIT 3)) AS memberNames
     FROM rooms r JOIN members m ON m.room_id = r.id
     WHERE m.user_id = ? ORDER BY r.rowid DESC
   `).bind(userId).all();
-  return { rooms: results };
+  return { rooms: results.map((r) => ({ ...r, memberNames: JSON.parse(r.memberNames) })) };
 }
 
 async function createRoom(env, userId, data) {
@@ -301,7 +304,7 @@ async function route(request, env) {
     await rateLimit(env.REGISTER_LIMIT, request);
     if (!env.GOOGLE_WEB_CLIENT_ID) throw new ApiError(503, "Googleログインは準備中です");
     const { subject } = await verifyGoogleToken(body.idToken, env.GOOGLE_WEB_CLIENT_ID, {
-      authorizedPresenters: env.GOOGLE_ANDROID_CLIENT_ID ? [env.GOOGLE_ANDROID_CLIENT_ID] : [],
+      authorizedPresenters: googleAndroidPresenters(env),
     });
     const current = request.headers.has("authorization") ? await authenticate(request, env) : null;
     let user = await env.DB.prepare("SELECT id, name FROM users WHERE google_subject = ?").bind(subject).first();
@@ -368,6 +371,20 @@ async function route(request, env) {
     return { status: 200, data: await joinRoom(env, user.id, body) };
   }
 
+  const automatic = pathname.match(/^\/v1\/rooms\/([a-f0-9-]{36})\/(sharing|comparison|auto-workouts)(?:\/([A-Za-z0-9-]{1,100}))?$/u);
+  if (automatic) {
+    const [, roomId, action, clientId] = automatic;
+    await requireMember(env, user.id, roomId);
+    if (action === 'sharing' && method === 'PUT' && !clientId) return { status: 200, data: await sharing(env, user.id, roomId, body.enabled) };
+    if (action === 'comparison' && method === 'GET' && !clientId) return { status: 200, data: await comparison(env, roomId, url.searchParams.get('month'), url.searchParams.get('cursor')) };
+    if (action === 'auto-workouts' && method === 'PUT' && !clientId) return { status: 200, data: await saveAutomatic(env, user.id, roomId, body, validateWorkout) };
+    if (action === 'auto-workouts' && method === 'GET' && !clientId) {
+      const { results } = await env.DB.prepare('SELECT client_id FROM auto_workouts WHERE room_id=? AND user_id=? AND deleted=0').bind(roomId, user.id).all();
+      return { status: 200, data: { clientIds: results.map((r) => r.client_id) } };
+    }
+    if (action === 'auto-workouts' && method === 'DELETE' && clientId) return { status: 200, data: await deleteAutomatic(env, user.id, roomId, clientId) };
+    throw new ApiError(405, 'この操作はできません');
+  }
   const match = pathname.match(/^\/v1\/rooms\/([a-f0-9-]{36})(?:\/posts(?:\/([a-f0-9-]{36}))?)?$/u);
   if (!match) throw new ApiError(404, "見つかりません");
   const [, roomId, postId] = match;
@@ -386,7 +403,7 @@ export default {
       const result = await route(request, env);
       return response(result.data, result.status);
     } catch (error) {
-      if (error instanceof ApiError || error instanceof SyncError) return response({ error: error.message }, error.status);
+      if (error instanceof ApiError || error instanceof SyncError || error instanceof ComparisonError) return response({ error: error.message }, error.status);
       if (error instanceof GoogleAuthError) return response({ error: "Googleログインを確認してください" }, 401);
       console.error("rooms request failed", error instanceof Error ? error.message : String(error));
       return response({ error: "サーバーに接続できませんでした。再度お試しください" }, 500);

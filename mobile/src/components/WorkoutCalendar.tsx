@@ -1,243 +1,110 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Animated, PanResponder, Pressable, Text, View } from 'react-native';
 import { useApp } from '../context';
 import { achievementSummary, completedSessions, completedSets, localDay } from '../logic';
 import { Card, IconButton, Sheet, useTheme } from '../ui';
 import { SessionDetails } from './SessionDetails';
+import { AppIcon } from './AppIcon';
+import { useReducedMotion } from '../use-reduced-motion';
 
 function startOfWeek(date: Date, monday: boolean) {
   const start = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  const offset = monday ? (start.getDay() + 6) % 7 : start.getDay();
-  start.setDate(start.getDate() - offset);
+  start.setDate(start.getDate() - (monday ? (start.getDay() + 6) % 7 : start.getDay()));
   return start;
 }
 
-function WeekStreakIcon({ active, color, mutedColor, glowColor }: { active: boolean; color: string; mutedColor: string; glowColor: string }) {
-  const [motion] = useState(() => new Animated.Value(0));
-
-  useEffect(() => {
-    if (!active) {
-      motion.setValue(0);
-      return;
-    }
-    const animation = Animated.loop(
-      Animated.sequence([
-        Animated.timing(motion, { toValue: 1, duration: 220, useNativeDriver: true }),
-        Animated.timing(motion, { toValue: 0.35, duration: 120, useNativeDriver: true }),
-        Animated.timing(motion, { toValue: 1, duration: 180, useNativeDriver: true }),
-        Animated.timing(motion, { toValue: 0, duration: 260, useNativeDriver: true }),
-      ]),
-    );
-    animation.start();
-    return () => animation.stop();
-  }, [active, motion]);
-
-  const rotate = motion.interpolate({ inputRange: [0, 1], outputRange: ['-12deg', '12deg'] });
-  return (
-    <View style={{ width: 22, height: 24, alignItems: 'center', justifyContent: 'center' }}>
-      {active && (
-        <Animated.View
-          pointerEvents="none"
-          style={{
-            position: 'absolute',
-            width: 15,
-            height: 15,
-            borderRadius: 99,
-            backgroundColor: glowColor,
-            opacity: motion.interpolate({ inputRange: [0, 1], outputRange: [0.06, 0.38] }),
-            transform: [{ scale: motion.interpolate({ inputRange: [0, 1], outputRange: [0.55, 1.5] }) }],
-          }}
-        />
-      )}
-      <Animated.Text
-        style={{
-          color: active ? color : mutedColor,
-          fontSize: 16,
-          opacity: active ? motion.interpolate({ inputRange: [0, 1], outputRange: [0.72, 1] }) : 1,
-          transform: [
-            { translateY: active ? motion.interpolate({ inputRange: [0, 1], outputRange: [1, -2] }) : 0 },
-            { scale: active ? motion.interpolate({ inputRange: [0, 1], outputRange: [0.9, 1.22] }) : 1 },
-            { rotate: active ? rotate : '0deg' },
-          ],
-        }}
-      >
-        🔥
-      </Animated.Text>
-    </View>
-  );
-}
-
-export function WorkoutCalendar() {
+export function WorkoutCalendar({ compact = false }: { compact?: boolean }) {
   const { state } = useApp();
   const { colors, styles } = useTheme();
-  const [month, setMonth] = useState(
-    () => new Date(new Date().getFullYear(), new Date().getMonth(), 1),
-  );
+  const reduced = useReducedMotion();
+  const [month, setMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const [selected, setSelected] = useState<string>();
-  const move = (delta: number) => {
-    setMonth((m) => new Date(m.getFullYear(), m.getMonth() + delta, 1));
-    setSelected(undefined);
-  };
-  const responder = useMemo(
-    () =>
-      PanResponder.create({
-        onMoveShouldSetPanResponder: (_, g) =>
-          Math.abs(g.dx) > 15 && Math.abs(g.dx) > Math.abs(g.dy) * 1.5,
-        onPanResponderRelease: (_, g) => {
-          if (Math.abs(g.dx) > 40) move(g.dx > 0 ? -1 : 1);
-        },
-      }),
-    [],
-  );
+  const [width, setWidth] = useState(0);
+  const [offset] = useState(() => new Animated.Value(0));
+  const moving = useRef(false);
+  const move = useCallback((delta: number) => {
+    if (moving.current || !width) return;
+    moving.current = true;
+    Animated.timing(offset, { toValue: -delta * width, duration: reduced ? 0 : 230, useNativeDriver: true })
+      .start(({ finished }) => {
+        if (finished) {
+          setSelected(undefined);
+          setMonth((m) => new Date(m.getFullYear(), m.getMonth() + delta, 1));
+        } else moving.current = false;
+      });
+  }, [offset, width, reduced]);
+  useLayoutEffect(() => { offset.setValue(0); moving.current = false; }, [month, width, offset]);
+  const [responder, setResponder] = useState<ReturnType<typeof PanResponder.create> | null>(null);
+  useEffect(() => {
+    const pan = PanResponder.create({
+    onMoveShouldSetPanResponder: (_, g) => !moving.current && Math.abs(g.dx) > 12 && Math.abs(g.dx) > Math.abs(g.dy) * 1.5,
+    onPanResponderMove: (_, g) => { if (!moving.current && !reduced) offset.setValue(Math.max(-width, Math.min(width, g.dx))); },
+    onPanResponderRelease: (_, g) => {
+      if (Math.abs(g.dx) > Math.min(60, width / 5) || Math.abs(g.vx) > 0.5) move(g.dx > 0 ? -1 : 1);
+      else Animated.spring(offset, { toValue: 0, useNativeDriver: true, overshootClamping: true }).start();
+    },
+    onPanResponderTerminate: () => { offset.setValue(0); },
+    });
+    const timer = setTimeout(() => setResponder(pan), 0);
+    return () => clearTimeout(timer);
+  }, [width, offset, move, reduced]);
   const sessions = completedSessions(state);
   const days = new Set(sessions.map((s) => localDay(s.startedAt)));
   const streakWeeks = achievementSummary(state).streakWeeks;
   const today = localDay(new Date());
   const currentWeekStart = startOfWeek(new Date(), state.weekStartsMonday);
-  const currentWeekKey = localDay(currentWeekStart);
-  const sessionsWithCompletedSets = new Set(completedSets(state).map((set) => set.sessionId));
-  const recordedWeeks = new Set(
-    sessions
-      .filter((session) => sessionsWithCompletedSets.has(session.id) && localDay(session.startedAt) <= today)
-      .map((session) => localDay(startOfWeek(new Date(session.startedAt), state.weekStartsMonday))),
-  );
-  const latestStreakWeek = new Date(currentWeekStart);
-  if (!recordedWeeks.has(currentWeekKey)) latestStreakWeek.setDate(latestStreakWeek.getDate() - 7);
-  const latestStreakWeekKey = localDay(latestStreakWeek);
-  const leading = state.weekStartsMonday
-    ? (month.getDay() + 6) % 7
-    : month.getDay();
-  const length = new Date(
-    month.getFullYear(),
-    month.getMonth() + 1,
-    0,
-  ).getDate();
-  const cells = Math.ceil((leading + length) / 7) * 7;
-  return (
-    <>
-      <Card style={{ padding: 10 }}>
-        <View {...responder.panHandlers}>
-          <View style={styles.row}>
-            <IconButton label="前の月" symbol="‹" onPress={() => move(-1)} />
-            <Text style={[styles.body, { fontWeight: '800' }]}>
-              {month.getFullYear() !== new Date().getFullYear() && `${month.getFullYear()}年 `}
-              {month.getMonth() + 1}月
-            </Text>
-            <IconButton label="次の月" symbol="›" onPress={() => move(1)} />
+  const sessionsWithSets = new Set(completedSets(state).map((set) => set.sessionId));
+  const recordedWeeks = new Set(sessions.filter((s) => sessionsWithSets.has(s.id) && localDay(s.startedAt) <= today)
+    .map((s) => localDay(startOfWeek(new Date(s.startedAt), state.weekStartsMonday))));
+  if (!recordedWeeks.has(localDay(currentWeekStart))) currentWeekStart.setDate(currentWeekStart.getDate() - 7);
+  const rowHeight = compact ? 32 : 38;
+  const renderMonth = (delta: number) => {
+    const date = new Date(month.getFullYear(), month.getMonth() + delta, 1);
+    const leading = state.weekStartsMonday ? (date.getDay() + 6) % 7 : date.getDay();
+    const length = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+    return <View key={delta} style={{ width }} aria-hidden={delta !== 0} accessibilityElementsHidden={delta !== 0} importantForAccessibility={delta ? 'no-hide-descendants' : 'auto'}>
+      <View style={styles.row}>
+        <IconButton label="前の月" symbol="‹" disabled={delta !== 0} onPress={() => move(-1)} />
+        <Text accessibilityLiveRegion="polite" style={[styles.body, { fontWeight: '700' }]}>{date.getFullYear() !== new Date().getFullYear() ? `${date.getFullYear()}年` : ''}{date.getMonth() + 1}月</Text>
+        <IconButton label="次の月" symbol="›" disabled={delta !== 0} onPress={() => move(1)} />
+      </View>
+       <View style={{ flexDirection: 'row' }}><View accessibilityLabel={`ストリーク ${streakWeeks}週`} style={{ flex: 1.15, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}><AppIcon name="flame" size={15} color={colors.primary} /><Text style={{ color: colors.primary, fontSize: 11, fontWeight: '800', marginLeft: 2 }}>{streakWeeks}</Text></View>
+        {(state.weekStartsMonday ? ['月', '火', '水', '木', '金', '土', '日'] : ['日', '月', '火', '水', '木', '金', '土']).map((label) => <Text key={label} style={[styles.small, { flex: 1, textAlign: 'center' }]}>{label}</Text>)}
+      </View>
+      {Array.from({ length: 6 }, (_, week) => {
+        const first = week * 7 - leading + 1;
+        const weekKey = localDay(startOfWeek(new Date(date.getFullYear(), date.getMonth(), first), state.weekStartsMonday));
+        const trained = recordedWeeks.has(weekKey);
+        return <View key={week} style={{ flexDirection: 'row' }}>
+          <View accessible accessibilityLabel={trained ? 'この週はトレーニング達成' : 'この週は未達成'} style={{ flex: 1.15, height: rowHeight, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+            <AppIcon name="flame" size={17} color={trained ? colors.primary : colors.line} />
           </View>
-          <View style={{ flexDirection: 'row' }}>
-            <View style={{ flex: 1.15 }} />
-            {(state.weekStartsMonday
-              ? ['月', '火', '水', '木', '金', '土', '日']
-              : ['日', '月', '火', '水', '木', '金', '土']
-            ).map((label) => (
-              <Text
-                key={label}
-                style={[styles.small, { flex: 1, textAlign: 'center' }]}
-              >
-                {label}
-              </Text>
-            ))}
-          </View>
-          {Array.from({ length: cells / 7 }, (_, week) => (
-            <View key={week} style={{ flexDirection: 'row' }}>
-              {(() => {
-                const firstDay = week * 7 - leading + 1;
-                const rowStart = new Date(month.getFullYear(), month.getMonth(), firstDay);
-                const weekStartKey = localDay(startOfWeek(rowStart, state.weekStartsMonday));
-                const weekTrained = recordedWeeks.has(weekStartKey);
-                const streakAtWeek = streakWeeks > 0 && weekStartKey === latestStreakWeekKey ? streakWeeks : undefined;
-                return (
-                  <View
-                    accessible
-                    accessibilityLabel={streakAtWeek ? `現在のストリーク${streakAtWeek}週` : weekTrained ? 'この週はトレーニング達成' : 'この週は未達成'}
-                    style={{ flex: 1.15, height: 38, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 1 }}
-                  >
-                    <WeekStreakIcon active={weekTrained} color={colors.primary} mutedColor={colors.muted} glowColor={colors.orange} />
-                    {streakAtWeek !== undefined && (
-                      <Text style={{ color: colors.primary, fontSize: 10, fontWeight: '800' }}>{streakAtWeek}</Text>
-                    )}
-                  </View>
-                );
-              })()}
-              {Array.from({ length: 7 }, (_, col) => {
-                const day = week * 7 + col - leading + 1;
-                const key = localDay(
-                  new Date(month.getFullYear(), month.getMonth(), day),
-                );
-                const trained = days.has(key);
-                return (
-                  <View
-                    key={col}
-                    style={{
-                      flex: 1,
-                      height: 38,
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}
-                  >
-                    {day > 0 && day <= length && (
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel={`${month.getMonth() + 1}月${day}日${key === today ? '、今日' : ''}${trained ? '、トレーニング記録あり' : ''}`}
-                        disabled={!trained}
-                        onPress={() => setSelected(key)}
-                        style={{
-                          width: 32,
-                          height: 32,
-                          borderRadius: 12,
-                          backgroundColor:
-                            key === today
-                              ? colors.soft
-                              : trained
-                                ? colors.primary
-                                : 'transparent',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                        }}
-                      >
-                        <Text
-                          style={{
-                            color:
-                              trained && key !== today ? colors.bg : colors.ink,
-                          }}
-                        >
-                          {day}
-                        </Text>
-                        {key === today && (
-                          <View
-                            style={{
-                              width: 12,
-                              height: 2,
-                              backgroundColor: colors.primary,
-                            }}
-                          />
-                        )}
-                      </Pressable>
-                    )}
-                  </View>
-                );
-              })}
-            </View>
-          ))}
-        </View>
-      </Card>
-      {selected && (
-        <Sheet
-          title={new Date(`${selected}T12:00:00`).toLocaleDateString('ja-JP', {
-            month: 'long',
-            day: 'numeric',
-            weekday: 'short',
+          {Array.from({ length: 7 }, (_, col) => {
+            const day = first + col;
+            const key = localDay(new Date(date.getFullYear(), date.getMonth(), day));
+            const done = days.has(key);
+            return <View key={col} style={{ flex: 1, height: rowHeight, alignItems: 'center', justifyContent: 'center' }}>
+              {day > 0 && day <= length && <Pressable accessibilityRole="button" accessibilityLabel={`${date.getMonth() + 1}月${day}日${key === today ? '、今日' : ''}${done ? '、トレーニング記録あり' : ''}`}
+                disabled={!done || delta !== 0} onPress={() => setSelected(key)}
+                style={{ width: 30, height: 30, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: key === today ? colors.soft : done ? colors.primary : 'transparent', borderWidth: key === today ? 1 : 0, borderColor: colors.primary }}>
+                <Text style={{ color: done && key !== today ? colors.bg : colors.ink }}>{day}</Text>
+              </Pressable>}
+            </View>;
           })}
-          onClose={() => setSelected(undefined)}
-        >
-          <SessionDetails
-            sessionIds={sessions
-              .filter((s) => localDay(s.startedAt) === selected)
-              .map((s) => s.id)}
-          />
-        </Sheet>
-      )}
-    </>
-  );
+        </View>;
+      })}
+    </View>;
+  };
+  return <>
+    <Card style={{ padding: 8 }}>
+      <View onLayout={(e) => setWidth(e.nativeEvent.layout.width)} style={{ overflow: 'hidden' }} {...responder?.panHandlers}>
+        <Animated.View style={{ flexDirection: 'row', width: width * 3, marginLeft: -width, transform: [{ translateX: offset }] }}>
+          {[-1, 0, 1].map(renderMonth)}
+        </Animated.View>
+      </View>
+    </Card>
+    {selected && <Sheet title={new Date(`${selected}T12:00:00`).toLocaleDateString('ja-JP', { month: 'long', day: 'numeric', weekday: 'short' })} onClose={() => setSelected(undefined)}>
+      <SessionDetails sessionIds={sessions.filter((s) => localDay(s.startedAt) === selected).map((s) => s.id)} />
+    </Sheet>}
+  </>;
 }

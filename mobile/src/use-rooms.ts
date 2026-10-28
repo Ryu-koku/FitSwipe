@@ -6,14 +6,17 @@ import {
   flushPendingPosts,
   RoomsApiError,
 } from './rooms';
-import type { RoomDetail } from './types';
+import type { RoomComparison, RoomDetail } from './types';
+import { japanMonth } from './automatic-sharing';
 
 const client = createRoomsClient();
 
 export function useRooms() {
-  const { state, getState, persist, update } = useApp();
+  const { state, getState, persist, update, syncRoomsNow } = useApp();
   const [detail, setDetail] = useState<RoomDetail>();
   const [roomId, setRoomId] = useState<string>();
+  const [comparison, setComparison] = useState<RoomComparison>();
+  const [createdRoomId, setCreatedRoomId] = useState<string>();
   const selected = useRef(roomId);
   const [busy, setBusy] = useState(false);
   const running = useRef(false);
@@ -26,14 +29,16 @@ export function useRooms() {
   }, [getState]);
   const load = useCallback(
     async (id: string) => {
-      const result = await client.detail(identity(), id);
+      const account = identity();
+      const [result, compared] = await Promise.all([client.detail(account, id), client.comparison(account, id, japanMonth())]);
+      if (getState().roomIdentity?.id !== account.id) return;
       update((s) => ({
         ...s,
         roomDetails: { ...s.roomDetails, [id]: result },
       }));
-      if (selected.current === id) setDetail(result);
+      if (selected.current === id) { setDetail(result); setComparison(compared); }
     },
-    [identity, update],
+    [identity, update, getState],
   );
   const flush = useCallback(
     () =>
@@ -43,7 +48,12 @@ export function useRooms() {
     [getState, identity, persist],
   );
   const refresh = useCallback(async () => {
-    const rooms = await client.list(identity());
+    // A queued automatic upload must not prevent reading a room or confirming
+    // that sharing was stopped. The provider exposes the retry error separately.
+    await syncRoomsNow().catch(() => {});
+    const account = identity();
+    const rooms = await client.list(account);
+    if (getState().roomIdentity?.id !== account.id) return;
     update((s) => ({
       ...s,
       rooms,
@@ -60,7 +70,7 @@ export function useRooms() {
     }
     await flush();
     if (selected.current) await load(selected.current);
-  }, [flush, identity, load, update]);
+  }, [flush, identity, load, update, syncRoomsNow, getState]);
   const run = useCallback(async (action: () => Promise<void>) => {
     if (running.current) return;
     running.current = true;
@@ -84,12 +94,14 @@ export function useRooms() {
     selected.current = undefined;
     setRoomId(undefined);
     setDetail(undefined);
+    setComparison(undefined);
   }, []);
   const open = useCallback(
     async (id: string) => {
       selected.current = id;
       setRoomId(id);
       setDetail(getState().roomDetails[id]);
+      setComparison(undefined);
       await load(id);
     },
     [getState, load],
@@ -100,6 +112,9 @@ export function useRooms() {
     error,
     notice,
     detail,
+    comparison,
+    createdRoomId,
+    dismissCreated: () => setCreatedRoomId(undefined),
     roomId,
     run,
     close,
@@ -115,6 +130,7 @@ export function useRooms() {
       const room = await client.create(identity(), name);
       await refresh();
       await open(room.id);
+      setCreatedRoomId(room.id);
     },
     join: async (code: string) => {
       const room = await client.join(identity(), code);
@@ -137,6 +153,24 @@ export function useRooms() {
         return;
       }
       if (selected.current) await load(selected.current);
+    },
+    setSharing: async (enabled: boolean) => {
+      const id = selected.current;
+      if (!id) return;
+      await client.sharing(identity(), id, enabled);
+      // Invalidate per-device receipts when re-enabling so missing copies upload.
+      await persist((s) => {
+        const receipts = { ...s.automaticRoomReceipts }; delete receipts[id];
+        return { ...s, automaticRoomReceipts: receipts };
+      });
+      await refresh();
+    },
+    moreComparison: async () => {
+      const id = selected.current;
+      if (!id || !comparison?.nextCursor) return;
+      const page = await client.comparison(identity(), id, comparison.month, comparison.nextCursor);
+      if (selected.current !== id) return;
+      setComparison((old) => old && old.month === page.month ? { ...page, posts: [...old.posts, ...page.posts.filter((p) => !old.posts.some((v) => v.id === p.id))] } : page);
     },
     more: async () => {
       const id = selected.current;

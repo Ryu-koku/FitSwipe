@@ -1,6 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { seedState, trainingLevel, strengthGrowth } = require('../src/logic.ts');
+const { seedState, trainingLevel, strengthGrowth, estimatedOneRepMax, lastExerciseTrainingDays } = require('../src/logic.ts');
 
 function fixture() {
   const state = seedState();
@@ -33,6 +33,21 @@ test('growth uses the daily best Epley estimate and includes declines', () => {
     { date: '2026-10-01', value: 75 },
     { date: '2026-10-03', value: 60 },
   ]);
+});
+
+test('estimated RM is validated and uses the Epley formula', () => {
+  assert.equal(estimatedOneRepMax(100, 1), 100);
+  assert.equal(estimatedOneRepMax(100, 10), 130);
+  assert.equal(estimatedOneRepMax(0, 5), undefined);
+  assert.equal(estimatedOneRepMax(100, 13), undefined);
+});
+
+test('last trained days uses only completed sets in completed sessions', () => {
+  const { state, add } = fixture();
+  assert.equal(lastExerciseTrainingDays(state, 1, new Date('2026-10-29T12:00:00')), undefined);
+  add(1, '2026-10-25', 50, 5);
+  add(2, '2026-10-27', 50, 5, {}, 'IN_PROGRESS');
+  assert.equal(lastExerciseTrainingDays(state, 1, new Date('2026-10-29T12:00:00')), 4);
 });
 
 test('growth excludes invalid reps, weights, dates, incomplete and other exercise records', () => {

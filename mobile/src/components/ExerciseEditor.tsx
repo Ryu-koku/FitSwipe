@@ -18,6 +18,7 @@ export function ExerciseEditor({
   const { styles } = useTheme();
   const [name, setName] = useState(exercise?.name ?? '');
   const [mode, setMode] = useState<ExerciseMode>(exercise?.mode ?? 'NORMAL');
+  const [muscleGroup, setMuscleGroup] = useState(exercise?.muscleGroup ?? '未分類');
   const [weight, setWeight] = useState(
     String(
       exercise
@@ -51,7 +52,7 @@ export function ExerciseEditor({
       nextId: Math.max(s.nextId, id + 1),
       exercises: exercise
         ? s.exercises.map((e) =>
-            e.id === id ? { ...e, name: name.trim() } : e,
+            e.id === id ? { ...e, name: name.trim(), muscleGroup: muscleGroup.trim() || '未分類' } : e,
           )
         : [
             ...s.exercises,
@@ -61,6 +62,7 @@ export function ExerciseEditor({
               mode,
               sortOrder: s.exercises.length,
               archived: false,
+              muscleGroup: muscleGroup.trim() || '未分類',
             },
           ],
       exerciseWeightSteps: exercise
@@ -92,6 +94,7 @@ export function ExerciseEditor({
         onChangeText={setName}
         maxLength={exercise ? 32 : undefined}
       />
+      <Field label="トレーニング部位" value={muscleGroup} onChangeText={setMuscleGroup} maxLength={24} />
       {!exercise && (
         <View style={[styles.wrap, { marginTop: 12 }]}>
           <Chip

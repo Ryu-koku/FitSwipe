@@ -25,6 +25,12 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     plugins: [
       ...(config.plugins ?? []),
       './plugins/with-play-upload-signing',
+      ['@appeeky/expo-healthkit', {
+        healthSharePermission: false,
+        healthUpdatePermission: false,
+        healthConnectPrivacyPolicyUrl: 'https://kintorememo.jp/privacy/',
+        healthConnectPermissions: ['READ_WEIGHT', 'READ_HEIGHT', 'READ_BODY_FAT'],
+      }],
       // Android uses an explicit webClientId (no google-services.json).
       // The library autolinks its Credential Manager dependencies. Its Expo
       // plugin is needed for the iOS redirect scheme / Pod configuration.

@@ -5,6 +5,14 @@ let keysExpireAt = 0;
 
 export class GoogleAuthError extends Error {}
 
+export function googleAndroidPresenters(env) {
+  return [env.GOOGLE_ANDROID_CLIENT_ID, env.GOOGLE_ANDROID_CLIENT_IDS]
+    .filter(Boolean)
+    .flatMap((value) => value.split(","))
+    .map((value) => value.trim())
+    .filter(Boolean);
+}
+
 function decode(value) {
   if (!/^[A-Za-z0-9_-]+$/u.test(value)) throw new GoogleAuthError("Invalid token");
   return Uint8Array.from(atob(value.replaceAll("-", "+").replaceAll("_", "/")), (c) => c.charCodeAt(0));
@@ -36,7 +44,7 @@ export async function verifyGoogleToken(token, audience, options = {}) {
   if (!keys) {
     if (!cachedKeys || keysExpireAt <= now) {
       const result = await fetch("https://www.googleapis.com/oauth2/v3/certs", {
-        redirect: "error", signal: AbortSignal.timeout(10_000),
+        redirect: "manual", signal: AbortSignal.timeout(10_000),
       });
       if (!result.ok) throw new GoogleAuthError("Google keys unavailable");
       const data = await result.json();

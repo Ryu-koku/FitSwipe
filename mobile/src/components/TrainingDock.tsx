@@ -5,15 +5,18 @@ import { useApp } from '../context';
 import { selectedPreset } from '../logic';
 import { feedback, useTheme } from '../ui';
 import { prepareRestNotifications } from '../rest-notifications';
+import { AppIcon } from './AppIcon';
+import { useReducedMotion } from '../use-reduced-motion';
 
 export function TrainingDock() {
   const path = usePathname();
   const preparing = path === '/prepare';
-  const visible = ['/', '/prepare', '/rooms'].includes(path);
+  const visible = ['/', '/prepare', '/rooms', '/complete'].includes(path);
   const { state, startWorkout } = useApp();
   const { colors, styles } = useTheme();
   const preset = selectedPreset(state);
   const active = state.sessions.some((s) => s.status === 'IN_PROGRESS');
+  const reducedMotion = useReducedMotion();
   const canStart =
     active ||
     !!preset?.exercises.some((c) =>
@@ -46,10 +49,10 @@ export function TrainingDock() {
   useEffect(() => {
     Animated.timing(progress, {
       toValue: preparing ? 1 : 0,
-      duration: 220,
+      duration: reducedMotion ? 0 : 220,
       useNativeDriver: true,
     }).start();
-  }, [preparing, progress]);
+  }, [preparing, progress, reducedMotion]);
   if (!visible) return null;
   return (
     <View
@@ -63,6 +66,7 @@ export function TrainingDock() {
       }}
     >
       <Animated.View
+        aria-hidden={preparing}
         pointerEvents={preparing ? 'none' : 'auto'}
         accessibilityElementsHidden={preparing}
         importantForAccessibility={preparing ? 'no-hide-descendants' : 'auto'}
@@ -71,9 +75,9 @@ export function TrainingDock() {
           bottom: 0,
           left: 0,
           right: 0,
-          height: 72,
-          borderTopLeftRadius: 28,
-          borderTopRightRadius: 28,
+          height: 80,
+          borderTopWidth: 1,
+          borderColor: colors.line,
           backgroundColor: colors.surface,
           flexDirection: 'row',
           alignItems: 'center',
@@ -94,20 +98,20 @@ export function TrainingDock() {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="ホーム"
-          onPress={() => router.replace('/')}
+          onPress={() => { if (path !== '/') router.replace('/'); }}
           style={{ flex: 1, alignItems: 'center', padding: 16 }}
         >
-          <Text style={[styles.tab, { paddingVertical: 0 }]}>⌂</Text>
+          <AppIcon name="home" color={path === '/' ? colors.primary : colors.muted} />
           <Text style={path === '/' ? styles.tab : styles.small}>ホーム</Text>
         </Pressable>
         <View style={{ width: 104 }} />
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="ルーム"
-          onPress={() => router.replace('/rooms')}
+          onPress={() => { if (path !== '/rooms') router.replace('/rooms'); }}
           style={{ flex: 1, alignItems: 'center', padding: 16 }}
         >
-          <Text style={[styles.tab, { paddingVertical: 0 }]}>♧</Text>
+          <AppIcon name="people" color={path === '/rooms' ? colors.primary : colors.muted} />
           <Text style={path === '/rooms' ? styles.tab : styles.small}>
             ルーム
           </Text>
@@ -125,7 +129,7 @@ export function TrainingDock() {
             ? active
               ? 'トレーニングを再開'
               : 'トレーニングを開始'
-            : 'トレーニングを準備'
+            : active ? 'トレーニングを再開' : 'トレーニングを準備'
         }
         accessibilityState={{ disabled: starting || (preparing && !canStart) }}
         disabled={starting || (preparing && !canStart)}
@@ -149,15 +153,7 @@ export function TrainingDock() {
           opacity: preparing && !canStart ? 0.4 : 1,
         }}
       >
-        <Text
-          style={{
-            color: colors.bg,
-            fontSize: preparing ? 32 : 42,
-            fontWeight: '500',
-          }}
-        >
-          {starting ? '…' : preparing ? '▶' : '+'}
-        </Text>
+        {starting ? <Text style={{ color: colors.bg }}>…</Text> : <AppIcon name={preparing || active ? 'play' : 'plus'} color={colors.bg} size={32} />}
       </Pressable>
     </View>
   );
