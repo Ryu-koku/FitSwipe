@@ -20,3 +20,6 @@ rooms-server/.env
 rooms-server/*.sqlite3*
 rooms-server/cloudflare/.wrangler/
 rooms-server/cloudflare/.dev.vars
+akapen/*.answer.json
+akapen/*.answer.txt
+akapen/.akapen-serve.log

@@ -73,3 +73,15 @@ WORKER_URL=http://127.0.0.1:8790 SYNC_TEST_PERSIST=/tmp/opencode/fitswipe-sync-l
 - EASプロジェクトのproduction環境へ`EXPO_PUBLIC_ROOMS_URL`を設定済み。
 - Google Cloudの既存プロジェクト `fitswipe-play-releases` のAuth Platform初期設定を準備。**ユーザーデータポリシーへの所有者の同意待ち**で、OAuthクライアントはまだ作成していない。
 - そのためWorkerのGoogleログインは設定未完了を示す503で拒否している。Google OAuthクライアントIDの両側への設定・署名登録・新規Androidビルド・実機認証は未完了。設定未完了のアプリを内部テストへ提出したとは扱わない。
+
+### 所有者の同意後の設定
+
+- 所有者によるポリシー同意を確認し、Google Auth Platformの構成を完了した。
+- 同じGoogle CloudプロジェクトにWebクライアント（バックエンドのaudience用）とAndroidクライアントを作成した。クライアントシークレットはこの構成では使用せず、リポジトリやアプリには保存しない。
+- Android OAuthには`dev.local.fitlogsolo`と、Play Consoleから確認した**アプリ署名鍵**のSHA-1を登録した。アップロード鍵のSHA-1とは異なる。現在はPlay経由の署名を対象とし、別署名のAPKを直接インストールする場合は別途登録が必要。
+- 公開ステータスは「テスト中」のまま、本人のアカウント1件だけをOAuthテストユーザーへ登録済み。一般公開やテスターの追加は行っていない。
+- EAS production環境の`EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`とWorkerの`GOOGLE_WEB_CLIENT_ID`を一致させ、Workerへ`GOOGLE_ANDROID_CLIENT_ID`も設定して再公開済み。
+- 公開WorkerのGoogleログインは、設定不足の503ではなく不正トークン拒否の401を返すことを確認した。これは実Googleログイン成功の検証ではない。
+- そのEAS環境変数と既存のPlayアップロード鍵を使い、versionCode **38** のAndroidビルドを開始した。内部テストへの提出もキューへ登録した。提出完了・Play反映・実機認証は個別に確認する。
+  - Build: `50c9e1e2-c72d-40ed-b2b2-8f17610aa2e8`
+  - Submission: `2357ffbf-3cb8-4c73-bb83-6f0487f15e33`

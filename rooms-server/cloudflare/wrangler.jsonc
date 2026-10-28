@@ -4,6 +4,10 @@
   "main": "worker.mjs",
   "compatibility_date": "2026-05-25",
   "workers_dev": true,
+  "vars": {
+    "GOOGLE_WEB_CLIENT_ID": "338806163060-66m1b1iodo2t423tkdi15qlfajsocbgv.apps.googleusercontent.com",
+    "GOOGLE_ANDROID_CLIENT_ID": "338806163060-lisvbgnj73hutpghgo1fiat17mblrkum.apps.googleusercontent.com"
+  },
   "observability": { "enabled": true },
   "d1_databases": [
     {
