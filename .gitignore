@@ -12,6 +12,7 @@ captures/
 *.keystore
 *.p12
 signing/
+*.html
 
 # Room server runtime data and credentials
 rooms-server/__pycache__/
