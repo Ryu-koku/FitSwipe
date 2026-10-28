@@ -102,6 +102,7 @@ export type AppState = {
   sets: WorkoutSet[];
   presets: WorkoutPreset[];
   selectedPresetId?: string;
+  homeGrowthExerciseId?: number;
   themeMode: ThemeMode;
   weekStartsMonday: boolean;
   weightStepKg: number;

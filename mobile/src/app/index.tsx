@@ -13,6 +13,7 @@ import {
   useTheme,
 } from '../ui';
 import { WorkoutCalendar } from '../components/WorkoutCalendar';
+import { StrengthGrowth } from '../components/StrengthGrowth';
 
 const metrics = [
   ['days', '累計トレーニング日数', '同じ日に複数回行っても1日として数えます。'],
@@ -41,6 +42,7 @@ export default function HomeScreen() {
   const { state, update } = useApp();
   const { colors, styles } = useTheme();
   const [editing, setEditing] = useState(false);
+  const [showExtras, setShowExtras] = useState(false);
   const [draft, setDraft] = useState(state.visibleAchievementMetrics);
   const summary = achievementSummary(state);
   const active = state.sessions.find((s) => s.status === 'IN_PROGRESS');
@@ -83,8 +85,21 @@ export default function HomeScreen() {
       )}
       <SectionTitle>カレンダー</SectionTitle>
       <WorkoutCalendar />
+      <SectionTitle>これまでの頑張り</SectionTitle>
+      <Pressable accessibilityRole="button" onPress={() => Alert.alert('継続週数について', metrics[3][2])}>
+        <Card>
+          <View style={styles.row}>
+            <Text style={styles.body}>ストリーク</Text>
+            <Text style={[styles.metric, { color: colors.primary }]}>{summary.streakWeeks} 週</Text>
+          </View>
+          <Text style={styles.small}>{summary.streakWeeks > 0 ? '今週も積み重ねよう' : '今週から積み重ねよう'}</Text>
+        </Card>
+      </Pressable>
+      <StrengthGrowth />
+      <Button label={showExtras ? 'ほかの実績を閉じる' : 'ほかの実績を見る'} secondary onPress={() => setShowExtras(!showExtras)} />
+      {showExtras && <>
       <View style={styles.row}>
-        <SectionTitle>これまでの頑張り</SectionTitle>
+        <SectionTitle>ほかの実績</SectionTitle>
         <Pressable
           accessibilityRole="button"
           onPress={() => {
@@ -101,7 +116,8 @@ export default function HomeScreen() {
             ([key]) =>
               state.visibleAchievementMetrics.includes(key) &&
               key !== 'big3' &&
-              key !== 'streak',
+              key !== 'streak' &&
+              key !== 'days',
           )
           .map(([key, label, explanation]) => (
             <Pressable
@@ -150,34 +166,13 @@ export default function HomeScreen() {
           </Card>
         </Pressable>
       )}
-      {state.visibleAchievementMetrics.includes('streak') && (
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => Alert.alert('継続週数について', metrics[3][2])}
-        >
-          <Card style={{ alignItems: 'center', paddingVertical: 24 }}>
-            <Text style={styles.body}>ストリーク</Text>
-            <Text style={{ fontSize: 64 }}>♨</Text>
-            <Text
-              style={[styles.metric, { color: colors.primary, fontSize: 42 }]}
-            >
-              {summary.streakWeeks}
-            </Text>
-            <Text style={styles.body}>週</Text>
-            <Text style={styles.small}>
-              {summary.streakWeeks > 0
-                ? '今週も積み重ねよう'
-                : '今週から積み重ねよう'}
-            </Text>
-          </Card>
-        </Pressable>
-      )}
-      {!state.visibleAchievementMetrics.length && (
+      {!state.visibleAchievementMetrics.some((key) => key !== 'days' && key !== 'streak') && (
         <Text style={styles.small}>編集から表示する項目を選べます</Text>
       )}
+      </>}
       {editing && (
         <Sheet title="表示する項目" onClose={() => setEditing(false)}>
-          {metrics.map(([key, label]) => (
+          {metrics.filter(([key]) => key !== 'days' && key !== 'streak').map(([key, label]) => (
             <View key={key} style={[styles.row, { marginBottom: 12 }]}>
               <Text style={styles.body}>{label}</Text>
               <Switch

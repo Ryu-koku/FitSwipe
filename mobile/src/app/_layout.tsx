@@ -1,4 +1,4 @@
-import { Stack } from 'expo-router';
+import { Stack, usePathname } from 'expo-router';
 import React from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { AppProvider, useApp } from '../context';
@@ -8,6 +8,7 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { TrainingDock } from '../components/TrainingDock';
 import { RestNotifications } from '../rest-notifications';
 import { AccountPanel } from '../components/AccountPanel';
+import { trainingLevel } from '../logic';
 
 export default function Layout() {
   return (
@@ -23,6 +24,8 @@ export default function Layout() {
 
 function AppLayout() {
   const { ready, error, state } = useApp();
+  const pathname = usePathname();
+  const { level, trainingDays } = trainingLevel(state);
   const { colors, styles, isDark } = useTheme();
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }}>
@@ -40,6 +43,13 @@ function AppLayout() {
       ) : ready ? (
         <>
           <RestNotifications />
+          {pathname !== '/workout' && (
+            <View style={{ paddingHorizontal: 18, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colors.line }}>
+              <Text style={styles.body} accessibilityLabel={`筋トレレベル${level}、累計${trainingDays}日`}>
+                Lv{level}　累計トレーニング {trainingDays.toLocaleString('ja-JP')}日
+              </Text>
+            </View>
+          )}
           <View style={{ flex: 1 }}>
             <Stack
               screenOptions={{

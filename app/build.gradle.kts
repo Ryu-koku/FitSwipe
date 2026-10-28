@@ -13,11 +13,16 @@ android {
         applicationId = "dev.local.fitlogsolo"
         minSdk = 28
         targetSdk = 36
-        versionCode = 37
-        versionName = "2.7.1"
+        versionCode = providers.environmentVariable("FITLOG_VERSION_CODE").orNull?.toInt() ?: 37
+        versionName = "2.7.3"
         val roomsUrl = providers.gradleProperty("fitSwipeRoomsUrl")
             .orElse(providers.environmentVariable("FITSWIPE_ROOMS_URL")).getOrElse("")
         require(roomsUrl.isEmpty() || roomsUrl.startsWith("https://") || roomsUrl.startsWith("http://10.0.2.2:") || roomsUrl.startsWith("http://127.0.0.1:"))
+        if (providers.environmentVariable("FITLOG_REQUIRE_ROOMS").orNull == "true") {
+            require(roomsUrl.startsWith("https://")) {
+                "Internal releases require an HTTPS rooms API URL"
+            }
+        }
         buildConfigField("String", "ROOMS_BASE_URL", "\"${roomsUrl.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -30,7 +35,7 @@ android {
             if (keyPath != null) {
                 storeFile = file(keyPath)
                 storePassword = providers.environmentVariable("FITLOG_UPLOAD_PASSWORD").get()
-                keyAlias = "fitlog-upload"
+                keyAlias = providers.environmentVariable("FITLOG_UPLOAD_KEY_ALIAS").getOrElse("fitlog-upload")
                 keyPassword = storePassword
             }
         }
