@@ -22,8 +22,22 @@ if [[ -z "$serial" ]]; then
   fi
   serial="${devices[0]}"
 fi
-export FITSWIPE_ROOMS_URL="${FITSWIPE_ROOMS_URL:-https://fitswipe-rooms-api.prompt-tem.workers.dev}"
-export FITLOG_REQUIRE_ROOMS=true
-bash ./gradlew testDebugUnitTest assembleDebug
-adb -H 127.0.0.1 -P "$port" -s "$serial" install -r app/build/outputs/apk/debug/app-debug.apk
-adb -H 127.0.0.1 -P "$port" -s "$serial" shell am start -n dev.local.fitlogsolo.usbdev/dev.local.fitlogsolo.MainActivity
+export EXPO_PUBLIC_ROOMS_URL="${EXPO_PUBLIC_ROOMS_URL:-${FITSWIPE_ROOMS_URL:-https://fitswipe-rooms-api.prompt-tem.workers.dev}}"
+export FITSWIPE_APP_VARIANT=development
+export EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID="${EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID:-}"
+
+pnpm --dir mobile typecheck
+pnpm --dir mobile lint
+pnpm --dir mobile test
+pnpm --dir mobile exec expo prebuild --platform android --no-install --no-clean
+
+gradle_wrapper="mobile/android/gradlew"
+if [[ ! -x "$gradle_wrapper" ]]; then
+  chmod +x "$gradle_wrapper"
+fi
+"$gradle_wrapper" -p mobile/android :app:assembleRelease
+
+apk="mobile/android/app/build/outputs/apk/release/app-release.apk"
+package="dev.local.fitlogsolo.expodev"
+adb -H 127.0.0.1 -P "$port" -s "$serial" install -r "$apk"
+adb -H 127.0.0.1 -P "$port" -s "$serial" shell monkey -p "$package" -c android.intent.category.LAUNCHER 1

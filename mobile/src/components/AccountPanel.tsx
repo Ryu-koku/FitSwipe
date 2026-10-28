@@ -11,7 +11,7 @@ function confirm(message: string) {
 }
 
 export function AccountPanel({ onboarding = false }: { onboarding?: boolean }) {
-  const { state, cloudBusy, syncError, login, logout, deleteCloudAccount, syncNow, persist, restoreGuest } = useApp();
+  const { state, cloudBusy, syncError, login, logout, deleteCloudAccount, syncNow, restoreGuest } = useApp();
   const { styles } = useTheme();
   const [error, setError] = useState<string>();
   const run = (work: () => Promise<unknown>) => {
@@ -19,13 +19,12 @@ export function AccountPanel({ onboarding = false }: { onboarding?: boolean }) {
     void work().catch((e: unknown) => setError(e instanceof Error ? e.message : '操作できませんでした'));
   };
   return <Card>
-    <SectionTitle>{state.cloud ? 'アカウント・同期' : '記録をアカウントに保存'}</SectionTitle>
-    <Text style={styles.body}>{state.cloud ? `${state.cloud.identity.name}でログイン中` : 'Googleログインを推奨します。ログインしなくても記録できます。'}</Text>
+    <SectionTitle>{onboarding ? 'Googleログインが必要です' : 'アカウント・同期'}</SectionTitle>
+    <Text style={styles.body}>{state.cloud ? `${state.cloud.identity.name}でログイン中` : onboarding ? 'FitSwipeのすべての機能を使うには、Googleログインしてください。' : 'Googleログインすると、記録をアカウントに保存できます。'}</Text>
     <Text style={styles.small}>ログインすると記録・日付・種目・プリセット・設定をアプリのサーバーへ保存します。Google Driveには保存しません。ルームの友達には、自分で共有した記録だけが見えます。</Text>
     {!!state.cloud && <Text style={styles.small}>未送信 {state.cloud.pending.length}件 · 最終同期 {state.cloud.lastSynced ? new Date(state.cloud.lastSynced).toLocaleString() : 'まだ完了していません'}</Text>}
     {(error || syncError) && <Text accessibilityRole="alert" style={styles.small}>{error ?? syncError}</Text>}
     {!cloudBusy && <Button label={state.cloud ? 'Googleで再ログイン' : 'Googleでログイン'} onPress={() => run(() => login(confirm))} />}
-    {!state.cloud && onboarding && !cloudBusy && <Button secondary label="ログインしないで使う" onPress={() => run(() => persist((s) => ({ ...s, loginPromptDismissed: true })))} />}
     {!state.cloud && !onboarding && !cloudBusy && <Button secondary label="ログイン前の保管データを戻す" onPress={() => Alert.alert('端末の保管データを戻す', '現在のゲスト記録と保管データを入れ替えます。サーバーへは送信しません。', [
       { text: 'キャンセル', style: 'cancel' }, { text: '入れ替える', onPress: () => run(restoreGuest) },
     ])} />}

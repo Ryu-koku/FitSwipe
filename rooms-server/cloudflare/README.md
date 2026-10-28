@@ -1,6 +1,6 @@
 # Cloudflare Worker API
 
-Cloudflare-hosted implementation of the room API used by the Android app. It uses a Workers `workers.dev` URL and D1; it does not require a custom domain, an always-on PC, or an exposed home network.
+Cloudflare-hosted implementation of the room API used by the Expo app. It uses a Workers `workers.dev` URL and D1; it does not require a custom domain, an always-on PC, or an exposed home network.
 
 ## Local check
 
@@ -28,16 +28,6 @@ wrangler deploy
 
 Wrangler prints the Worker URL, normally `https://fitswipe-rooms-api.<account-subdomain>.workers.dev`. Confirm `GET /health` returns `{"status":"ok"}` before building the Android release.
 
-Build the Play upload bundle with the Worker URL and the existing Play upload keystore configured through environment variables. Keep the password in a local secret manager or read it into the environment without putting it on the command line:
-
-```sh
-export FITSWIPE_ROOMS_URL=https://fitswipe-rooms-api.<account-subdomain>.workers.dev
-export FITLOG_UPLOAD_KEYSTORE=/path/to/upload.p12
-read -rs FITLOG_UPLOAD_PASSWORD
-export FITLOG_UPLOAD_PASSWORD
-./gradlew :app:bundleRelease
-```
-
-`read` waits for the password on standard input; paste it without echoing, then press Enter. Never commit the keystore or password. The bundle is written to `app/build/outputs/bundle/release/app-release.aab`; upload that AAB to the app's internal testing track in Play Console and publish the test release there.
+Play internal-test builds are generated from `mobile/` by `.github/workflows/play-internal.yml`. Configure the Worker URL, existing Play upload keystore, Google Play service-account JSON, and Google Web OAuth client ID as documented in `docs/automatic-internal-release.md`. The workflow uses a temporary keystore and uploads only to the internal testing track; never commit credentials.
 
 The Worker preserves the Android API contract: account tokens are stored as SHA-256 hashes; room membership gates member and post reads; invitation codes use cryptographically secure randomness; shared workouts are validated and idempotent; and the D1 schema cascades room/account deletion. Cloudflare rate-limit bindings are approximate per-location limits and do not store client IPs in the application database.

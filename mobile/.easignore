@@ -1,0 +1,16 @@
+node_modules/
+.expo/
+.claude/
+dist/
+web-build/
+android/
+ios/
+.env*
+credentials.json
+google-service-account*.json
+*.p12
+*.jks
+*.keystore
+*.key
+*.pem
+*.tsbuildinfo

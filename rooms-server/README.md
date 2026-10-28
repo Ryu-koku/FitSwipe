@@ -23,15 +23,14 @@ Caddyが証明書の取得・更新とHTTPSの終端を担当します。TLSの�
 
 このPCで一時運用する場合は、APIが起動したあとに `tailscale funnel --bg --https=8443 http://127.0.0.1:8787` でHTTPS公開できます。Funnelの利用権限が必要です。PCが停止・スリープしている間は利用できません。解除は `tailscale funnel --https=8443 off` です。他のFunnel設定を消す `reset` は使いません。
 
-## Androidへの接続先設定
+## Expoアプリへの接続先設定
 
 ```sh
-FITSWIPE_ROOMS_URL=https://rooms.example.com ./gradlew :app:assembleDebug
-# または
-./gradlew -PfitSwipeRoomsUrl=https://rooms.example.com :app:assembleRelease
+cd mobile
+EXPO_PUBLIC_ROOMS_URL=https://rooms.example.com pnpm android
 ```
 
-接続先が未設定のビルドでは、ルームは「準備中」と表示し、架空のメンバーや投稿は表示しません。接続先はHTTPSを使い、認証トークンを付けたリダイレクトには追従しません。ローカル開発に限りdebugビルドは `http://10.0.2.2:8787` / `http://127.0.0.1:8787` を指定できます。Android側の平文通信許可はdebugマニフェストだけに含めます。
+接続先が未設定のビルドでは、ルームは「準備中」と表示し、架空のメンバーや投稿は表示しません。接続先はHTTPSを使い、認証トークンを付けたリダイレクトには追従しません。ローカル開発に限り `http://10.0.2.2:8787` / `http://127.0.0.1:8787` を指定できます。
 
 ## 共有のしくみ
 

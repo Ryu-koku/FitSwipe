@@ -15,7 +15,7 @@
 
 ## アプリ側の実装（mobile/ Expo版）
 
-- 初回Googleログイン／スキップと設定のアカウント管理。Nitro Google Sign-InによるAndroid Credential Manager認証を使用。Expo GoではGoogle認証できず、ネイティブ再ビルドが必要。
+- 初回起動時にGoogleログインを必須化。ログイン前はアプリの全機能を表示せず、ログアウト後も再ログイン画面に留まる。設定のアカウント管理も提供。Nitro Google Sign-InによるAndroid Credential Manager認証を使用。Expo GoではGoogle認証できず、ネイティブ再ビルドが必要。
 - 種目・セッション・セット・プリセットのUUID変換、設定の同期。ローカル数値IDの衝突を避け、参照関係も変換する。
 - 変更とUUID対応表・永続outboxを同じ端末保存に記録。アプリ起動中は変更後と30秒間隔で同期を試行し、通信できなければ保留する。OSがアプリを停止している間のバックグラウンド送信は保証しない。
 - Googleログイン後に既存記録の取り込みを確認。取り込まない元の個人データは端末へ保管し、ログアウト後に設定から明示的に戻せる（現在のゲストデータとの入替）。別参加者のルーム参加情報は統合しない。
@@ -62,4 +62,4 @@ pnpm test
 WORKER_URL=http://127.0.0.1:8790 SYNC_TEST_PERSIST=/tmp/opencode/fitswipe-sync-local pnpm test
 ```
 
-ローカルHTTPはlocalhost/127.0.0.1/Androidエミュレータの10.0.2.2だけ許可し、本番接続はHTTPS必須。旧Kotlin `app/` にはこのGoogle同期UIを追加しておらず、現在の開発対象である `mobile/` に実装している。
+ローカルHTTPはlocalhost/127.0.0.1/Androidエミュレータの10.0.2.2だけ許可し、本番接続はHTTPS必須。アプリのGoogle同期UIと認証は `mobile/` のExpo版に実装している。

@@ -38,7 +38,7 @@ function AppLayout() {
           {error}
         </Text>
       )}
-      {ready && !state.loginPromptDismissed ? (
+      {ready && !state.cloud ? (
         <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: 16 }}><AccountPanel onboarding /></ScrollView>
       ) : ready ? (
         <>

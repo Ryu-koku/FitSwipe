@@ -3,6 +3,27 @@
     "appVersionSource": "remote"
   },
   "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "env": {
+        "FITSWIPE_APP_VARIANT": "development",
+        "EXPO_PUBLIC_ROOMS_URL": "https://fitswipe-rooms-api.prompt-tem.workers.dev"
+      },
+      "android": {
+        "buildType": "apk"
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "env": {
+        "FITSWIPE_APP_VARIANT": "development",
+        "EXPO_PUBLIC_ROOMS_URL": "https://fitswipe-rooms-api.prompt-tem.workers.dev"
+      },
+      "android": {
+        "buildType": "apk"
+      }
+    },
     "production": {
       "autoIncrement": true,
       "android": {
