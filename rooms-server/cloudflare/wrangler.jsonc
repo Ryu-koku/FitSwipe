@@ -9,8 +9,7 @@
     {
       "binding": "DB",
       "database_name": "fitswipe-rooms",
-      // Replace with the ID printed by `wrangler d1 create fitswipe-rooms`.
-      "database_id": "00000000-0000-4000-8000-000000000001",
+      "database_id": "851c476f-1937-4285-9ad9-6e78dbd05ecb",
       "migrations_dir": "migrations"
     }
   ],

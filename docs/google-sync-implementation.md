@@ -63,3 +63,13 @@ WORKER_URL=http://127.0.0.1:8790 SYNC_TEST_PERSIST=/tmp/opencode/fitswipe-sync-l
 ```
 
 ローカルHTTPはlocalhost/127.0.0.1/Androidエミュレータの10.0.2.2だけ許可し、本番接続はHTTPS必須。旧Kotlin `app/` にはこのGoogle同期UIを追加しておらず、現在の開発対象である `mobile/` に実装している。
+
+## 実環境への反映（2026-10-28）
+
+- 既存の本番D1 `fitswipe-rooms` を確認し、wrangler設定を実DBのIDへ更新した。新しい別DBは作成していない。
+- DBバックアップを取得してから、リモートへ`0002_google_sync.sql`を適用済み。
+- Workerを既存変数を保持する`wrangler deploy --keep-vars`で公開済み。
+- 公開先: `https://fitswipe-rooms-api.prompt-tem.workers.dev`。`/health`は200、未認証`/v1/sync`は401を確認。
+- EASプロジェクトのproduction環境へ`EXPO_PUBLIC_ROOMS_URL`を設定済み。
+- Google Cloudの既存プロジェクト `fitswipe-play-releases` のAuth Platform初期設定を準備。**ユーザーデータポリシーへの所有者の同意待ち**で、OAuthクライアントはまだ作成していない。
+- そのためWorkerのGoogleログインは設定未完了を示す503で拒否している。Google OAuthクライアントIDの両側への設定・署名登録・新規Androidビルド・実機認証は未完了。設定未完了のアプリを内部テストへ提出したとは扱わない。
