@@ -42,6 +42,11 @@ android {
     }
 
     buildTypes {
+        debug {
+            applicationIdSuffix = ".usbdev"
+            versionNameSuffix = "-dev"
+            resValue("string", "app_name", "FitSwipe Dev")
+        }
         release {
             signingConfig = signingConfigs.getByName("playUpload")
             isMinifyEnabled = false
