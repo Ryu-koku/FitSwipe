@@ -1,3 +1,6 @@
+import { GoogleAuthError, verifyGoogleToken } from "./google-auth.mjs";
+import { SyncError, pullChanges, pushChanges } from "./personal-sync.mjs";
+
 const INVITE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const MAX_BODY_BYTES = 131_072;
 
@@ -123,8 +126,14 @@ async function authenticate(request, env) {
   const authorization = request.headers.get("authorization") ?? "";
   const token = authorization.startsWith("Bearer ") ? authorization.slice(7) : "";
   if (token.length < 20 || token.length > 100) throw new ApiError(401, "アカウントを確認してください");
-  const user = await env.DB.prepare("SELECT id, name FROM users WHERE token_hash = ?")
-    .bind(await sha256(token)).first();
+  const hash = await sha256(token);
+  const user = await env.DB.prepare(`
+    SELECT id, name, google_subject FROM users WHERE token_hash = ?
+    UNION ALL
+    SELECT u.id, u.name, u.google_subject FROM users u
+      JOIN account_sessions s ON s.user_id = u.id
+      WHERE s.token_hash = ? AND s.expires_at > ? LIMIT 1
+  `).bind(hash, hash, Math.floor(Date.now() / 1000)).first();
   if (!user) throw new ApiError(401, "アカウントを確認してください");
   return user;
 }
@@ -288,14 +297,65 @@ async function route(request, env) {
     return { status: 200, data: await register(request, env, body) };
   }
 
+  if (pathname === "/v1/auth/google" && method === "POST") {
+    await rateLimit(env.REGISTER_LIMIT, request);
+    if (!env.GOOGLE_WEB_CLIENT_ID) throw new ApiError(503, "Googleログインは準備中です");
+    const { subject } = await verifyGoogleToken(body.idToken, env.GOOGLE_WEB_CLIENT_ID, {
+      authorizedPresenters: env.GOOGLE_ANDROID_CLIENT_ID ? [env.GOOGLE_ANDROID_CLIENT_ID] : [],
+    });
+    const current = request.headers.has("authorization") ? await authenticate(request, env) : null;
+    let user = await env.DB.prepare("SELECT id, name FROM users WHERE google_subject = ?").bind(subject).first();
+    if (current) {
+      if ((user && user.id !== current.id) || (current.google_subject && current.google_subject !== subject)) {
+        throw new ApiError(409, "別のアカウントに連携済みです。データは統合していません");
+      }
+      try {
+        await env.DB.prepare("UPDATE users SET google_subject = ? WHERE id = ? AND (google_subject IS NULL OR google_subject = ?)")
+          .bind(subject, current.id, subject).run();
+      } catch {
+        throw new ApiError(409, "連携状態が変わりました。もう一度確認してください");
+      }
+      user = current;
+    } else if (!user) {
+      const id = crypto.randomUUID();
+      const name = text(body.name, "表示名", 32);
+      // A concurrent login may win the unique Google-subject constraint.
+      await env.DB.prepare("INSERT OR IGNORE INTO users(id, name, token_hash, google_subject) VALUES (?, ?, ?, ?)")
+        .bind(id, name, await sha256(newToken()), subject).run();
+      user = await env.DB.prepare("SELECT id, name FROM users WHERE google_subject = ?").bind(subject).first();
+    }
+    const token = newToken();
+    const expiresAt = Math.floor(Date.now() / 1000) + 30 * 86_400;
+    await env.DB.prepare("INSERT INTO account_sessions(token_hash, user_id, expires_at) VALUES (?, ?, ?)")
+      .bind(await sha256(token), user.id, expiresAt).run();
+    return { status: 200, data: { id: user.id, name: user.name, token, expiresAt } };
+  }
+
   const user = await authenticate(request, env);
+  if (pathname === "/v1/sync" && method === "POST") {
+    return { status: 200, data: await pushChanges(env, user, body) };
+  }
+  if (pathname === "/v1/sync" && method === "GET") {
+    return { status: 200, data: await pullChanges(env, user, url.searchParams.get("cursor")) };
+  }
   if (pathname === "/v1/account" && ["PUT", "PATCH"].includes(method)) {
     const name = text(body.name, "表示名", 32);
     await env.DB.prepare("UPDATE users SET name = ? WHERE id = ?").bind(name, user.id).run();
     return { status: 200, data: {} };
   }
   if (pathname === "/v1/account" && method === "DELETE") {
-    await env.DB.prepare("DELETE FROM users WHERE id = ?").bind(user.id).run();
+    await env.DB.batch([
+      env.DB.prepare(`
+        UPDATE rooms SET owner_id = (
+          SELECT m.user_id FROM members m
+          WHERE m.room_id = rooms.id AND m.user_id <> ?
+          ORDER BY m.rowid, m.user_id LIMIT 1
+        ) WHERE owner_id = ? AND EXISTS (
+          SELECT 1 FROM members m WHERE m.room_id = rooms.id AND m.user_id <> ?
+        )
+      `).bind(user.id, user.id, user.id),
+      env.DB.prepare("DELETE FROM users WHERE id = ?").bind(user.id),
+    ]);
     return { status: 200, data: {} };
   }
   if (pathname === "/v1/rooms" && method === "GET") {
@@ -326,7 +386,8 @@ export default {
       const result = await route(request, env);
       return response(result.data, result.status);
     } catch (error) {
-      if (error instanceof ApiError) return response({ error: error.message }, error.status);
+      if (error instanceof ApiError || error instanceof SyncError) return response({ error: error.message }, error.status);
+      if (error instanceof GoogleAuthError) return response({ error: "Googleログインを確認してください" }, 401);
       console.error("rooms request failed", error instanceof Error ? error.message : String(error));
       return response({ error: "サーバーに接続できませんでした。再度お試しください" }, 500);
     }
