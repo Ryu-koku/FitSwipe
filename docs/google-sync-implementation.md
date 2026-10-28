@@ -85,3 +85,11 @@ WORKER_URL=http://127.0.0.1:8790 SYNC_TEST_PERSIST=/tmp/opencode/fitswipe-sync-l
 - そのEAS環境変数と既存のPlayアップロード鍵を使い、versionCode **38** のAndroidビルドを開始した。内部テストへの提出もキューへ登録した。提出完了・Play反映・実機認証は個別に確認する。
   - Build: `50c9e1e2-c72d-40ed-b2b2-8f17610aa2e8`
   - Submission: `2357ffbf-3cb8-4c73-bb83-6f0487f15e33`
+
+### 署名不一致の修正
+
+versionCode 38のネイティブビルドは成功しましたが、EASのリモート既定鍵が旧鍵だったため内部テスト提出が拒否されました。Playが要求する既存アップロード鍵とローカル`upload-reset.p12`のSHA-1一致を確認し、`production-local-key`プロファイルでversionCode **39**を再ビルド・提出予約しました。新しい鍵は生成していません。アップロード用の一時`credentials.json`は削除済みです。
+
+- Build: `04a5066e-08aa-47e7-9e84-cef8ace9131e`
+- Submission: `ebd3c1b0-04ae-422f-a3e2-25f465a5a37d`
+- 提出完了・配信・実機のGoogleログイン成功はまだ未確認です。

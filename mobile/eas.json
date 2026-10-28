@@ -3,6 +3,11 @@
     "appVersionSource": "remote"
   },
   "build": {
+    "production-local-key": {
+      "extends": "production",
+      "environment": "production",
+      "credentialsSource": "local"
+    },
     "production": {
       "autoIncrement": true,
       "android": {

@@ -20,6 +20,12 @@ npx eas-cli@latest build --platform android --profile production --auto-submit
 
 ## 一度だけ必要な設定
 
+### 現在の署名に関する注意（2026-10-28）
+
+EASのリモート既定鍵は旧アップロード鍵のままです。versionCode 38はビルド成功後、署名不一致でPlay提出が拒否されました。Playが要求するSHA-1は`CF:93:B7:69:AC:56:F9:BA:56:78:50:29:2F:7D:50:7C:43:60:3F:63`で、既存の`upload-reset.p12`と一致します。鍵の再生成やPlayの鍵変更は不要です。
+
+当面は`production-local-key`ビルドプロファイルを使い、Git管理外の`credentials.json`からこの既存鍵を指定します。パスワードをログ・引数へ出さずに秘密ファイルから読み込んで作成し、EASアップロード後は`credentials.json`を削除します。提出は`--profile production`で既存の内部テストへ行います。リモート既定鍵を正しく更新するまでは、通常のproductionプロファイルだけで再ビルドしないでください。
+
 - Expo アカウントへのログインとプロジェクトへの紐付け。
 - 従来の Play アップロード鍵を EAS のビルド認証情報として登録。
   新しい署名鍵を生成しないこと。
