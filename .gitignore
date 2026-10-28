@@ -14,6 +14,10 @@ captures/
 signing/
 *.html
 
+# Local environment files
+.env*
+!.env.example
+
 # Room server runtime data and credentials
 rooms-server/__pycache__/
 rooms-server/.venv/
