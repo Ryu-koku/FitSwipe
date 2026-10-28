@@ -92,12 +92,13 @@ export function WorkoutCalendar() {
   const sessions = completedSessions(state);
   const days = new Set(sessions.map((s) => localDay(s.startedAt)));
   const streakWeeks = achievementSummary(state).streakWeeks;
+  const today = localDay(new Date());
   const currentWeekStart = startOfWeek(new Date(), state.weekStartsMonday);
   const currentWeekKey = localDay(currentWeekStart);
   const sessionsWithCompletedSets = new Set(completedSets(state).map((set) => set.sessionId));
   const recordedWeeks = new Set(
     sessions
-      .filter((session) => sessionsWithCompletedSets.has(session.id) && localDay(session.startedAt) <= localDay(new Date()))
+      .filter((session) => sessionsWithCompletedSets.has(session.id) && localDay(session.startedAt) <= today)
       .map((session) => localDay(startOfWeek(new Date(session.startedAt), state.weekStartsMonday))),
   );
   const latestStreakWeek = new Date(currentWeekStart);
@@ -112,7 +113,6 @@ export function WorkoutCalendar() {
     0,
   ).getDate();
   const cells = Math.ceil((leading + length) / 7) * 7;
-  const today = localDay(new Date());
   return (
     <>
       <Card style={{ padding: 10 }}>
@@ -145,9 +145,7 @@ export function WorkoutCalendar() {
                 const firstDay = week * 7 - leading + 1;
                 const rowStart = new Date(month.getFullYear(), month.getMonth(), firstDay);
                 const weekStartKey = localDay(startOfWeek(rowStart, state.weekStartsMonday));
-                const weekTrained = Array.from({ length: 7 }, (_, offset) =>
-                  days.has(localDay(new Date(month.getFullYear(), month.getMonth(), firstDay + offset))),
-                ).some(Boolean);
+                const weekTrained = recordedWeeks.has(weekStartKey);
                 const streakAtWeek = streakWeeks > 0 && weekStartKey === latestStreakWeekKey ? streakWeeks : undefined;
                 return (
                   <View
