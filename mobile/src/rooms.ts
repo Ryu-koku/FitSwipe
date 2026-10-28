@@ -29,6 +29,10 @@ export function createRoomsClient(
       throw new Error(
         'ルーム共有は準備中です。公開後のアップデートで利用できます。',
       );
+    const url = new URL(endpoint);
+    if (url.protocol !== 'https:' && !(url.protocol === 'http:' && ['localhost', '127.0.0.1', '10.0.2.2'].includes(url.hostname))) {
+      throw new Error('接続先にはHTTPSが必要です。');
+    }
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15000);
     try {
@@ -55,6 +59,12 @@ export function createRoomsClient(
     }
   }
   return {
+    google: (idToken: string, name: string, identity?: RoomIdentity) =>
+      request<RoomIdentity & { expiresAt: number }>('/v1/auth/google', identity?.token, 'POST', { idToken, name }),
+    push: (identity: RoomIdentity, changes: import('./sync').Mutation[]) =>
+      request<{ acknowledged: string[] }>('/v1/sync', identity.token, 'POST', { changes }),
+    pull: (identity: RoomIdentity, cursor: number) =>
+      request<import('./sync').SyncPage>(`/v1/sync?cursor=${cursor}`, identity.token),
     configured: !!endpoint,
     register: (name: string) =>
       request<RoomIdentity>('/v1/account', undefined, 'POST', {
