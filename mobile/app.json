@@ -2,14 +2,14 @@
   "expo": {
     "name": "FitSwipe",
     "slug": "fitlog-solo",
-    "version": "2.7.1",
+    "version": "2.7.4",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "dev.local.fitlogsolo",
-      "buildNumber": "34"
+      "buildNumber": "35"
     },
     "android": {
       "adaptiveIcon": {
@@ -20,18 +20,29 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "dev.local.fitlogsolo",
-      "permissions": ["android.permission.SCHEDULE_EXACT_ALARM"],
+      "permissions": [
+        "android.permission.SCHEDULE_EXACT_ALARM"
+      ],
       "versionCode": 37
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "scheme": ["fitlogsolo", "fitswipe"],
+    "scheme": [
+      "fitlogsolo",
+      "fitswipe"
+    ],
     "plugins": [
       "expo-router",
       "expo-status-bar",
       "expo-system-ui",
-      ["expo-notifications", { "enableRemoteNotifications": false }]
+      [
+        "expo-notifications",
+        {
+          "enableRemoteNotifications": false
+        }
+      ],
+      "expo-secure-store"
     ],
     "extra": {
       "router": {

@@ -236,6 +236,19 @@ class Store:
     def account(self, user, method, data):
         with self.connect() as db:
             if method == "DELETE":
+                # Membership row order records join order. Transfer before cascading
+                # the user deletion, in the same transaction; empty rooms cascade.
+                db.execute("BEGIN IMMEDIATE")
+                db.execute("""
+                    UPDATE rooms SET owner_id = (
+                        SELECT m.user_id FROM members m
+                        WHERE m.room_id = rooms.id AND m.user_id <> ?
+                        ORDER BY m.rowid, m.user_id LIMIT 1
+                    ) WHERE owner_id = ? AND EXISTS (
+                        SELECT 1 FROM members m
+                        WHERE m.room_id = rooms.id AND m.user_id <> ?
+                    )
+                """, (user, user, user))
                 db.execute("DELETE FROM users WHERE id=?", (user,))
             else:
                 db.execute("UPDATE users SET name=? WHERE id=?", (text(data.get("name"), "表示名", 32), user))

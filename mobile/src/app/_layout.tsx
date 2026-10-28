@@ -3,10 +3,11 @@ import React from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { AppProvider, useApp } from '../context';
 import { ThemeProvider, useTheme } from '../ui';
-import { ActivityIndicator, Text, View } from 'react-native';
+import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { TrainingDock } from '../components/TrainingDock';
 import { RestNotifications } from '../rest-notifications';
+import { AccountPanel } from '../components/AccountPanel';
 import { trainingLevel } from '../logic';
 
 export default function Layout() {
@@ -37,7 +38,9 @@ function AppLayout() {
           {error}
         </Text>
       )}
-      {ready ? (
+      {ready && !state.cloud ? (
+        <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: 16 }}><AccountPanel onboarding /></ScrollView>
+      ) : ready ? (
         <>
           <RestNotifications />
           {pathname !== '/workout' && (

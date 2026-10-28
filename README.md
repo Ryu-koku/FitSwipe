@@ -2,9 +2,9 @@
 
 オフライン優先の筋トレ記録アプリです。トレーニング記録は端末内に保存し、ルームに投稿した記録だけをメンバーに共有します。
 
-## React Native版（Android・iOS）
+## Expo版（Android・iOS）
 
-共通アプリの実装は `mobile/` にあります。`app/` は移植元のKotlin版です。
+唯一のアプリ実装は `mobile/` にあります。Android・iOS・WebでExpo / React Nativeを共通利用します。
 
 ```sh
 cd mobile
@@ -15,11 +15,11 @@ pnpm test
 pnpm start
 ```
 
-ネイティブ実行は `mobile/` で `pnpm android`、macOSでは `pnpm ios`。以前の生成済みネイティブディレクトリを使う場合は、先に `pnpm exec expo prebuild --platform android --no-install`（iOSは `--platform ios`）で設定を反映し、再ビルドしてください。生成されたネイティブファイルは手編集しません。
-ルーム接続先はRN版では `EXPO_PUBLIC_ROOMS_URL` に設定します。既存のサーバーAPIをそのまま使います。未設定の場合は「準備中」と表示します。
-保存は既存RN版と同じAsyncStorageです。旧Kotlin版の端末データ移行は追加していません。
+ネイティブ実行は `mobile/` で `pnpm android`、macOSでは `pnpm ios`。Android・iOSのネイティブプロジェクトはExpo Prebuildで生成し、生成ファイルは手編集しません。
+ルーム接続先は `EXPO_PUBLIC_ROOMS_URL` に設定します。既存のサーバーAPIをそのまま使います。未設定の場合は「準備中」と表示します。
+保存はAsyncStorageです。以前のKotlin版の端末データは自動移行されません。Play版更新でアプリデータ自体は削除しませんが、Kotlin版の記録はExpo版に表示されません。必要な記録は移行前に別途保全してください。
 
-以下のGradle環境・コマンドはKotlin版向けです。
+USB実機開発は [docs/usb-phone-development.md](docs/usb-phone-development.md)、Play内部テスト配信は [docs/automatic-internal-release.md](docs/automatic-internal-release.md) を参照してください。
 
 ## 画面と操作
 
@@ -36,37 +36,7 @@ pnpm start
 
 ## 共有サーバー
 
-[rooms-server/README.md](rooms-server/README.md) にセルフホスト用の起動・HTTPS公開・バックアップ手順があります。Cloudflareで公開するWorker実装は [rooms-server/cloudflare/README.md](rooms-server/cloudflare/README.md) を参照してください。接続先は `FITSWIPE_ROOMS_URL` 環境変数または `-PfitSwipeRoomsUrl=...` でビルド時に指定します。未設定のビルドではルームは準備中になります。
-
-## ビルド環境
-
-- Kotlin 2.1.21
-- Android Gradle Plugin 8.9.2
-- Gradle 8.11.1
-- compileSdk / targetSdk 36
-- minSdk 28
-- Java 17向けにコンパイル（ビルドホストではJava 21でも検証）
-- Room 2.7.2
-
-## コマンド
-
-```bash
-./gradlew testDebugUnitTest
-./gradlew assembleDebug
-./gradlew assembleDebugAndroidTest
-```
-
-APKは次に生成されます。
-
-```text
-app/build/outputs/apk/debug/app-debug.apk
-```
-
-実機へのインストール例:
-
-```bash
-adb install -r app/build/outputs/apk/debug/app-debug.apk
-```
+[rooms-server/README.md](rooms-server/README.md) にセルフホスト用の起動・HTTPS公開・バックアップ手順があります。Cloudflareで公開するWorker実装は [rooms-server/cloudflare/README.md](rooms-server/cloudflare/README.md) を参照してください。接続先は `EXPO_PUBLIC_ROOMS_URL` 環境変数でビルド時に指定します。未設定のビルドではルームは準備中になります。
 
 ## データ管理アプリとの分離
 
@@ -75,8 +45,12 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 ## 確認コマンド
 
 ```sh
-./gradlew :app:assembleDebug :app:testDebugUnitTest :app:assembleDebugAndroidTest
+cd mobile
+pnpm typecheck
+pnpm lint
+pnpm test
+pnpm exec expo-doctor
 python3 -m unittest discover -s rooms-server -v
 ```
 
-Android instrumentationテストには端末またはエミュレータが必要です。ホームからプリセットを移動したこと、＋と再生の中心位置、選択状態の永続化、同時開始・既存セッションの再開を検証します。
+USB実機向けの型・lint・ロジックテスト・ネイティブビルド・インストールは `bash scripts/install-phone.sh` で実行します。

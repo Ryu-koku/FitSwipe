@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { execFileSync } from "node:child_process";
 
 const baseUrl = process.env.WORKER_URL ?? "http://127.0.0.1:8788";
 if (!["127.0.0.1", "localhost"].includes(new URL(baseUrl).hostname)) {
@@ -106,5 +107,68 @@ test("Cloudflare Worker supports private room sharing end-to-end", async () => {
   } finally {
     if (guest?.token) await call("/v1/account", { method: "DELETE", token: guest.token }).catch(() => {});
     if (owner?.token) await call("/v1/account", { method: "DELETE", token: owner.token }).catch(() => {});
+  }
+});
+
+test("account deletion preserves other members' rooms and posts", async () => {
+  const owner = (await call("/v1/account", { method: "POST", body: { name: "transfer-owner" } })).data;
+  const member = (await call("/v1/account", { method: "POST", body: { name: "transfer-member" } })).data;
+  try {
+    const room = (await call("/v1/rooms", { method: "POST", token: owner.token, body: { name: "keep" } })).data;
+    const code = (await call("/v1/rooms", { token: owner.token })).data.rooms[0].inviteCode;
+    await call("/v1/rooms/join", { method: "POST", token: member.token, body: { code } });
+    assert.equal((await call("/v1/account", { method: "DELETE", token: owner.token })).status, 200);
+    const rooms = (await call("/v1/rooms", { token: member.token })).data.rooms;
+    assert.equal(rooms[0].id, room.id);
+    assert.equal(rooms[0].ownerId, member.id);
+    assert.equal((await call("/v1/rooms", { token: owner.token })).status, 401);
+  } finally {
+    await call("/v1/account", { method: "DELETE", token: owner.token });
+    await call("/v1/account", { method: "DELETE", token: member.token });
+  }
+});
+
+// Fixture provisioning is local-only and opt-in, never an authentication bypass
+// in the Worker. It lets D1 behavior be tested without real Google credentials.
+test("personal sync is private, transactional, retry-safe and deletion-aware", {
+  skip: !process.env.SYNC_TEST_PERSIST,
+}, async () => {
+  const owner = (await call("/v1/account", { method: "POST", body: { name: "sync-owner" } })).data;
+  const other = (await call("/v1/account", { method: "POST", body: { name: "sync-other" } })).data;
+  try {
+    assert.equal((await call("/v1/sync", { token: owner.token })).status, 403);
+    // Both values are locally generated UUIDs; never interpolate external input.
+    assert.match(owner.id, /^[a-f0-9-]{36}$/u);
+    assert.match(other.id, /^[a-f0-9-]{36}$/u);
+    execFileSync("wrangler", ["d1", "execute", "fitswipe-rooms", "--local", "--persist-to", process.env.SYNC_TEST_PERSIST,
+      "--command", `UPDATE users SET google_subject = id WHERE id IN ('${owner.id}', '${other.id}')`], {
+      cwd: new URL("..", import.meta.url), stdio: "pipe",
+    });
+    const change = { id: crypto.randomUUID(), mutationId: crypto.randomUUID(), kind: "session", deleted: false,
+      payload: { startedAt: "2026-10-28T10:00:00Z", endedAt: null } };
+    const push = (changes) => call("/v1/sync", { method: "POST", token: owner.token, body: { changes } });
+    assert.equal((await push([change])).status, 200);
+    const first = (await call("/v1/sync", { token: owner.token })).data;
+    assert.equal(first.changes.length, 1);
+    assert.deepEqual(first.changes[0].payload, change.payload);
+    assert.equal((await call("/v1/sync", { token: other.token })).data.changes.length, 0);
+    const edit = { ...change, mutationId: crypto.randomUUID(), payload: { startedAt: "2026-10-29T10:00:00Z" } };
+    await push([edit]);
+    await push([change]); // stale transport retry must not overwrite the newer edit
+    const second = (await call(`/v1/sync?cursor=${first.cursor}`, { token: owner.token })).data;
+    assert.deepEqual(second.changes[0].payload, edit.payload);
+    assert.equal(second.cursor, first.cursor + 1);
+    assert.equal((await push([{ ...edit, mutationId: crypto.randomUUID(), kind: "invalid" }])).status, 400);
+    await push([{ ...edit, mutationId: crypto.randomUUID(), deleted: true }]);
+    const deleted = (await call(`/v1/sync?cursor=${second.cursor}`, { token: owner.token })).data;
+    assert.equal(deleted.changes[0].deleted, true);
+    assert.equal(deleted.changes[0].payload, null);
+    assert.equal((await call("/v1/sync?cursor=-1", { token: owner.token })).status, 400);
+    assert.equal((await call("/v1/sync")).status, 401);
+    await call("/v1/account", { method: "DELETE", token: owner.token });
+    assert.equal((await push([edit])).status, 401);
+  } finally {
+    await call("/v1/account", { method: "DELETE", token: owner.token });
+    await call("/v1/account", { method: "DELETE", token: other.token });
   }
 });

@@ -12,9 +12,12 @@ captures/
 *.keystore
 *.p12
 signing/
+*.html
 
 # Room server runtime data and credentials
 rooms-server/__pycache__/
 rooms-server/.venv/
 rooms-server/.env
 rooms-server/*.sqlite3*
+rooms-server/cloudflare/.wrangler/
+rooms-server/cloudflare/.dev.vars

@@ -105,11 +105,27 @@ class RoomsApiTests(unittest.TestCase):
             saved = db.execute("SELECT token_hash FROM users WHERE id=?", (self.alice["id"],)).fetchone()[0]
         self.assertNotEqual(saved, self.alice["token"])
 
-    def test_account_deletion_revokes_token_and_cascades_rooms(self):
+    def test_account_deletion_revokes_token_and_transfers_rooms(self):
         self.join_bob()
+        self.request("POST", f"/v1/rooms/{self.room}/posts", self.payload, self.alice)
+        self.request("POST", f"/v1/rooms/{self.room}/posts", self.payload, self.bob)
         self.assertEqual(200, self.request("DELETE", "/v1/account", account=self.alice)[0])
         self.assertEqual(401, self.request("GET", "/v1/rooms", account=self.alice)[0])
-        self.assertEqual([], self.request("GET", "/v1/rooms", account=self.bob)[1]["rooms"])
+        rooms = self.request("GET", "/v1/rooms", account=self.bob)[1]["rooms"]
+        self.assertEqual(self.bob["id"], rooms[0]["ownerId"])
+        posts = self.request("GET", f"/v1/rooms/{self.room}/posts", account=self.bob)[1]["posts"]
+        self.assertEqual([self.bob["id"]], [post["userId"] for post in posts])
+
+    def test_account_deletion_transfers_to_first_joiner_and_removes_empty_rooms(self):
+        self.join_bob()
+        code = self.request("GET", "/v1/rooms", account=self.alice)[1]["rooms"][0]["inviteCode"]
+        self.request("POST", "/v1/rooms/join", {"code": code}, self.eve)
+        empty_room = self.request("POST", "/v1/rooms", {"name": "alone"}, self.alice)[1]["id"]
+        self.request("DELETE", "/v1/account", account=self.alice)
+        rooms = self.request("GET", "/v1/rooms", account=self.eve)[1]["rooms"]
+        self.assertEqual(self.bob["id"], rooms[0]["ownerId"])
+        with self.store.connect() as db:
+            self.assertIsNone(db.execute("SELECT id FROM rooms WHERE id=?", (empty_room,)).fetchone())
 
     def test_bilateral_snapshot_and_pagination(self):
         for i in range(51):
