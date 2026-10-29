@@ -24,6 +24,15 @@ export function ExerciseOrderList({ items, onMove, onEdit, header, footer }: {
   useEffect(() => { latest.current = { items, onMove }; }, [items, onMove]);
   const [from, setFrom] = useState<number>();
   const suppressPress = useRef(false);
+  const touchStart = useRef<{ index: number; id: number; y: number } | undefined>(undefined);
+  const beginDrag = (index: number, id: number, y: number) => {
+    if (drag.current) return;
+    suppressPress.current = true;
+    dragY.setValue(index * ROW);
+    setFrom(index);
+    drag.current = { from: index, to: index, id, origin: y, pointer: y, scroll: offset.current };
+    setDragging(id); setPreview(index); feedback();
+  };
   const finish = (cancel = false) => {
     const active = drag.current;
     if (!active) return;
@@ -46,7 +55,13 @@ export function ExerciseOrderList({ items, onMove, onEdit, header, footer }: {
   const [handlers, setHandlers] = useState<ReturnType<typeof PanResponder.create> | null>(null);
   useEffect(() => {
     const responder = PanResponder.create({
-    onMoveShouldSetPanResponderCapture: () => !!drag.current,
+      onMoveShouldSetPanResponderCapture: (_, g) => {
+        if (!drag.current && touchStart.current && Math.abs(g.dy) > 7) {
+          const pending = touchStart.current;
+          beginDrag(pending.index, pending.id, pending.y);
+        }
+        return !!drag.current;
+      },
     onPanResponderMove: (_, g) => { if (drag.current) { drag.current.pointer = g.moveY; actions.current.updatePosition(); } },
     onPanResponderRelease: () => actions.current.finish(),
     onPanResponderTerminate: () => actions.current.finish(true),
@@ -77,20 +92,18 @@ export function ExerciseOrderList({ items, onMove, onEdit, header, footer }: {
       onContentSizeChange={(_w, h) => { bounds.current.content = h; }}
       onScroll={(e) => { offset.current = e.nativeEvent.contentOffset.y; }} contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 20 }}>
       {header}
-      <Text style={[styles.small, { marginVertical: 12 }]}>タップで編集 · 長押しして並べ替え</Text>
+      <Text style={[styles.small, { marginVertical: 12 }]}>タップで編集 · 少しスワイプ、または長押しで並べ替え</Text>
       <View style={{ height: items.length * ROW }}>
         {items.map((item, index) => <OrderRow key={item.id} index={order.findIndex((v) => v.id === item.id)} dragging={dragging === item.id} dragY={dragY} reduced={reduced}>
           <Pressable accessibilityRole="button" accessibilityLabel={`${item.name}、${item.detail}。タップで編集、長押しで並べ替え`}
             accessibilityActions={[{ name: 'increment', label: '下へ' }, { name: 'decrement', label: '上へ' }]}
             onAccessibilityAction={(e) => onMove(index, Math.max(0, Math.min(items.length - 1, index + (e.nativeEvent.actionName === 'increment' ? 1 : -1))))}
+            onTouchStart={(e) => { touchStart.current = { index, id: item.id, y: e.nativeEvent.pageY }; suppressPress.current = false; }}
             onPressIn={() => { suppressPress.current = false; }}
-            onPress={() => { if (!suppressPress.current) onEdit(item.id); }} delayLongPress={280}
+            onPress={() => { if (!suppressPress.current) onEdit(item.id); }} delayLongPress={120}
             onLongPress={(e) => {
               const y = e.nativeEvent.pageY;
-              suppressPress.current = true;
-              dragY.setValue(index * ROW); setFrom(index);
-              drag.current = { from: index, to: index, id: item.id, origin: y, pointer: y, scroll: offset.current };
-              setDragging(item.id); setPreview(index); feedback();
+              beginDrag(index, item.id, y);
             }}>
             <Card style={{ height: ROW - 8, marginBottom: 0, padding: 14, borderColor: dragging === item.id ? colors.primary : colors.line }}>
               <View style={styles.row}><View style={{ flex: 1 }}><Text numberOfLines={1} style={[styles.body, { fontWeight: '700' }]}>{item.name}</Text><Text style={styles.small}>{item.detail}</Text></View><Text style={{ color: colors.primary }}>›</Text></View>

@@ -11,7 +11,9 @@ import { useReducedMotion } from '../use-reduced-motion';
 export function TrainingDock() {
   const path = usePathname();
   const preparing = path === '/prepare';
-  const visible = ['/', '/prepare', '/rooms', '/complete'].includes(path);
+  // Keep the dock scoped to screens that provide its navigation/actions.
+  // In particular, the workout completion screen must remain unobstructed.
+  const visible = ['/', '/prepare', '/rooms'].includes(path);
   const { state, startWorkout } = useApp();
   const { colors, styles } = useTheme();
   const preset = selectedPreset(state);
@@ -58,10 +60,6 @@ export function TrainingDock() {
     <View
       pointerEvents="box-none"
       style={{
-        position: 'absolute',
-        bottom: 0,
-        left: 0,
-        right: 0,
         height: 112,
       }}
     >

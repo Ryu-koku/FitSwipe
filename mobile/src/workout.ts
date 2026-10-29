@@ -245,6 +245,7 @@ export function advanceWorkout(state: AppState, skip = false): AppState {
   const sideSwitch = next.setId === set.id;
   const seconds =
     !skip &&
+    !state.restTimerDisabledExerciseIds.includes(set.exerciseId) &&
     nextSet.exerciseId === set.exerciseId &&
     (!sideSwitch || state.sideSwitchRestExerciseIds.includes(set.exerciseId))
       ? (state.exerciseRestDurations[set.exerciseId] ??

@@ -99,6 +99,7 @@ export function seedState(): AppState {
     ],
     exerciseWeightSteps: { 1: 2.5, 2: 5, 3: 5, 4: 2.5, 5: 2.5, 7: 2.5 },
     exerciseRestDurations: {},
+    restTimerDisabledExerciseIds: [],
     sideSwitchRestExerciseIds: [],
     leftFirstExerciseIds: [],
     installationId: `rn-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`,

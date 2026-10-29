@@ -38,16 +38,19 @@ function Column({ member, index, max, own, onPress }: { member: RoomComparison['
 
 export function RoomComparisonChart({ comparison, ownId, onMember }: { comparison: RoomComparison; ownId?: string; onMember: (id: string) => void }) {
   const { styles } = useTheme();
-  const max = Math.max(0, ...comparison.rankings.map((r) => r.sets));
+  const rankings = comparison.rankings;
+  const max = Math.max(0, ...rankings.map((r) => r.sets));
   return <>
     <Text style={[styles.body, { fontWeight: '800' }]}>{Number(comparison.month.slice(5))}月のセット数</Text>
     <Text style={styles.small}>毎月1日〜末日 · 日本時間 · 完了セットのみ</Text>
-    <ScrollView horizontal showsHorizontalScrollIndicator style={{ marginTop: 16 }}>
-      <View style={{ height: 282, width: Math.max(240, comparison.rankings.length * 80) }}>
-        {comparison.rankings.map((member, index) => <Column key={member.id} member={member} index={index} max={max} own={member.id === ownId} onPress={() => onMember(member.id)} />)}
-      </View>
-    </ScrollView>
-    <Text style={styles.small}>アイコン・棒をタップで種目や重量を見る。人数が多いときは横にスワイプ。</Text>
-    {!max && <Text style={[styles.small, { marginTop: 12 }]}>今月の共有記録はまだありません。</Text>}
+    {rankings.length ? <>
+      <ScrollView horizontal showsHorizontalScrollIndicator style={{ marginTop: 16 }}>
+        <View style={{ height: 282, width: Math.max(240, rankings.length * 80), alignSelf: 'flex-start' }}>
+          {rankings.map((member, index) => <Column key={member.id} member={member} index={index} max={max} own={member.id === ownId} onPress={() => onMember(member.id)} />)}
+        </View>
+      </ScrollView>
+      <Text style={styles.small}>アイコン・棒をタップで種目や重量を見る。人数が多いときは横にスワイプ。</Text>
+      {!max && <Text style={[styles.small, { marginTop: 12 }]}>今月の共有記録はまだありません。</Text>}
+    </> : <Text style={[styles.small, { marginTop: 16 }]}>比較できるメンバーはいません。</Text>}
   </>;
 }

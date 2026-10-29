@@ -37,6 +37,9 @@ export function ExerciseEditor({
   const [sideRest, setSideRest] = useState(
     exercise ? state.sideSwitchRestExerciseIds.includes(exercise.id) : false,
   );
+  const [restTimerEnabled, setRestTimerEnabled] = useState(
+    exercise ? !state.restTimerDisabledExerciseIds.includes(exercise.id) : true,
+  );
   const weightValue = numeric(weight);
   const restValue = numeric(rest);
   const valid =
@@ -74,6 +77,10 @@ export function ExerciseEditor({
         ),
         ...(rest.trim() ? [[String(id), Math.round(restValue! * 60)]] : []),
       ]),
+      restTimerDisabledExerciseIds: [
+        ...s.restTimerDisabledExerciseIds.filter((value) => value !== id),
+        ...(!restTimerEnabled ? [id] : []),
+      ],
       leftFirstExerciseIds: [
         ...s.leftFirstExerciseIds.filter((value) => value !== id),
         ...(left ? [id] : []),
@@ -123,6 +130,10 @@ export function ExerciseEditor({
             value={rest}
             onChangeText={setRest}
           />
+          <View style={styles.row}>
+            <Text style={styles.body}>休憩タイマー</Text>
+            <Switch value={restTimerEnabled} onValueChange={setRestTimerEnabled} />
+          </View>
           {mode === 'BILATERAL' && (
             <>
               <View style={styles.row}>
@@ -143,6 +154,7 @@ export function ExerciseEditor({
               setRest('');
               setLeft(false);
               setSideRest(false);
+              setRestTimerEnabled(true);
               update((s) => ({
                 ...s,
                 exerciseWeightSteps: Object.fromEntries(
@@ -154,6 +166,9 @@ export function ExerciseEditor({
                   Object.entries(s.exerciseRestDurations).filter(
                     ([key]) => key !== String(exercise.id),
                   ),
+                ),
+                restTimerDisabledExerciseIds: s.restTimerDisabledExerciseIds.filter(
+                  (id) => id !== exercise.id,
                 ),
                 leftFirstExerciseIds: s.leftFirstExerciseIds.filter(
                   (id) => id !== exercise.id,

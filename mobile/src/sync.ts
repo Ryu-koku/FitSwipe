@@ -15,7 +15,7 @@ export type CloudState = {
 const kinds = ['exercise', 'session', 'set', 'preset'] as const;
 const fields = ['themeMode', 'weekStartsMonday', 'weightStepKg', 'restDurationSeconds',
   'visibleAchievementMetrics', 'exerciseWeightSteps', 'exerciseRestDurations',
-  'sideSwitchRestExerciseIds', 'leftFirstExerciseIds', 'selectedPresetId'] as const;
+  'restTimerDisabledExerciseIds', 'sideSwitchRestExerciseIds', 'leftFirstExerciseIds', 'selectedPresetId'] as const;
 const keyOf = (r: Pick<RecordData, 'kind' | 'id'>) => `${r.kind}:${r.id}`;
 // Fixed IDs for independent preference records; no other account's identity or
 // transport state ever belongs in a synced payload.
@@ -45,7 +45,7 @@ export function project(state: AppState, mapping: Record<string, string>, uuid: 
     if (field === 'exerciseWeightSteps' || field === 'exerciseRestDurations') {
       value = Object.fromEntries(Object.entries(state[field]).map(([local, v]) => [id('exercise', local), v]));
     }
-    if (field === 'sideSwitchRestExerciseIds' || field === 'leftFirstExerciseIds') value = state[field].map((v) => id('exercise', v));
+    if (field === 'restTimerDisabledExerciseIds' || field === 'sideSwitchRestExerciseIds' || field === 'leftFirstExerciseIds') value = state[field].map((v) => id('exercise', v));
     const record: RecordData = { kind: 'setting', id: settingId(index), deleted: false, payload: { field, value } };
     result[keyOf(record)] = record;
   });
@@ -109,7 +109,7 @@ export function materialize(state: AppState, cloud: CloudState): AppState {
     if (field === 'exerciseWeightSteps' || field === 'exerciseRestDurations') {
       value = Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([remote, v]) => [localId('exercise', remote), v]));
     }
-    if (field === 'sideSwitchRestExerciseIds' || field === 'leftFirstExerciseIds') value = (value as string[]).map((v) => localId('exercise', v));
+    if (field === 'restTimerDisabledExerciseIds' || field === 'sideSwitchRestExerciseIds' || field === 'leftFirstExerciseIds') value = (value as string[]).map((v) => localId('exercise', v));
     settings[field] = value;
   });
   const exercises = grouped.exercise as AppState['exercises'];
@@ -152,6 +152,7 @@ export function mergeGuest(account: AppState, guest: AppState, uuid: () => strin
     visibleAchievementMetrics: guest.visibleAchievementMetrics,
     exerciseWeightSteps: { ...account.exerciseWeightSteps, ...byExercise(guest.exerciseWeightSteps) },
     exerciseRestDurations: { ...account.exerciseRestDurations, ...byExercise(guest.exerciseRestDurations) },
+    restTimerDisabledExerciseIds: [...account.restTimerDisabledExerciseIds, ...guest.restTimerDisabledExerciseIds.map((id) => exercises.get(id)!)],
     sideSwitchRestExerciseIds: [...account.sideSwitchRestExerciseIds, ...guest.sideSwitchRestExerciseIds.map((id) => exercises.get(id)!)],
     leftFirstExerciseIds: [...account.leftFirstExerciseIds, ...guest.leftFirstExerciseIds.map((id) => exercises.get(id)!)],
     nextId,

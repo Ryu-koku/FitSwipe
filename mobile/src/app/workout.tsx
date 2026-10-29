@@ -123,7 +123,12 @@ export default function WorkoutScreen() {
         : undefined,
     }));
   const advance = (skip = false) => {
-    if (locked.current || browsing) return;
+    if (browsing) {
+      const next = cards[position + 1];
+      if (next) setBrowsing(next.setId === current?.setId && next.side === current?.side ? undefined : next);
+      return;
+    }
+    if (locked.current) return;
     locked.current = true;
     const changed = advanceWorkout(getState(), skip);
     update(() => changed);
@@ -136,9 +141,6 @@ export default function WorkoutScreen() {
   const position = cards.findIndex(
     (c) => c.setId === card.setId && c.side === card.side,
   );
-  const visited = cards
-    .slice(0, position)
-    .filter((c) => cardCompleted(state, c));
   const preset = state.presets.find((p) => p.id === session.presetId);
   const rest = !browsing && !!progress?.restEndsAt;
   const change = (key: typeof weightKey | typeof repsKey, delta: number) => {
@@ -208,7 +210,6 @@ export default function WorkoutScreen() {
             key={`${set.id}-${side}-${!!browsing}`}
             onAdvance={() => advance()}
             onSkip={() => advance(true)}
-            disabled={!!browsing}
           >
             <Card
               style={{
@@ -284,37 +285,20 @@ export default function WorkoutScreen() {
                     {previous?.[repsKey] ?? '—'}回　›
                   </Text>
                 </Pressable>
-                {!browsing && (
-                  <>
-                    <Text style={[styles.small, { textAlign: 'center' }]}>
-                      右・上にスワイプで完了
-                    </Text>
-                    <Button
-                      label="スキップ"
-                      secondary
-                      onPress={() => advance(true)}
-                    />
-                  </>
-                )}
+                {!browsing && <Button label="スキップ" secondary onPress={() => advance(true)} />}
               </View>
             </Card>
           </SwipeCard>
         )}
       </View>
       <View style={[styles.row, { marginBottom: 8 }]}>
-        <Button
-          label={browsing ? 'さらに前' : '前のカード'}
-          disabled={!visited.length}
-          secondary
-          onPress={() => setBrowsing(visited.at(-1))}
+        <IconButton
+          label="前のカードへ"
+          symbol="←"
+          disabled={position <= 0}
+          onPress={() => setBrowsing(cards[position - 1])}
         />
-        {browsing ? (
-          <Button
-            label="現在へ"
-            secondary
-            onPress={() => setBrowsing(undefined)}
-          />
-        ) : (
+        {!browsing && (
           <IconButton
             label="種目を編集"
             symbol="✎"
