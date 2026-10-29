@@ -125,6 +125,7 @@ export type AppState = {
   visibleAchievementMetrics: string[];
   exerciseWeightSteps: Record<number, number>;
   exerciseRestDurations: Record<number, number>;
+  restTimerDisabledExerciseIds: number[];
   sideSwitchRestExerciseIds: number[];
   leftFirstExerciseIds: number[];
   workout?: WorkoutProgress;

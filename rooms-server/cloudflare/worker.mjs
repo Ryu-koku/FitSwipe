@@ -168,7 +168,10 @@ async function listRooms(env, userId) {
 }
 
 async function createRoom(env, userId, data) {
-  const name = text(data.name, "ルーム名", 40);
+  const rawName = data.name ?? "";
+  let name;
+  if (typeof rawName === "string" && !rawName.trim()) name = "筋トレ仲間";
+  else { text(rawName, "ルーム名", 40); name = rawName; }
   const count = await env.DB.prepare("SELECT count(*) AS count FROM members WHERE user_id = ?")
     .bind(userId).first();
   if (count.count >= 30) throw new ApiError(400, "参加できるルームは30個までです");

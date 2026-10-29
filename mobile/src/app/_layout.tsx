@@ -25,7 +25,7 @@ function AppLayout() {
   const { ready, error, state } = useApp();
   const { colors, styles, isDark } = useTheme();
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface }}>
       <StatusBar style={isDark ? 'light' : 'dark'} />
       {error && (
         <Text

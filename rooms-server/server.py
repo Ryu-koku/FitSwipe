@@ -154,7 +154,12 @@ class Store:
             return {"rooms": rows}
 
     def create_room(self, user, data):
-        name = text(data.get("name"), "ルーム名", 40)
+        raw_name = data.get("name", "")
+        if isinstance(raw_name, str) and not raw_name.strip():
+            name = "筋トレ仲間"
+        else:
+            text(raw_name, "ルーム名", 40)
+            name = raw_name
         identity, invite = str(uuid.uuid4()), "".join(secrets.choice("ABCDEFGHJKLMNPQRSTUVWXYZ23456789") for _ in range(10))
         with self.connect() as db:
             db.execute("BEGIN IMMEDIATE")

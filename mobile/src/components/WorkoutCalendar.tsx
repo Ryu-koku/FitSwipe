@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from
 import { Animated, PanResponder, Pressable, Text, View } from 'react-native';
 import { useApp } from '../context';
 import { achievementSummary, completedSessions, completedSets, localDay } from '../logic';
-import { Card, IconButton, Sheet, useTheme } from '../ui';
+import { Card, Sheet, useTheme } from '../ui';
 import { SessionDetails } from './SessionDetails';
 import { AppIcon } from './AppIcon';
 import { useReducedMotion } from '../use-reduced-motion';
@@ -63,12 +63,12 @@ export function WorkoutCalendar({ compact = false }: { compact?: boolean }) {
     const leading = state.weekStartsMonday ? (date.getDay() + 6) % 7 : date.getDay();
     const length = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
     return <View key={delta} style={{ width }} aria-hidden={delta !== 0} accessibilityElementsHidden={delta !== 0} importantForAccessibility={delta ? 'no-hide-descendants' : 'auto'}>
-      <View style={styles.row}>
-        <IconButton label="前の月" symbol="‹" disabled={delta !== 0} onPress={() => move(-1)} />
+      <View style={[styles.row, { justifyContent: 'space-between' }]}>
+        <View accessibilityLabel={`ストリーク ${streakWeeks}週`} style={{ minWidth: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}><AppIcon name="flame" size={17} color={colors.primary} /><Text style={{ color: colors.primary, fontSize: 14, fontWeight: '800', marginLeft: 3 }}>{streakWeeks}</Text></View>
         <Text accessibilityLiveRegion="polite" style={[styles.body, { fontWeight: '700' }]}>{date.getFullYear() !== new Date().getFullYear() ? `${date.getFullYear()}年` : ''}{date.getMonth() + 1}月</Text>
-        <IconButton label="次の月" symbol="›" disabled={delta !== 0} onPress={() => move(1)} />
+        <View style={{ minWidth: 44 }} />
       </View>
-       <View style={{ flexDirection: 'row' }}><View accessibilityLabel={`ストリーク ${streakWeeks}週`} style={{ flex: 1.15, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}><AppIcon name="flame" size={15} color={colors.primary} /><Text style={{ color: colors.primary, fontSize: 11, fontWeight: '800', marginLeft: 2 }}>{streakWeeks}</Text></View>
+       <View style={{ flexDirection: 'row' }}><View style={{ flex: 1.15 }} />
         {(state.weekStartsMonday ? ['月', '火', '水', '木', '金', '土', '日'] : ['日', '月', '火', '水', '木', '金', '土']).map((label) => <Text key={label} style={[styles.small, { flex: 1, textAlign: 'center' }]}>{label}</Text>)}
       </View>
       {Array.from({ length: 6 }, (_, week) => {
@@ -76,8 +76,8 @@ export function WorkoutCalendar({ compact = false }: { compact?: boolean }) {
         const weekKey = localDay(startOfWeek(new Date(date.getFullYear(), date.getMonth(), first), state.weekStartsMonday));
         const trained = recordedWeeks.has(weekKey);
         return <View key={week} style={{ flexDirection: 'row' }}>
-          <View accessible accessibilityLabel={trained ? 'この週はトレーニング達成' : 'この週は未達成'} style={{ flex: 1.15, height: rowHeight, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
-            <AppIcon name="flame" size={17} color={trained ? colors.primary : colors.line} />
+          <View accessible={first <= length && first + 6 >= 1} accessibilityLabel={trained ? 'この週はトレーニング達成' : 'この週は未達成'} style={{ flex: 1.15, height: rowHeight, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+            {first <= length && first + 6 >= 1 && <AppIcon name="flame" size={17} color={trained ? colors.primary : colors.line} />}
           </View>
           {Array.from({ length: 7 }, (_, col) => {
             const day = first + col;
@@ -86,8 +86,9 @@ export function WorkoutCalendar({ compact = false }: { compact?: boolean }) {
             return <View key={col} style={{ flex: 1, height: rowHeight, alignItems: 'center', justifyContent: 'center' }}>
               {day > 0 && day <= length && <Pressable accessibilityRole="button" accessibilityLabel={`${date.getMonth() + 1}月${day}日${key === today ? '、今日' : ''}${done ? '、トレーニング記録あり' : ''}`}
                 disabled={!done || delta !== 0} onPress={() => setSelected(key)}
-                style={{ width: 30, height: 30, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: key === today ? colors.soft : done ? colors.primary : 'transparent', borderWidth: key === today ? 1 : 0, borderColor: colors.primary }}>
-                <Text style={{ color: done && key !== today ? colors.bg : colors.ink }}>{day}</Text>
+                style={{ width: 30, height: 30, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: key === today ? colors.soft : done ? colors.primary : 'transparent', borderWidth: key === today || key === selected ? 1 : 0, borderColor: colors.primary }}>
+                <Text style={{ color: done && key !== today ? colors.bg : colors.ink, lineHeight: 17 }}>{day}</Text>
+                {done && <View style={{ position: 'absolute', bottom: 2, width: 4, height: 4, borderRadius: 2, backgroundColor: key === today || key === selected ? colors.primary : colors.bg }} />}
               </Pressable>}
             </View>;
           })}
