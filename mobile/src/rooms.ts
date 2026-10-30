@@ -52,7 +52,7 @@ export function createRoomsClient(
       if (!response.ok)
         throw new RoomsApiError(
           response.status,
-          data.error ?? '操作できませんでした',
+          `${data.error ?? '操作できませんでした'}${response.status === 404 ? ` (${method} ${path.split('?')[0]})` : ''}`,
         );
       return data as T;
     } finally {

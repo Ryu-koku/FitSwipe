@@ -21,11 +21,31 @@ export function WorkoutCalendar({ compact = false }: { compact?: boolean }) {
   const [selected, setSelected] = useState<string>();
   const [width, setWidth] = useState(0);
   const [offset] = useState(() => new Animated.Value(0));
+  const [calendarHeight] = useState(() => new Animated.Value(0));
+  const measuredHeight = useRef(0);
+  const monthHeights = useRef(new Map<string, number>());
+  const [heightReady, setHeightReady] = useState(false);
+  const resizeCalendar = useCallback((next: number) => {
+    if (!next || next === measuredHeight.current) return;
+    const animate = measuredHeight.current > 0 && !reduced;
+    measuredHeight.current = next;
+    calendarHeight.stopAnimation();
+    if (animate) {
+      Animated.timing(calendarHeight, { toValue: next, duration: 200, useNativeDriver: false }).start();
+    } else calendarHeight.setValue(next);
+    setHeightReady(true);
+  }, [calendarHeight, reduced]);
+  useLayoutEffect(() => {
+    const height = monthHeights.current.get(`${month.getFullYear()}-${month.getMonth()}`);
+    if (height !== undefined) resizeCalendar(height);
+  }, [month, width, resizeCalendar]);
   const moving = useRef(false);
   const move = useCallback((delta: number) => {
     if (moving.current || !width) return;
     moving.current = true;
-    Animated.timing(offset, { toValue: -delta * width, duration: reduced ? 0 : 230, useNativeDriver: true })
+    // Keep the final translation reset on the same JS timeline as the month
+    // commit, instead of briefly showing new dates at the old native offset.
+    Animated.timing(offset, { toValue: -delta * width, duration: reduced ? 0 : 230, useNativeDriver: false })
       .start(({ finished }) => {
         if (finished) {
           setSelected(undefined);
@@ -41,7 +61,7 @@ export function WorkoutCalendar({ compact = false }: { compact?: boolean }) {
     onPanResponderMove: (_, g) => { if (!moving.current && !reduced) offset.setValue(Math.max(-width, Math.min(width, g.dx))); },
     onPanResponderRelease: (_, g) => {
       if (Math.abs(g.dx) > Math.min(60, width / 5) || Math.abs(g.vx) > 0.5) move(g.dx > 0 ? -1 : 1);
-      else Animated.spring(offset, { toValue: 0, useNativeDriver: true, overshootClamping: true }).start();
+      else Animated.spring(offset, { toValue: 0, useNativeDriver: false, overshootClamping: true }).start();
     },
     onPanResponderTerminate: () => { offset.setValue(0); },
     });
@@ -62,16 +82,50 @@ export function WorkoutCalendar({ compact = false }: { compact?: boolean }) {
     const date = new Date(month.getFullYear(), month.getMonth() + delta, 1);
     const leading = state.weekStartsMonday ? (date.getDay() + 6) % 7 : date.getDay();
     const length = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
-    return <View key={delta} style={{ width }} aria-hidden={delta !== 0} accessibilityElementsHidden={delta !== 0} importantForAccessibility={delta ? 'no-hide-descendants' : 'auto'}>
+    const weeks = Math.ceil((leading + length) / 7);
+    const monthKey = `${date.getFullYear()}-${date.getMonth()}`;
+    const isCurrentMonth = date.getFullYear() === new Date().getFullYear() && date.getMonth() === new Date().getMonth();
+    const isFutureMonth = date.getFullYear() > new Date().getFullYear() || (date.getFullYear() === new Date().getFullYear() && date.getMonth() > new Date().getMonth());
+    let displayedStreak = streakWeeks;
+    let showStreak = isCurrentMonth;
+    if (!isCurrentMonth && !isFutureMonth) {
+      const firstWeek = localDay(startOfWeek(date, state.weekStartsMonday));
+      const lastDay = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+      const lastWeek = localDay(startOfWeek(lastDay, state.weekStartsMonday));
+      // Exclude next month's workouts even when they share the final week.
+      const monthWeeks = new Set(sessions.filter((session) => sessionsWithSets.has(session.id) && localDay(session.startedAt) <= localDay(lastDay))
+        .map((session) => localDay(startOfWeek(new Date(session.startedAt), state.weekStartsMonday))));
+      let run = 0;
+      let previous: string | undefined;
+      displayedStreak = 0;
+      for (const week of [...monthWeeks].filter((key) => key <= lastWeek).sort()) {
+        const before = new Date(`${week}T12:00:00`);
+        before.setDate(before.getDate() - 7);
+        run = previous === localDay(before) ? run + 1 : 1;
+        if (week >= firstWeek) displayedStreak = Math.max(displayedStreak, run);
+        previous = week;
+      }
+      showStreak = displayedStreak > 0;
+    }
+    // Only the visible month determines the strip height; adjacent swipe pages
+    // may have more weeks and must not leave empty space under this month.
+    return <View key={monthKey} onLayout={(event) => {
+      const next = event.nativeEvent.layout.height;
+      monthHeights.current.set(monthKey, next);
+      if (delta === 0) resizeCalendar(next);
+    }} style={{ width, ...(delta !== 0 ? { position: 'absolute' as const, top: 0, left: delta * width } : {}) }} aria-hidden={delta !== 0} accessibilityElementsHidden={delta !== 0} importantForAccessibility={delta ? 'no-hide-descendants' : 'auto'}>
       <View style={[styles.row, { justifyContent: 'space-between' }]}>
-        <View accessibilityLabel={`ストリーク ${streakWeeks}週`} style={{ minWidth: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}><AppIcon name="flame" size={17} color={colors.primary} /><Text style={{ color: colors.primary, fontSize: 14, fontWeight: '800', marginLeft: 3 }}>{streakWeeks}</Text></View>
-        <Text accessibilityLiveRegion="polite" style={[styles.body, { fontWeight: '700' }]}>{date.getFullYear() !== new Date().getFullYear() ? `${date.getFullYear()}年` : ''}{date.getMonth() + 1}月</Text>
+        <View accessibilityLabel={showStreak ? `${isCurrentMonth ? 'ストリーク' : '月内最長ストリーク'} ${displayedStreak}週` : undefined} style={{ minWidth: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>{showStreak && <><AppIcon name="flame" size={20} color={colors.primary} /><Text style={{ color: colors.primary, fontSize: 16, fontWeight: '800', marginLeft: 3 }}>{displayedStreak}</Text></>}</View>
+        <View accessibilityLabel={isCurrentMonth ? '今月' : undefined} style={{ alignItems: 'center' }}>
+          <Text accessibilityLiveRegion="polite" style={[styles.body, { fontWeight: '700' }]}>{date.getFullYear() !== new Date().getFullYear() ? `${date.getFullYear()}年` : ''}{date.getMonth() + 1}月</Text>
+          <View style={{ height: 2, width: 18, marginTop: 2, borderRadius: 1, backgroundColor: isCurrentMonth ? colors.primary : 'transparent' }} />
+        </View>
         <View style={{ minWidth: 44 }} />
       </View>
        <View style={{ flexDirection: 'row' }}><View style={{ flex: 1.15 }} />
         {(state.weekStartsMonday ? ['月', '火', '水', '木', '金', '土', '日'] : ['日', '月', '火', '水', '木', '金', '土']).map((label) => <Text key={label} style={[styles.small, { flex: 1, textAlign: 'center' }]}>{label}</Text>)}
       </View>
-      {Array.from({ length: 6 }, (_, week) => {
+      {Array.from({ length: weeks }, (_, week) => {
         const first = week * 7 - leading + 1;
         const weekKey = localDay(startOfWeek(new Date(date.getFullYear(), date.getMonth(), first), state.weekStartsMonday));
         const trained = recordedWeeks.has(weekKey);
@@ -97,12 +151,12 @@ export function WorkoutCalendar({ compact = false }: { compact?: boolean }) {
     </View>;
   };
   return <>
-    <Card style={{ padding: 8 }}>
-      <View onLayout={(e) => setWidth(e.nativeEvent.layout.width)} style={{ overflow: 'hidden' }} {...responder?.panHandlers}>
-        <Animated.View style={{ flexDirection: 'row', width: width * 3, marginLeft: -width, transform: [{ translateX: offset }] }}>
+    <Card style={{ padding: 8, marginBottom: 0 }}>
+      <Animated.View onLayout={(e) => setWidth(e.nativeEvent.layout.width)} style={{ overflow: 'hidden', ...(heightReady ? { height: calendarHeight } : {}) }} {...responder?.panHandlers}>
+        <Animated.View style={{ width, position: 'absolute', top: 0, left: 0, transform: [{ translateX: offset }] }}>
           {[-1, 0, 1].map(renderMonth)}
         </Animated.View>
-      </View>
+      </Animated.View>
     </Card>
     {selected && <Sheet title={new Date(`${selected}T12:00:00`).toLocaleDateString('ja-JP', { month: 'long', day: 'numeric', weekday: 'short' })} onClose={() => setSelected(undefined)}>
       <SessionDetails sessionIds={sessions.filter((s) => localDay(s.startedAt) === selected).map((s) => s.id)} />

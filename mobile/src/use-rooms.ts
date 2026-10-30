@@ -30,7 +30,11 @@ export function useRooms() {
   const load = useCallback(
     async (id: string) => {
       const account = identity();
-      const [result, compared] = await Promise.all([client.detail(account, id), client.comparison(account, id, japanMonth())]);
+      const roomName = getState().rooms.find((room) => room.id === id)?.name;
+      const mockRoom = __DEV__ && (roomName === 'まめ' || roomName === 'まめのルーム');
+      const [result, compared] = await Promise.all([client.detail(account, id), mockRoom
+        ? Promise.resolve<RoomComparison>({ month: japanMonth(), rankings: [{ id: account.id, name: account.name, sets: 0, rank: 1 }], posts: [] })
+        : client.comparison(account, id, japanMonth())]);
       if (getState().roomIdentity?.id !== account.id) return;
       update((s) => ({
         ...s,

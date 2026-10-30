@@ -1,13 +1,17 @@
 import React, {
   PropsWithChildren,
   createContext,
+  useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
 } from 'react';
 import {
+  Animated,
   KeyboardAvoidingView,
   Modal,
+  PanResponder,
   Platform,
   Pressable,
   RefreshControl,
@@ -17,6 +21,7 @@ import {
   TextInput,
   View,
   useColorScheme,
+  useWindowDimensions,
 } from 'react-native';
 import type { StyleProp, ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -175,6 +180,9 @@ export function Screen({
   bottomDock = true,
   onRefresh,
   refreshing = false,
+  overlay,
+  scrollOnlyWhenOverflow = false,
+  headerShown = true,
 }: PropsWithChildren<{
   title?: string;
   right?: React.ReactNode;
@@ -183,8 +191,13 @@ export function Screen({
   bottomDock?: boolean;
   onRefresh?: () => void;
   refreshing?: boolean;
+  overlay?: React.ReactNode;
+  scrollOnlyWhenOverflow?: boolean;
+  headerShown?: boolean;
 }>) {
   const { styles } = useTheme();
+  const [viewportHeight, setViewportHeight] = useState(0);
+  const [contentHeight, setContentHeight] = useState(0);
   const header = (
     <View style={styles.header}>
       {onBack && <IconButton label="戻る" symbol="‹" onPress={onBack} />}
@@ -197,11 +210,15 @@ export function Screen({
       style={styles.screen}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      {header}
+      {headerShown && header}
       {scroll ? (
         <ScrollView
           keyboardShouldPersistTaps="handled"
-          contentContainerStyle={[styles.content, !bottomDock && { paddingBottom: 24 }]}
+          onLayout={scrollOnlyWhenOverflow ? (event) => setViewportHeight(event.nativeEvent.layout.height) : undefined}
+          onContentSizeChange={scrollOnlyWhenOverflow ? (_, height) => setContentHeight(height) : undefined}
+          scrollEnabled={!scrollOnlyWhenOverflow || contentHeight > viewportHeight + 1}
+          bounces={!scrollOnlyWhenOverflow || contentHeight > viewportHeight + 1}
+          contentContainerStyle={[styles.content, (!bottomDock || scrollOnlyWhenOverflow) && { paddingBottom: 24 }]}
           refreshControl={onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} /> : undefined}
         >
           {children}
@@ -211,6 +228,7 @@ export function Screen({
           {children}
         </View>
       )}
+      {overlay}
     </KeyboardAvoidingView>
   );
 }
@@ -222,6 +240,8 @@ export function Card({
   const { styles } = useTheme();
   return <View style={[styles.card, style]}>{children}</View>;
 }
+
+const SheetDismissContext = createContext<{ onClose: () => void; dismiss: () => void } | null>(null);
 
 export function Button({
   label,
@@ -235,13 +255,15 @@ export function Button({
   disabled?: boolean;
 }) {
   const { styles } = useTheme();
+  const sheetDismiss = useContext(SheetDismissContext);
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityState={{ disabled }}
       onPress={() => {
         feedback();
-        onPress();
+        if (sheetDismiss && onPress === sheetDismiss.onClose) sheetDismiss.dismiss();
+        else onPress();
       }}
       disabled={disabled}
       style={({ pressed }) => [
@@ -413,48 +435,121 @@ export function Sheet({
   children,
   onClose,
   scroll = true,
-}: PropsWithChildren<{ title: string; onClose: () => void; scroll?: boolean }>) {
+  bottomSheet = false,
+  popup = false,
+}: PropsWithChildren<{ title: string; onClose: () => void; scroll?: boolean; bottomSheet?: boolean; popup?: boolean }>) {
   const { styles, colors } = useTheme();
   const insets = useSafeAreaInsets();
+  const [sheetOffset] = useState(() => new Animated.Value(0));
+  const { height: windowHeight } = useWindowDimensions();
+  const availableSheetHeight = windowHeight - insets.top - insets.bottom - 40;
+  const [settledHeight, setSettledHeight] = useState(availableSheetHeight * 0.75);
+  const [sheetHeight] = useState(() => new Animated.Value(availableSheetHeight * 0.75));
+  const [entrance] = useState(() => new Animated.Value(bottomSheet ? windowHeight : 0));
+  const [backdropOpacity] = useState(() => new Animated.Value(bottomSheet ? 0 : 1));
+  const [closing, setClosing] = useState(false);
+  const dismiss = useCallback(() => {
+    if (!bottomSheet) { onClose(); return; }
+    if (closing) return;
+    setClosing(true);
+    entrance.stopAnimation();
+    Animated.parallel([
+      Animated.timing(entrance, { toValue: windowHeight, duration: 240, useNativeDriver: false }),
+      Animated.timing(backdropOpacity, { toValue: 0, duration: 240, useNativeDriver: false }),
+    ]).start(({ finished }) => { if (finished) onClose(); else setClosing(false); });
+  }, [bottomSheet, onClose, entrance, backdropOpacity, windowHeight, closing]);
+  useEffect(() => {
+    if (!bottomSheet) return;
+    const animation = Animated.parallel([
+      Animated.timing(entrance, { toValue: 0, duration: 240, useNativeDriver: false }),
+      Animated.timing(backdropOpacity, { toValue: 1, duration: 240, useNativeDriver: false }),
+    ]);
+    animation.start();
+    return () => animation.stop();
+  }, [bottomSheet, entrance, backdropOpacity]);
+  const sheetPan = useMemo(() => PanResponder.create({
+    onStartShouldSetPanResponder: () => bottomSheet,
+    onMoveShouldSetPanResponderCapture: (_, gesture) => bottomSheet && Math.abs(gesture.dy) > 6 && Math.abs(gesture.dy) > Math.abs(gesture.dx),
+    onMoveShouldSetPanResponder: (_, gesture) => bottomSheet && Math.abs(gesture.dy) > 6 && Math.abs(gesture.dy) > Math.abs(gesture.dx),
+    onPanResponderGrant: () => { sheetOffset.stopAnimation(); sheetHeight.stopAnimation(); },
+    onPanResponderMove: (_, gesture) => {
+      const next = settledHeight - gesture.dy;
+      const minimum = availableSheetHeight * 0.3;
+      sheetHeight.setValue(Math.max(minimum, Math.min(availableSheetHeight, next)));
+      sheetOffset.setValue(Math.max(0, minimum - next));
+    },
+    onPanResponderRelease: (_, gesture) => {
+      if (gesture.dy > 100 || (gesture.dy > 40 && gesture.vy > 0.8)) {
+        dismiss();
+      } else {
+        const height = gesture.dy < -40 ? availableSheetHeight
+          : gesture.dy > 40 ? availableSheetHeight * 0.75 : settledHeight;
+        setSettledHeight(height);
+        Animated.timing(sheetHeight, { toValue: height, duration: 180, useNativeDriver: false }).start();
+        Animated.spring(sheetOffset, { toValue: 0, useNativeDriver: false, overshootClamping: true }).start();
+      }
+    },
+    onPanResponderTerminate: () => {
+      Animated.timing(sheetHeight, { toValue: settledHeight, duration: 160, useNativeDriver: false }).start();
+      Animated.spring(sheetOffset, { toValue: 0, useNativeDriver: false, overshootClamping: true }).start();
+    },
+   }), [bottomSheet, dismiss, sheetOffset, sheetHeight, settledHeight, availableSheetHeight]);
   return (
-    <Modal transparent animationType="slide" onRequestClose={onClose}>
+    <Modal transparent animationType={popup ? 'fade' : bottomSheet ? 'none' : 'slide'} onRequestClose={dismiss}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={{
           flex: 1,
-          backgroundColor: '#0007',
-          justifyContent: 'flex-end',
+          justifyContent: popup ? 'center' : 'flex-end',
           paddingTop: insets.top + 20,
+          ...(popup ? { paddingHorizontal: 20, paddingBottom: insets.bottom + 20 } : {}),
         }}
       >
+        <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: '#0007', opacity: backdropOpacity }]} />
         <Pressable
           accessibilityLabel="閉じる"
-          onPress={onClose}
-          style={{ flex: 1, minHeight: 20 }}
+          onPress={dismiss}
+          style={popup ? StyleSheet.absoluteFill : { flex: 1, minHeight: 20 }}
         />
-        <View
+        <Animated.View
           style={{
-            maxHeight: '90%',
+            maxHeight: bottomSheet ? availableSheetHeight : '90%',
+            flexShrink: 0,
+            transform: [{ translateY: Animated.add(sheetOffset, entrance) }],
             backgroundColor: colors.bg,
             borderTopLeftRadius: 28,
             borderTopRightRadius: 28,
+            ...(popup ? { borderBottomLeftRadius: 28, borderBottomRightRadius: 28 } : {}),
+            overflow: 'hidden',
             paddingBottom: insets.bottom + 16,
-            ...(scroll ? {} : { height: '90%' }),
+            ...(bottomSheet ? { height: sheetHeight } : scroll ? {} : { height: '90%' }),
           }}
         >
-          <View
+          <View style={{ flexShrink: 0 }}>
+          {bottomSheet && <View collapsable={false} {...sheetPan.panHandlers} style={{ height: 32, width: '100%', alignItems: 'center', justifyContent: 'center' }}>
+            <View accessible={false} style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: colors.line }} />
+          </View>}
+          {bottomSheet ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 8 }}>
+              <View collapsable={false} {...sheetPan.panHandlers} style={{ flex: 1, minHeight: 48, justifyContent: 'center' }}>
+                <Text pointerEvents="none" accessibilityRole="header" style={[styles.body, { fontSize: 22, fontWeight: '700' }]}>{title}</Text>
+              </View>
+              <IconButton label="閉じる" symbol="×" onPress={dismiss} />
+            </View>
+          ) : <View
             style={[styles.header, { paddingHorizontal: 20, paddingTop: 8 }]}
           >
             <Text style={[styles.title, { flex: 1 }]}>{title}</Text>
             <IconButton label="閉じる" symbol="×" onPress={onClose} />
+          </View>}
           </View>
           {scroll ? <ScrollView
             keyboardShouldPersistTaps="handled"
             contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 12 }}
           >
-            {children}
-          </ScrollView> : children}
-        </View>
+            <SheetDismissContext.Provider value={{ onClose, dismiss }}>{children}</SheetDismissContext.Provider>
+          </ScrollView> : <View style={{ flex: 1, minHeight: 0 }}><SheetDismissContext.Provider value={{ onClose, dismiss }}>{children}</SheetDismissContext.Provider></View>}
+        </Animated.View>
       </KeyboardAvoidingView>
     </Modal>
   );

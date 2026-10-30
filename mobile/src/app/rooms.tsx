@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, AppState, BackHandler, Pressable, Share, Text, View, Animated, Easing } from 'react-native';
 import { useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import QRCode from 'react-native-qrcode-svg';
 import { useApp } from '../context';
 import { formatWeight } from '../logic';
@@ -15,18 +14,24 @@ export default function RoomsScreen() {
   const rooms = useRooms();
   const latest = useRef(rooms);
   useEffect(() => { latest.current = rooms; }, [rooms]);
-  const { styles } = useTheme();
-  const insets = useSafeAreaInsets();
+  const { colors, styles } = useTheme();
   const params = useLocalSearchParams<{ code?: string }>();
   const [dialog, setDialog] = useState<'create' | 'join' | 'profile' | 'rename' | 'invite' | 'manage'>();
   const [draft, setDraft] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [memberId, setMemberId] = useState<string>();
   const [actionsOpen, setActionsOpen] = useState(false);
+  const [pullRefreshing, setPullRefreshing] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [actionProgress] = useState(() => new Animated.Value(0));
   const consumed = useRef('');
   const room = state.rooms.find((r) => r.id === rooms.roomId);
+  const mockRoom = __DEV__ && (room?.name === 'まめ' || room?.name === 'まめのルーム');
+  const displayedComparison = rooms.comparison ?? (mockRoom ? {
+    month: new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' }).slice(0, 7),
+    rankings: [{ id: rooms.account?.id ?? 'preview-own', name: rooms.account?.name ?? 'あなた', sets: 0, rank: 1 }],
+    posts: [],
+  } : undefined);
   const created = state.rooms.find((r) => r.id === rooms.createdRoomId);
   const inviteRoom = dialog === 'invite' ? room : undefined;
   useEffect(() => {
@@ -68,7 +73,19 @@ export default function RoomsScreen() {
   };
   return <Screen title={room?.name ?? 'ルーム'} onBack={rooms.roomId ? () => { setMemberId(undefined); rooms.close(); } : undefined}
     right={rooms.account ? <View style={styles.row}><IconButton label={room ? 'ルームの操作' : 'プロフィール'} symbol="⋯" onPress={menu} /></View> : undefined}
-    onRefresh={rooms.account ? () => void rooms.run(rooms.refresh) : undefined} refreshing={rooms.busy}>
+    onRefresh={rooms.account ? () => {
+      setPullRefreshing(true);
+      void rooms.run(rooms.refresh).finally(() => setPullRefreshing(false));
+    } : undefined} refreshing={pullRefreshing}
+    overlay={rooms.configured && !!rooms.account && !room ? <View pointerEvents="box-none" style={{ position: 'absolute', right: 20, bottom: 20, alignItems: 'flex-end' }}>
+      <Animated.View pointerEvents={actionsOpen ? 'auto' : 'none'} style={{ opacity: actionProgress, transform: [{ translateY: actionProgress.interpolate({ inputRange: [0, 1], outputRange: [10, 0] }) }, { scale: actionProgress.interpolate({ inputRange: [0, 1], outputRange: [0.94, 1] }) }], marginBottom: 12, gap: 10 }}>
+        <Button label="ルームを作成" secondary onPress={() => openAction('create')} />
+        <Button label="ルームに参加" secondary onPress={() => openAction('join')} />
+      </Animated.View>
+      <Pressable accessibilityRole="button" accessibilityLabel={actionsOpen ? 'ルーム操作を閉じる' : 'ルーム操作を開く'} accessibilityState={{ expanded: actionsOpen }} disabled={rooms.busy} onPress={toggleActions} style={{ width: 58, height: 58, borderRadius: 29, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', elevation: 6 }}>
+        <Animated.Text style={{ color: '#fff', fontSize: 34, lineHeight: 40, transform: [{ rotate: actionProgress.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '45deg'] }) }] }}>＋</Animated.Text>
+      </Pressable>
+    </View> : undefined}>
     {(rooms.error || roomSyncError) && <Card><Text accessibilityRole="alert" style={styles.body}>{rooms.error || roomSyncError}</Text><Button label="再試行" secondary disabled={rooms.busy} onPress={() => void rooms.run(rooms.refresh)} /></Card>}
     {!rooms.configured ? <Card><Text style={styles.body}>ルーム共有は準備中です</Text></Card> : !rooms.account ? <>
       <Text style={styles.title}>友だちと、積み重ねよう</Text><Field label="表示名" value={displayName} onChangeText={setDisplayName} maxLength={32} />
@@ -79,19 +96,9 @@ export default function RoomsScreen() {
         <Card style={{ marginTop: 12 }}><View style={styles.row}><View style={{ flexDirection: 'row', paddingRight: 8 }}>{(entry.memberNames?.length ? entry.memberNames : [entry.name]).map((name, i) => <View key={i} style={{ marginLeft: i ? -12 : 0 }}><MemberAvatar name={name} /></View>)}</View><Text style={[styles.body, { flex: 1, fontWeight: '700' }]}>{entry.name}</Text></View></Card>
       </Pressable>)}
     </> : <>
-      {!room.sharingSince && <Card><Text style={styles.body}>完了した記録を、メンバーと自動で比較できます。</Text><Text style={styles.small}>今月1日以降の記録と今後の記録を共有します。</Text><Button label="自動共有を始める" disabled={rooms.busy} onPress={startSharing} /></Card>}
       {room.sharingSince && <Text style={[styles.small, { marginBottom: 12 }]}>自動共有中 · 種目・重量・回数まで共有</Text>}
-      {rooms.comparison ? <Card><RoomComparisonChart comparison={rooms.comparison} ownId={rooms.account.id} onMember={setMemberId} /></Card> : <Text style={styles.small}>比較データを読み込み中…</Text>}
+      {displayedComparison ? <Card><RoomComparisonChart comparison={displayedComparison} ownId={rooms.account.id} onMember={setMemberId} enableMock={mockRoom} /></Card> : <Text style={styles.small}>比較データを読み込み中…</Text>}
     </>}
-    {rooms.configured && !!rooms.account && !room && <View pointerEvents="box-none" style={{ position: 'absolute', right: 20, bottom: insets.bottom + 84, alignItems: 'flex-end' }}>
-      <Animated.View pointerEvents={actionsOpen ? 'auto' : 'none'} style={{ opacity: actionProgress, transform: [{ translateY: actionProgress.interpolate({ inputRange: [0, 1], outputRange: [10, 0] }) }, { scale: actionProgress.interpolate({ inputRange: [0, 1], outputRange: [0.94, 1] }) }], marginBottom: 12, gap: 10 }}>
-        <Button label="ルームを作成" secondary onPress={() => openAction('create')} />
-        <Button label="ルームに参加" secondary onPress={() => openAction('join')} />
-      </Animated.View>
-      <Pressable accessibilityRole="button" accessibilityLabel={actionsOpen ? 'ルーム操作を閉じる' : 'ルーム操作を開く'} accessibilityState={{ expanded: actionsOpen }} disabled={rooms.busy} onPress={toggleActions} style={{ width: 58, height: 58, borderRadius: 29, backgroundColor: styles.title.color as string, alignItems: 'center', justifyContent: 'center', elevation: 6 }}>
-        <Animated.Text style={{ color: '#fff', fontSize: 34, lineHeight: 40, transform: [{ rotate: actionProgress.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '45deg'] }) }] }}>＋</Animated.Text>
-      </Pressable>
-    </View>}
     {(dialog === 'create' || dialog === 'join' || dialog === 'rename') && <Sheet title={dialog === 'create' ? 'ルームを作成' : dialog === 'join' ? 'ルームに参加' : '表示名を変更'} onClose={() => setDialog(undefined)}>
       <Field label={dialog === 'create' ? 'ルーム名（任意）' : dialog === 'join' ? '招待コード・参加リンク' : '表示名'} value={draft} onChangeText={setDraft} maxLength={dialog === 'join' ? 200 : dialog === 'create' ? 40 : 32} />
        <Button label={dialog === 'create' ? '作成して招待' : dialog === 'join' ? '参加' : '保存'} disabled={rooms.busy || (dialog !== 'create' && !draft.trim())} onPress={() => {

@@ -24,7 +24,6 @@ import {
   currentCard,
   finishWorkout,
   startWorkout,
-  undoWorkout,
   updateSet,
   workoutCards,
 } from '../workout';
@@ -32,6 +31,7 @@ import { SwipeCard } from '../components/SwipeCard';
 import { WorkoutOrderEditor } from '../components/WorkoutOrderEditor';
 import type { WorkoutCard } from '../types';
 import { ExercisePictogram } from '../components/ExercisePictogram';
+import { WorkoutProgressBar } from '../components/WorkoutProgressBar';
 
 export default function WorkoutScreen() {
   const { state, update, getState } = useApp();
@@ -87,7 +87,9 @@ export default function WorkoutScreen() {
   const rows = state.sets.filter((s) => s.sessionId === session.id);
   const cards = workoutCards(state, session.id);
   const completedCount = cards.filter((c) => cardCompleted(state, c)).length;
-  const order = [...new Set(rows.map((s) => s.exerciseId))];
+  const remainingExercises = new Set(cards.filter((item) => !cardCompleted(state, item))
+    .map((item) => rows.find((row) => row.id === item.setId)?.exerciseId)
+    .filter((id) => id !== undefined)).size;
   const exerciseSets = rows.filter((s) => s.exerciseId === exercise.id);
   const older = state.sessions
     .filter((s) => s.status === 'COMPLETED')
@@ -141,7 +143,6 @@ export default function WorkoutScreen() {
   const position = cards.findIndex(
     (c) => c.setId === card.setId && c.side === card.side,
   );
-  const preset = state.presets.find((p) => p.id === session.presetId);
   const rest = !browsing && !!progress?.restEndsAt;
   const change = (key: typeof weightKey | typeof repsKey, delta: number) => {
     feedback();
@@ -155,12 +156,12 @@ export default function WorkoutScreen() {
   return (
     <Screen
       scroll={false}
-      title={preset?.name ?? 'トレーニング'}
-      onBack={() => {
-        if (browsing) setBrowsing(undefined);
-        else update(undoWorkout);
-      }}
-      right={
+      headerShown={false}
+    >
+      <View style={[styles.row, { marginBottom: 8 }]}>
+        <Text style={[styles.body, { flex: 1, fontSize: 22, fontWeight: '700' }]}>
+          {state.presets.find((preset) => preset.id === session.presetId)?.name ?? 'トレーニング'}
+        </Text>
         <IconButton
           label="トレーニングを終了"
           symbol="×"
@@ -169,33 +170,13 @@ export default function WorkoutScreen() {
             router.replace('/');
           }}
         />
-      }
-    >
+      </View>
       <View style={[styles.row, { marginBottom: 8 }]}>
-        <Text style={styles.small}>
-          {order.indexOf(exercise.id) + 1} / {order.length} 種目
-        </Text>
-        <Text style={styles.small}>
-          {completedCount} / {cards.length} 完了
+        <Text style={[styles.small, { marginLeft: 'auto', textAlign: 'right' }]}>
+          残り{remainingExercises}種目
         </Text>
       </View>
-      <View
-        style={{
-          height: 5,
-          borderRadius: 3,
-          backgroundColor: colors.line,
-          marginBottom: 16,
-        }}
-      >
-        <View
-          style={{
-            height: 5,
-            borderRadius: 3,
-            backgroundColor: colors.primary,
-            width: `${cards.length ? (completedCount / cards.length) * 100 : 0}%`,
-          }}
-        />
-      </View>
+      <WorkoutProgressBar progress={cards.length ? completedCount / cards.length : 0} />
       <View style={{ flex: 1, paddingBottom: 16 }}>
         {rest ? (
           <RestCard
@@ -285,7 +266,6 @@ export default function WorkoutScreen() {
                     {previous?.[repsKey] ?? '—'}回　›
                   </Text>
                 </Pressable>
-                {!browsing && <Button label="スキップ" secondary onPress={() => advance(true)} />}
               </View>
             </Card>
           </SwipeCard>
@@ -294,7 +274,7 @@ export default function WorkoutScreen() {
       <View style={[styles.row, { marginBottom: 8 }]}>
         <IconButton
           label="前のカードへ"
-          symbol="←"
+          symbol="↶"
           disabled={position <= 0}
           onPress={() => setBrowsing(cards[position - 1])}
         />

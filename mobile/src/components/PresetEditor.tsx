@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { Alert, View } from 'react-native';
+import { Alert, Switch, Text, View } from 'react-native';
 import { useApp } from '../context';
 import { activeExercises } from '../logic';
 import type { PresetExerciseConfig } from '../types';
-import { exerciseDefaults, numeric } from '../workout';
+import { exerciseDefaults } from '../workout';
 import { Button, Chip, Field, NumberField, Sheet, useTheme } from '../ui';
 import { ExerciseOrderList } from './ExerciseOrderList';
 import { moveItem } from '../reorder';
@@ -57,13 +57,12 @@ export function PresetEditor({ presetId, onClose }: { presetId: string; onClose:
 
 export function RestField({ exerciseId }: { exerciseId: number }) {
   const { state, update } = useApp();
-  const seconds = state.exerciseRestDurations[exerciseId];
-  const [draft, setDraft] = useState(seconds !== undefined ? String(seconds / 60) : '');
-  const value = numeric(draft);
-  return <>
-    <Field label="休憩（分・空欄で共通設定）" value={draft} onChangeText={setDraft} keyboardType="decimal-pad" />
-    <Button label="休憩を保存" secondary disabled={!!draft.trim() && (value === undefined || value > 120)} onPress={() => update((s) => ({ ...s,
-      exerciseRestDurations: Object.fromEntries([...Object.entries(s.exerciseRestDurations).filter(([id]) => id !== String(exerciseId)), ...(value !== undefined ? [[String(exerciseId), Math.round(value * 60)]] : [])]),
-    }))} />
-  </>;
+  const { styles } = useTheme();
+  return <View style={[styles.row, { justifyContent: 'space-between', marginVertical: 12 }]}>
+    <Text style={styles.body}>休憩</Text>
+    <Switch accessibilityLabel="休憩" value={!state.restTimerDisabledExerciseIds.includes(exerciseId)}
+      onValueChange={(enabled) => update((s) => ({ ...s,
+        restTimerDisabledExerciseIds: [...s.restTimerDisabledExerciseIds.filter((id) => id !== exerciseId), ...(!enabled ? [exerciseId] : [])],
+      }))} />
+  </View>;
 }
