@@ -5,6 +5,7 @@ import {
   ExerciseMode,
   WorkoutSet,
 } from './types';
+import { exerciseGroup } from './exercise-groups';
 
 export const now = () => new Date().toISOString();
 
@@ -58,7 +59,7 @@ const defaultConfig = (
 export function seedState(): AppState {
   return {
     nextId: 100,
-    exercises: initialExercises,
+    exercises: initialExercises.map((exercise) => ({ ...exercise, muscleGroup: exerciseGroup(exercise) })),
     bodyMeasurements: [],
     sessions: [],
     sets: [],

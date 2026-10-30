@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import { router } from 'expo-router';
 import { useApp } from '../context';
 import {
   Button,
@@ -13,7 +12,6 @@ import {
   useTheme,
 } from '../ui';
 import { PresetEditor } from '../components/PresetEditor';
-import { ExerciseEditor } from '../components/ExerciseEditor';
 
 export default function PrepareScreen() {
   const { state, update } = useApp();
@@ -21,9 +19,18 @@ export default function PrepareScreen() {
   const [editing, setEditing] = useState<string>();
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState('');
-  const [exercise, setExercise] = useState(false);
   return (
-    <Screen title="トレーニング" onBack={() => router.replace('/')}>
+    <Screen title="トレーニング"
+      overlay={<View pointerEvents="box-none" style={{ position: 'absolute', right: 20, bottom: 20 }}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="プリセットを追加"
+          onPress={() => { setName(''); setAdding(true); }}
+          style={{ width: 58, height: 58, borderRadius: 29, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', elevation: 6 }}
+        >
+          <Text style={{ color: '#fff', fontSize: 34, lineHeight: 40 }}>＋</Text>
+        </Pressable>
+      </View>}>
       <SectionTitle>プリセット</SectionTitle>
       <View style={[styles.wrap, { gap: 10 }]}>
         {state.presets.map((preset) => {
@@ -44,26 +51,29 @@ export default function PrepareScreen() {
             >
               <Card
                 style={{
-                  minHeight: 150,
+                   minHeight: 150,
+                   paddingBottom: 60,
                   backgroundColor: selected ? colors.soft : colors.surface,
                   borderColor: selected ? colors.primary : colors.line,
                   borderWidth: selected ? 2 : 1,
                 }}
               >
-                <Text style={{ color: colors.primary, fontSize: 24 }}>
-                  {selected ? '●' : '○'}
-                </Text>
-                <Text
-                  style={[styles.body, { fontWeight: '800', marginTop: 10 }]}
-                >
-                  {preset.name}
-                </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Text style={{ color: colors.primary, fontSize: 24 }}>
+                    {selected ? '●' : '○'}
+                  </Text>
+                  <Text
+                    style={[styles.body, { flex: 1, fontSize: 20, fontWeight: '800' }]}
+                  >
+                    {preset.name}
+                  </Text>
+                </View>
                 <Text style={styles.small}>
                   {configs.length}種目 ·{' '}
                   {configs.reduce((sum, c) => sum + Math.max(1, c.sets), 0)}
                   セット
                 </Text>
-                <View style={{ alignItems: 'flex-end' }}>
+                <View style={{ position: 'absolute', right: 8, bottom: 8 }}>
                   <IconButton
                     label={`${preset.name}を編集`}
                     symbol="✎"
@@ -78,22 +88,12 @@ export default function PrepareScreen() {
           );
         })}
       </View>
-      <Button
-        label="＋ プリセットを追加"
-        secondary
-        onPress={() => {
-          setName('');
-          setAdding(true);
-        }}
-      />
-      <Button label="種目を追加" secondary onPress={() => setExercise(true)} />
       {editing && (
         <PresetEditor
           presetId={editing}
           onClose={() => setEditing(undefined)}
         />
       )}
-      {exercise && <ExerciseEditor onClose={() => setExercise(false)} />}
       {adding && (
         <Sheet title="プリセットを追加" onClose={() => setAdding(false)}>
           <Field

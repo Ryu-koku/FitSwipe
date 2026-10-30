@@ -24,7 +24,6 @@ export default function SettingsScreen() {
   const { styles } = useTheme();
   const [page, setPage] = useState<'menu' | 'basic' | 'exercises' | 'body'>('menu');
   const [weight, setWeight] = useState(String(state.weightStepKg));
-  const [rest, setRest] = useState(String(state.restDurationSeconds / 60));
   const [editor, setEditor] = useState<Exercise | 'new'>();
   const [importText, setImportText] = useState('');
   const [csvText, setCsvText] = useState('');
@@ -40,7 +39,6 @@ export default function SettingsScreen() {
     }, [page]),
   );
   const step = numeric(weight);
-  const seconds = numeric(rest);
   return (
     <Screen
       title={
@@ -130,22 +128,6 @@ export default function SettingsScreen() {
                 update((s) => ({
                   ...s,
                   weightStepKg: Math.round(step! * 100) / 100,
-                }))
-              }
-            />
-            <Field
-              label="共通のセット間休憩（分・0で休憩なし）"
-              value={rest}
-              onChangeText={setRest}
-              keyboardType="decimal-pad"
-            />
-            <Button
-              label="休憩設定を保存"
-              disabled={seconds === undefined || seconds > 120}
-              onPress={() =>
-                update((s) => ({
-                  ...s,
-                  restDurationSeconds: Math.round(seconds! * 60),
                 }))
               }
             />

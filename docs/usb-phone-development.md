@@ -1,5 +1,23 @@
 # USB実機での開発
 
+## リアルタイム確認（推奨）
+
+サーバーの `develop` で初回のみ次を実行します。
+
+```sh
+ANDROID_HOME=/tmp/opencode/fitswipe-phone-sdk \
+ANDROID_SDK_ROOT=/tmp/opencode/fitswipe-phone-sdk \
+bash scripts/dev-phone.sh --build
+```
+
+次回からは `bash scripts/dev-phone.sh` だけで接続します。Metro を動かしている間、
+この作業ツリーの JS/TS・画面変更が Fast Refresh で実機に反映されます。
+リモート develop の自動 pull はしません。ネイティブ依存や設定変更時は `--build` で再生成してください。
+終了は Ctrl+C。laptop の ADB とサーバーの Metro はループバック限定の SSH と USB で接続します。
+既存の FitSwipe Dev を更新しますが、Play 版のデータは変更しません。
+
+## 単独起動可能な APK の確認
+
 このチェックアウトの `develop` で作業し、次でExpo版の型チェック・lint・テスト・ネイティブ生成・ビルド・実機更新・起動を行う。
 
 ```sh

@@ -22,7 +22,8 @@ export async function prepareRestNotifications() {
     await Notifications.setNotificationChannelAsync(channelId, {
       name: '休憩タイマー',
       importance: AndroidImportance.HIGH,
-      sound: 'default',
+      // Omit sound to use Android's system default. A string here is
+      // validated as a bundled custom sound filename in Expo SDK 58.
       enableVibrate: true,
       vibrationPattern: [0, 240],
     });

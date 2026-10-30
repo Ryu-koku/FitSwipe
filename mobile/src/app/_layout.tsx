@@ -1,4 +1,4 @@
-import { Stack } from 'expo-router';
+import { Stack, usePathname } from 'expo-router';
 import React from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { AppProvider, useApp } from '../context';
@@ -22,10 +22,12 @@ export default function Layout() {
 }
 
 function AppLayout() {
+  const path = usePathname();
+  const hasDock = ['/', '/prepare', '/rooms'].includes(path);
   const { ready, error, state } = useApp();
   const { colors, styles, isDark } = useTheme();
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: hasDock ? colors.surface : colors.bg }}>
       <StatusBar style={isDark ? 'light' : 'dark'} />
       {error && (
         <Text

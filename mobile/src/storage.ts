@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AppState } from './types';
 import { seedState } from './logic';
 import * as SecureStore from 'expo-secure-store';
+import { exerciseGroup } from './exercise-groups';
 
 const KEY = 'fitlogsolo.react-native.state.v1';
 
@@ -38,6 +39,7 @@ async function encode(state: AppState) {
 }
 
 async function hydrate(state: AppState) {
+  state.exercises = state.exercises.map((exercise) => ({ ...exercise, muscleGroup: exerciseGroup(exercise) }));
   for (const identity of [state.roomIdentity, state.cloud?.identity]) {
     if (!identity || identity.token) continue;
     identity.token = await SecureStore.getItemAsync(`fitswipe.token.${identity.id}`) ?? '';

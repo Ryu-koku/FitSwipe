@@ -8,6 +8,7 @@ const paths = {
   plus: 'M12 5v14M5 12h14',
   play: 'm8 4 12 8-12 8Z',
   back: 'm15 4-8 8 8 8',
+  undo: 'm9 4-5 5 5 5M4 9h10a6 6 0 0 1 0 12',
   next: 'm9 4 8 8-8 8',
   close: 'm6 6 12 12M6 18 18 6',
   edit: 'm15 5 4 4M4 20l5-1L21 7l-4-4L5 15Z',
@@ -25,5 +26,5 @@ export function AppIcon({ name, color, size = 24 }: { name: AppIconName; color: 
 
 export const symbolIcons: Record<string, AppIconName> = {
   '⚙': 'settings', '⌂': 'home', '♧': 'people', '+': 'plus', '＋': 'plus',
-  '▶': 'play', '‹': 'back', '›': 'next', '×': 'close', '✎': 'edit', '⋯': 'more', '↻': 'refresh',
+  '▶': 'play', '‹': 'back', '›': 'next', '×': 'close', '✎': 'edit', '⋯': 'more', '↻': 'refresh', '↶': 'undo',
 };
