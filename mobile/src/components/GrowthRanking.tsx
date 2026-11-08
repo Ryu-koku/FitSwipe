@@ -37,11 +37,13 @@ export function GrowthRanking() {
   return <>
     <SectionTitle>成長ランキング</SectionTitle>
     <Card style={{ padding: 12, marginBottom: 0 }}>
+      {!!displayedRanking.length && <Text style={[styles.small, { marginBottom: 4 }]}>種目をタップして推移を見る</Text>}
       {!displayedRanking.length ? <Text style={[styles.small, { marginTop: 12 }]}>重量と回数を記録すると、成長ランキングが表示されます。</Text> : displayedRanking.map((item, index) => (
-        <Pressable key={item.name} accessibilityRole="button" accessibilityLabel={`${item.name}の成長グラフを見る`} onPress={() => setSelected(item.name)} style={[styles.row, { paddingVertical: 8, borderBottomWidth: index === displayedRanking.length - 1 ? 0 : 1, borderColor: colors.line }]}>
+        <Pressable key={item.name} accessibilityRole="button" accessibilityLabel={`${item.name}の成長グラフを見る`} onPress={() => setSelected(item.name)} style={[styles.row, { minHeight: 48, paddingVertical: 8, borderBottomWidth: index === displayedRanking.length - 1 ? 0 : 1, borderColor: colors.line }]}>
           <Text style={[styles.body, { width: 32, fontWeight: '700', color: colors.primary }]}>{index + 1}位</Text>
           <Text numberOfLines={1} style={[styles.body, { flex: 1, fontWeight: '700' }]}>{item.name}</Text>
           <Text style={[styles.body, { color: item.change >= 0 ? colors.primary : colors.muted, fontWeight: '700' }]}>{item.change > 0 ? '+' : ''}{item.change.toFixed(1)}%</Text>
+          <Text accessible={false} style={{ color: colors.muted, fontSize: 22 }}>›</Text>
         </Pressable>
       ))}
       <Text style={[styles.small, { marginTop: 12 }]}>直近90日の推定1RM変化率 · 記録2日以上の種目が対象</Text>

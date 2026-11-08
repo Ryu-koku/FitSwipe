@@ -99,7 +99,8 @@ export function TrainingDock() {
           onPress={() => { feedback(); if (preparing) void begin(); else router.push('/prepare'); }}
           style={[preparing && selectedTabStyle, { width: preparing ? 84 : '100%', height: preparing ? 84 : '100%', flexShrink: 0, transform: [{ translateY: preparing ? -22 : 0 }], borderRadius: preparing ? 42 : 0, backgroundColor: preparing ? colors.primary : 'transparent', alignItems: 'center', justifyContent: 'center', gap: 4, opacity: preparing && !canStart ? 0.4 : 1 }]}
         >
-          {starting ? <Text style={{ color: colors.bg }}>…</Text> : <AppIcon name="play" color={preparing ? colors.bg : colors.muted} size={preparing ? 38 : 24} />}
+          {starting ? <Text style={{ color: colors.bg }}>…</Text> : <AppIcon name="play" color={preparing ? colors.bg : colors.muted} size={preparing ? 28 : 24} />}
+          {preparing && <Text style={[styles.small, { color: colors.bg, fontWeight: '700' }]}>{starting ? '準備中' : active ? '続きから' : '開始'}</Text>}
           {!preparing && <Text style={[styles.small, { color: colors.muted, fontWeight: '700' }]}>トレーニング</Text>}
         </Pressable>
         </View>

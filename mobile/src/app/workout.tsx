@@ -38,11 +38,14 @@ export default function WorkoutScreen() {
   const { colors, styles } = useTheme();
   const [orderEditor, setOrderEditor] = useState(false);
   const [history, setHistory] = useState(false);
+  const [exitPrompt, setExitPrompt] = useState(false);
   const [browsing, setBrowsing] = useState<WorkoutCard>();
+  const [preparingNext, setPreparingNext] = useState(false);
   const session = state.sessions.find((s) => s.status === 'IN_PROGRESS');
   const progress = state.workout;
   const current = session ? currentCard(state, session.id) : undefined;
-  const card = browsing ?? current;
+  const validBrowsing = browsing && state.sets.some((item) => item.id === browsing.setId && item.sessionId === session?.id) ? browsing : undefined;
+  const card = validBrowsing ?? current;
   const set = state.sets.find((s) => s.id === card?.setId);
   const exercise = state.exercises.find((e) => e.id === set?.exerciseId);
   const locked = useRef(false);
@@ -125,7 +128,7 @@ export default function WorkoutScreen() {
         : undefined,
     }));
   const advance = (skip = false) => {
-    if (browsing) {
+    if (validBrowsing) {
       const next = cards[position + 1];
       if (next) setBrowsing(next.setId === current?.setId && next.side === current?.side ? undefined : next);
       return;
@@ -133,6 +136,7 @@ export default function WorkoutScreen() {
     if (locked.current) return;
     locked.current = true;
     const changed = advanceWorkout(getState(), skip);
+    setPreparingNext(false);
     update(() => changed);
     if (!changed.workout)
       router.replace({
@@ -143,7 +147,12 @@ export default function WorkoutScreen() {
   const position = cards.findIndex(
     (c) => c.setId === card.setId && c.side === card.side,
   );
-  const rest = !browsing && !!progress?.restEndsAt;
+  const nextCard = cards[position + 1];
+  const rest = !validBrowsing && !!progress?.restEndsAt;
+  const prepareNext = (willAdvance: boolean) => {
+    if (!willAdvance || validBrowsing) return;
+    setPreparingNext(true);
+  };
   const change = (key: typeof weightKey | typeof repsKey, delta: number) => {
     feedback();
     update((s) => {
@@ -162,14 +171,11 @@ export default function WorkoutScreen() {
         <Text style={[styles.body, { flex: 1, fontSize: 22, fontWeight: '700' }]}>
           {state.presets.find((preset) => preset.id === session.presetId)?.name ?? 'トレーニング'}
         </Text>
-        <IconButton
-          label="トレーニングを終了"
-          symbol="×"
-          onPress={() => {
-            update((s) => finishWorkout(s, session.id));
-            router.replace('/');
-          }}
-        />
+        <Pressable accessibilityRole="button" accessibilityLabel="トレーニングの終了方法を選ぶ"
+          onPress={() => setExitPrompt(true)}
+          style={{ minHeight: 48, minWidth: 48, alignItems: 'center', justifyContent: 'center' }}>
+          <Text style={[styles.body, { color: colors.primary, fontWeight: '700' }]}>終了</Text>
+        </Pressable>
       </View>
       <View style={[styles.row, { marginBottom: 8 }]}>
         <Text style={[styles.small, { marginLeft: 'auto', textAlign: 'right' }]}>
@@ -191,6 +197,7 @@ export default function WorkoutScreen() {
             key={`${set.id}-${side}-${!!browsing}`}
             onAdvance={() => advance()}
             onSkip={() => advance(true)}
+            onSwipeStart={prepareNext}
           >
             <Card
               style={{
@@ -270,7 +277,30 @@ export default function WorkoutScreen() {
             </Card>
           </SwipeCard>
         )}
+        {preparingNext && !rest && nextCard && <View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 16, opacity: 0 }}><PreloadedCard card={nextCard} state={state} /></View>}
       </View>
+      {!rest && <View style={{ marginBottom: 8 }}>
+        <Text style={[styles.small, { textAlign: 'center' }]}>
+          {validBrowsing ? '右にスワイプして次のカードへ' : '← スキップ　スワイプで操作　完了 →'}
+        </Text>
+        <View style={styles.row}>
+          {!validBrowsing && <View style={{ flex: 1 }}><Button label="スキップ" secondary onPress={() => advance(true)} /></View>}
+          <View style={{ flex: 1 }}><Button label={validBrowsing ? '次のカードへ' : 'セット完了'} onPress={() => advance()} /></View>
+        </View>
+      </View>}
+      {exitPrompt && <Sheet title="トレーニングを終了しますか？" popup onClose={() => setExitPrompt(false)}>
+        <Text style={styles.body}>終了すると、ここまで完了したセットが今回の記録になります。あとで続ける場合は「ホームに戻る」を選んでください。</Text>
+        <Button label="終了して記録を見る" onPress={() => {
+          setExitPrompt(false);
+          update((s) => finishWorkout(s, session.id));
+          router.replace({ pathname: '/complete', params: { sessionId: session.id } });
+        }} />
+        <Button label="ホームに戻る（あとで再開）" secondary onPress={() => {
+          setExitPrompt(false);
+          router.replace('/');
+        }} />
+        <Button label="トレーニングを続ける" secondary onPress={() => setExitPrompt(false)} />
+      </Sheet>}
       <View style={[styles.row, { marginBottom: 8 }]}>
         <IconButton
           label="前のカードへ"
@@ -278,13 +308,11 @@ export default function WorkoutScreen() {
           disabled={position <= 0}
           onPress={() => setBrowsing(cards[position - 1])}
         />
-        {!browsing && (
           <IconButton
             label="種目を編集"
             symbol="✎"
             onPress={() => setOrderEditor(true)}
           />
-        )}
       </View>
       {orderEditor && (
         <WorkoutOrderEditor
@@ -325,6 +353,28 @@ export default function WorkoutScreen() {
       )}
     </Screen>
   );
+}
+
+function PreloadedCard({ card, state }: { card: WorkoutCard; state: ReturnType<typeof useApp>['state'] }) {
+  const { colors, styles } = useTheme();
+  const set = state.sets.find((row) => row.id === card.setId);
+  const exercise = state.exercises.find((item) => item.id === set?.exerciseId);
+  if (!set || !exercise) return null;
+  const side = card.side ?? 'normal';
+  const weight = set[`${side}WeightKg` as const];
+  const reps = set[`${side}Reps` as const];
+  const exerciseSets = state.sets.filter((row) => row.sessionId === set.sessionId && row.exerciseId === exercise.id);
+  return <Card style={{ flex: 1, overflow: 'hidden', padding: 0, backgroundColor: colors.soft, marginBottom: 0 }}>
+    <View style={[styles.row, { padding: 18, backgroundColor: colors.primary }]}>
+      <ExercisePictogram name={exercise.name} />
+      <Text style={{ color: colors.bg, fontSize: 24, fontWeight: '800', flex: 1 }}>{exercise.name}</Text>
+      <Text style={{ color: colors.bg, fontWeight: '700' }}>{set.setOrder}/{exerciseSets.length}</Text>
+    </View>
+    <View style={{ flex: 1, padding: 16, justifyContent: 'center', alignItems: 'center' }}>
+      {card.side && <Text style={[styles.title, { color: colors.primary }]}>{card.side === 'left' ? '左' : '右'}</Text>}
+      <Text style={[styles.title, { marginTop: 16 }]}>{formatWeight(weight)} × {reps ?? '—'}回</Text>
+    </View>
+  </Card>;
 }
 
 function TapNumber({

@@ -17,11 +17,13 @@ export function SwipeCard({
   children,
   onAdvance,
   onSkip,
+  onSwipeStart,
   disabled = false,
   rest = false,
 }: PropsWithChildren<{
   onAdvance: () => void;
   onSkip: () => void;
+  onSwipeStart?: (advance: boolean) => void;
   disabled?: boolean;
   rest?: boolean;
 }>) {
@@ -29,10 +31,10 @@ export function SwipeCard({
   const { width, height } = useWindowDimensions();
   const [position] = useState(() => new Animated.ValueXY());
   const busy = useRef(false);
-  const actions = useRef({ onAdvance, onSkip, disabled });
+  const actions = useRef({ onAdvance, onSkip, onSwipeStart, disabled });
   useEffect(() => {
-    actions.current = { onAdvance, onSkip, disabled };
-  }, [onAdvance, onSkip, disabled]);
+    actions.current = { onAdvance, onSkip, onSwipeStart, disabled };
+  }, [onAdvance, onSkip, onSwipeStart, disabled]);
   const [hint, setHint] = useState<string>();
   const pan = useMemo(
     () =>
@@ -73,6 +75,7 @@ export function SwipeCard({
             Math.abs(delta) < 10 ? Math.sign(velocity) : Math.sign(delta);
           const advance = rest || (horizontal ? direction > 0 : direction < 0);
           feedback();
+          actions.current.onSwipeStart?.(advance);
           Animated.timing(position, {
             toValue: horizontal
               ? { x: direction * width * 1.4, y: 0 }

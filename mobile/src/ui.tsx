@@ -351,6 +351,7 @@ export function Field({
   label,
   keyboardType = 'default',
   maxLength,
+  autoFocus = false,
   onFocus,
   onBlur,
 }: {
@@ -360,6 +361,7 @@ export function Field({
   label?: string;
   keyboardType?: 'default' | 'numeric' | 'decimal-pad' | 'number-pad';
   maxLength?: number;
+  autoFocus?: boolean;
   onFocus?: () => void;
   onBlur?: () => void;
 }) {
@@ -375,6 +377,7 @@ export function Field({
         placeholderTextColor={colors.muted}
         keyboardType={keyboardType}
         maxLength={maxLength}
+        autoFocus={autoFocus}
         onFocus={onFocus}
         onBlur={onBlur}
         style={styles.field}
@@ -497,7 +500,7 @@ export function Sheet({
   return (
     <Modal transparent animationType={popup ? 'fade' : bottomSheet ? 'none' : 'slide'} onRequestClose={dismiss}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' || popup ? 'padding' : undefined}
         style={{
           flex: 1,
           justifyContent: popup ? 'center' : 'flex-end',
@@ -513,7 +516,9 @@ export function Sheet({
         />
         <Animated.View
           style={{
-            maxHeight: bottomSheet ? availableSheetHeight : '90%',
+            width: popup ? '100%' : undefined,
+            alignSelf: popup ? 'center' : undefined,
+            maxHeight: popup ? '100%' : bottomSheet ? availableSheetHeight : '90%',
             flexShrink: 0,
             transform: [{ translateY: Animated.add(sheetOffset, entrance) }],
             backgroundColor: colors.bg,
@@ -521,7 +526,7 @@ export function Sheet({
             borderTopRightRadius: 28,
             ...(popup ? { borderBottomLeftRadius: 28, borderBottomRightRadius: 28 } : {}),
             overflow: 'hidden',
-            paddingBottom: insets.bottom + 16,
+            paddingBottom: popup ? 16 : insets.bottom + 16,
             ...(bottomSheet ? { height: sheetHeight } : scroll ? {} : { height: '90%' }),
           }}
         >
@@ -545,6 +550,7 @@ export function Sheet({
           </View>
           {scroll ? <ScrollView
             keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="none"
             contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 12 }}
           >
             <SheetDismissContext.Provider value={{ onClose, dismiss }}>{children}</SheetDismissContext.Provider>

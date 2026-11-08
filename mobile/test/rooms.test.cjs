@@ -60,10 +60,11 @@ with tempfile.TemporaryDirectory(prefix="rn-rooms-") as directory:
   const alice = await api.register('Alice');
   const bob = await api.register('Bob');
   const outsider = await api.register('Outsider');
-  const created = await api.create(alice, 'Friends');
+  const created = await api.create(alice, 'Friends', false);
   assert.deepEqual(Object.keys(created), ['id']);
   let list = await api.list(alice);
   assert.equal(list[0].name, 'Friends');
+  assert.equal(list[0].competitive, false);
   assert.equal(list[0].ownerId, alice.id);
   assert.ok(list[0].inviteCode);
   await api.join(bob, `fitswipe://room?code=${list[0].inviteCode}`);
@@ -71,6 +72,7 @@ with tempfile.TemporaryDirectory(prefix="rn-rooms-") as directory:
     () => api.detail(outsider, created.id),
     (e) => e.status === 404,
   );
+  assert.equal((await api.list(bob))[0].competitive, false);
   let state = startWorkout(seedState());
   while (state.workout) state = advanceWorkout(state);
   const entry = {

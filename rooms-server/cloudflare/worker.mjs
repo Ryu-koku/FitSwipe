@@ -157,17 +157,19 @@ async function register(request, env, data) {
 
 async function listRooms(env, userId) {
   const { results } = await env.DB.prepare(`
-    SELECT r.id, r.name, r.owner_id AS ownerId, r.invite AS inviteCode,
+    SELECT r.id, r.name, r.competitive, r.owner_id AS ownerId, r.invite AS inviteCode,
       (SELECT count(*) FROM members m WHERE m.room_id = r.id) AS memberCount,
       (SELECT since_month FROM room_sharing s WHERE s.room_id=r.id AND s.user_id=m.user_id) AS sharingSince,
       (SELECT json_group_array(name) FROM (SELECT u.name FROM users u JOIN members preview ON preview.user_id=u.id WHERE preview.room_id=r.id ORDER BY u.name LIMIT 3)) AS memberNames
     FROM rooms r JOIN members m ON m.room_id = r.id
     WHERE m.user_id = ? ORDER BY r.rowid DESC
   `).bind(userId).all();
-  return { rooms: results.map((r) => ({ ...r, memberNames: JSON.parse(r.memberNames) })) };
+  return { rooms: results.map((r) => ({ ...r, competitive: Boolean(r.competitive), memberNames: JSON.parse(r.memberNames) })) };
 }
 
 async function createRoom(env, userId, data) {
+  const competitive = data.competitive === undefined ? true : data.competitive;
+  if (typeof competitive !== "boolean") throw new ApiError(400, "ルームの種類が不正です");
   const rawName = data.name ?? "";
   let name;
   if (typeof rawName === "string" && !rawName.trim()) name = "筋トレ仲間";
@@ -178,7 +180,7 @@ async function createRoom(env, userId, data) {
   const id = crypto.randomUUID();
   const invite = newInviteCode();
   await env.DB.batch([
-    env.DB.prepare("INSERT INTO rooms (id, name, owner_id, invite) VALUES (?, ?, ?, ?)").bind(id, name, userId, invite),
+    env.DB.prepare("INSERT INTO rooms (id, name, owner_id, invite, competitive) VALUES (?, ?, ?, ?, ?)").bind(id, name, userId, invite, competitive ? 1 : 0),
     env.DB.prepare("INSERT INTO members (room_id, user_id) VALUES (?, ?)").bind(id, userId),
   ]);
   return { id };
