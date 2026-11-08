@@ -5,8 +5,8 @@
 サーバーの `develop` で初回のみ次を実行します。
 
 ```sh
-ANDROID_HOME=/tmp/opencode/fitswipe-phone-sdk \
-ANDROID_SDK_ROOT=/tmp/opencode/fitswipe-phone-sdk \
+ANDROID_HOME=$HOME/.local/share/fitswipe-android-sdk \
+ANDROID_SDK_ROOT=$HOME/.local/share/fitswipe-android-sdk \
 bash scripts/dev-phone.sh --build
 ```
 
@@ -40,11 +40,11 @@ laptopを起動してUSB接続とUSBデバッグの許可を維持する。lapto
 ## ビルド環境
 
 - Expo SDK 58のAndroidビルドには、SDK Platform 37・Build Tools 37.0.0・NDK 27.1.12297006・CMakeが必要です。読み取り専用のNix SDKに不足分を追加しようとして失敗する場合は、書き込み可能なSDKへ `ANDROID_HOME` と `ANDROID_SDK_ROOT` を両方向けて実行します。
-- この開発サーバーの専用SDKは `/tmp/opencode/fitswipe-phone-sdk` です。用意済みの場合は次のように使えます。
+- この開発サーバーの専用SDKは `$HOME/.local/share/fitswipe-android-sdk` です（`/tmp` は定期削除されるため置かない）。用意済みの場合は次のように使えます。
 
 ```sh
-ANDROID_HOME=/tmp/opencode/fitswipe-phone-sdk \
-ANDROID_SDK_ROOT=/tmp/opencode/fitswipe-phone-sdk \
+ANDROID_HOME=$HOME/.local/share/fitswipe-android-sdk \
+ANDROID_SDK_ROOT=$HOME/.local/share/fitswipe-android-sdk \
 bash scripts/install-phone.sh
 ```
 
