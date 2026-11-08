@@ -15,7 +15,7 @@ export function useRooms() {
   const { state, getState, persist, update, syncRoomsNow } = useApp();
   const [detail, setDetail] = useState<RoomDetail>();
   const [roomId, setRoomId] = useState<string>();
-  const [comparison, setComparison] = useState<RoomComparison>();
+  const [comparison, setComparison] = useState<RoomComparison | null>();
   const [createdRoomId, setCreatedRoomId] = useState<string>();
   const selected = useRef(roomId);
   const [busy, setBusy] = useState(false);
@@ -30,11 +30,15 @@ export function useRooms() {
   const load = useCallback(
     async (id: string) => {
       const account = identity();
-      const roomName = getState().rooms.find((room) => room.id === id)?.name;
-      const mockRoom = __DEV__ && (roomName === 'まめ' || roomName === 'まめのルーム');
-      const [result, compared] = await Promise.all([client.detail(account, id), mockRoom
-        ? Promise.resolve<RoomComparison>({ month: japanMonth(), rankings: [{ id: account.id, name: account.name, sets: 0, rank: 1 }], posts: [] })
-        : client.comparison(account, id, japanMonth())]);
+      const [result, compared] = await Promise.all([
+        client.detail(account, id),
+        client.comparison(account, id, japanMonth()).catch((error: unknown) => {
+          // Older servers may not expose the comparison route yet. Keep the
+          // room itself available without hiding authentication/network errors.
+          if (error instanceof RoomsApiError && error.status === 404) return null;
+          throw error;
+        }),
+      ]);
       if (getState().roomIdentity?.id !== account.id) return;
       update((s) => ({
         ...s,
@@ -130,10 +134,9 @@ export function useRooms() {
       await persist((s) => ({ ...s, roomIdentity: account }));
       await refresh();
     },
-    create: async (name: string) => {
-      const room = await client.create(identity(), name);
+    create: async (name: string, competitive = true) => {
+      const room = await client.create(identity(), name, competitive);
       await refresh();
-      await open(room.id);
       setCreatedRoomId(room.id);
     },
     join: async (code: string) => {

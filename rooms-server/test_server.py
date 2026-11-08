@@ -42,6 +42,17 @@ class RoomsApiTests(unittest.TestCase):
         self.assertEqual(200, status)
         return account
 
+    def test_room_type_persists_and_defaults_for_legacy_clients(self):
+        self.assertIs(self.store.rooms(self.alice["id"])["rooms"][0]["competitive"], True)
+        status, created = self.request("POST", "/v1/rooms", {"name": "Together", "competitive": False}, self.alice)
+        self.assertEqual(200, status)
+        reopened = Store(self.store.path)
+        room = next(r for r in reopened.rooms(self.alice["id"])["rooms"] if r["id"] == created["id"])
+        self.assertIs(room["competitive"], False)
+        self.assertEqual(200, self.request("POST", "/v1/rooms/join", {"code": room["inviteCode"]}, self.bob)[0])
+        self.assertIs(self.store.rooms(self.bob["id"])["rooms"][0]["competitive"], False)
+        self.assertEqual(400, self.request("POST", "/v1/rooms", {"competitive": "false"}, self.alice)[0])
+
     def join_bob(self):
         code = self.request("GET", "/v1/rooms", account=self.alice)[1]["rooms"][0]["inviteCode"]
         self.assertEqual(200, self.request("POST", "/v1/rooms/join", {"code": code}, self.bob)[0])

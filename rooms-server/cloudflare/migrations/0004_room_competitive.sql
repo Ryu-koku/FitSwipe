@@ -1,0 +1,1 @@
+ALTER TABLE rooms ADD COLUMN competitive INTEGER NOT NULL DEFAULT 1 CHECK (competitive IN (0, 1));

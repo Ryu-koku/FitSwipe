@@ -43,3 +43,11 @@ Apply `0003_automatic_room_sharing.sql` before releasing the refreshed client. T
 - `GET /v1/rooms/:id/comparison?month=YYYY-MM&cursor=...`: whole-month member totals, including zeroes and ties, plus paginated details. Boundaries use Japan time; bilateral pairs count once, incomplete pairs do not count. Members cannot mutate anyone else's snapshots.
 
 Run `node --test --test-concurrency=1 test/*.test.mjs` against the local Worker. When enabling the personal-sync integration tests with `SYNC_TEST_PERSIST`, run the mobile and Worker suites sequentially: both provision fixtures through Wrangler's direct local-D1 connection, which otherwise causes SQLite lock conflicts. This repository change does not apply remote migrations or deploy the Worker.
+
+## Room types
+
+`POST /v1/rooms` accepts an optional boolean `competitive` (default `true`).
+Room lists return the saved value to every member. Noncompetitive rooms show
+member records without ranks in the mobile app; existing rooms stay competitive.
+Apply `0004_room_competitive.sql` using D1 migrations before deploying this Worker,
+and deploy the Worker before releasing the mobile client with room-type selection.

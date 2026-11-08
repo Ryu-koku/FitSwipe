@@ -83,9 +83,10 @@ export function createRoomsClient(
       }),
     list: async (identity: RoomIdentity) =>
       (await request<{ rooms: Room[] }>('/v1/rooms', identity.token)).rooms,
-    create: (identity: RoomIdentity, name: string) =>
+    create: (identity: RoomIdentity, name: string, competitive = true) =>
       request<{ id: string }>('/v1/rooms', identity.token, 'POST', {
         name: name.trim() ? name : '筋トレ仲間',
+        competitive,
       }),
     join: (identity: RoomIdentity, code: string) =>
       request<{ id: string }>('/v1/rooms/join', identity.token, 'POST', {

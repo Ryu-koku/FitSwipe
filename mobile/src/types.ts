@@ -61,6 +61,7 @@ export type Room = {
   ownerId: string;
   inviteCode: string;
   memberCount: number;
+  competitive?: boolean; // Older servers and saved rooms default to competitive.
   sharingSince?: string | null;
   memberNames?: string[];
 };

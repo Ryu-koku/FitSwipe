@@ -99,6 +99,8 @@ class Store:
                 CREATE INDEX IF NOT EXISTS user_memberships ON members(user_id);
                 CREATE INDEX IF NOT EXISTS user_posts ON posts(user_id,created_at);
             """)
+            if "competitive" not in {row["name"] for row in db.execute("PRAGMA table_info(rooms)")}:
+                db.execute("ALTER TABLE rooms ADD COLUMN competitive INTEGER NOT NULL DEFAULT 1 CHECK (competitive IN (0, 1))")
             migration = Path(__file__).parent / "cloudflare/migrations/0003_automatic_room_sharing.sql"
             if not migration.exists():
                 migration = Path(__file__).parent / "auto-sharing.sql"
@@ -143,17 +145,21 @@ class Store:
     def rooms(self, user):
         with self.connect() as db:
             rows = [dict(row) for row in db.execute("""
-                SELECT r.id,r.name,r.owner_id AS ownerId,r.invite AS inviteCode,
+                SELECT r.id,r.name,r.competitive,r.owner_id AS ownerId,r.invite AS inviteCode,
                     (SELECT count(*) FROM members m WHERE m.room_id=r.id) AS memberCount,
                     (SELECT since_month FROM room_sharing s WHERE s.room_id=r.id AND s.user_id=m.user_id) AS sharingSince,
                     (SELECT json_group_array(name) FROM (SELECT u.name FROM users u JOIN members preview ON preview.user_id=u.id WHERE preview.room_id=r.id ORDER BY u.name LIMIT 3)) AS memberNames
                 FROM rooms r JOIN members m ON m.room_id=r.id WHERE m.user_id=? ORDER BY r.rowid DESC
             """, (user,))]
             for row in rows:
+                row["competitive"] = bool(row["competitive"])
                 row["memberNames"] = json.loads(row["memberNames"])
             return {"rooms": rows}
 
     def create_room(self, user, data):
+        competitive = data.get("competitive", True)
+        if not isinstance(competitive, bool):
+            raise ApiError(400, "ルームの種類が不正です")
         raw_name = data.get("name", "")
         if isinstance(raw_name, str) and not raw_name.strip():
             name = "筋トレ仲間"
@@ -165,7 +171,7 @@ class Store:
             db.execute("BEGIN IMMEDIATE")
             if db.execute("SELECT count(*) FROM members WHERE user_id=?", (user,)).fetchone()[0] >= 30:
                 raise ApiError(400, "参加できるルームは30個までです")
-            db.execute("INSERT INTO rooms VALUES(?,?,?,?)", (identity, name, user, invite))
+            db.execute("INSERT INTO rooms(id,name,owner_id,invite,competitive) VALUES(?,?,?,?,?)", (identity, name, user, invite, competitive))
             db.execute("INSERT INTO members VALUES(?,?)", (identity, user))
         return {"id": identity}
 

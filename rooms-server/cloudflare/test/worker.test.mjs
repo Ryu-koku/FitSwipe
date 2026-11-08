@@ -34,12 +34,13 @@ test("Cloudflare Worker supports private room sharing end-to-end", async () => {
     owner = ownerRegistration.data;
 
     const roomCreation = await call("/v1/rooms", {
-      method: "POST", token: owner.token, body: { name: "テストルーム" },
+      method: "POST", token: owner.token, body: { name: "テストルーム", competitive: false },
     });
     assert.equal(roomCreation.status, 200);
     roomId = roomCreation.data.id;
 
     const ownerRooms = await call("/v1/rooms", { token: owner.token });
+    assert.equal(ownerRooms.data.rooms.find((room) => room.id === roomId).competitive, false);
     const inviteCode = ownerRooms.data.rooms.find((room) => room.id === roomId).inviteCode;
     const guestRegistration = await call("/v1/account", {
       method: "POST", body: { name: `guest-${suffix.slice(0, 8)}` },

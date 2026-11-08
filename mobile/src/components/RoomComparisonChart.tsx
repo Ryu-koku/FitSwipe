@@ -36,7 +36,7 @@ function Column({ member, index, max, own, onPress }: { member: RoomComparison['
   </Animated.View>;
 }
 
-export function RoomComparisonChart({ comparison, ownId, onMember, enableMock = false }: { comparison: RoomComparison; ownId?: string; onMember: (id: string) => void; enableMock?: boolean }) {
+export function RoomComparisonChart({ comparison, ownId, onMember, enableMock = false, competitive = true }: { comparison: RoomComparison; ownId?: string; onMember: (id: string) => void; enableMock?: boolean; competitive?: boolean }) {
   const { styles } = useTheme();
   const [mockMembers, setMockMembers] = useState(__DEV__);
   const showingMock = __DEV__ && enableMock && mockMembers;
@@ -49,6 +49,13 @@ export function RoomComparisonChart({ comparison, ownId, onMember, enableMock = 
     ...member,
     rank: members.findIndex((entry) => entry.sets === member.sets) + 1,
   })) : comparison.rankings;
+  if (!competitive) return <>
+    <Text style={[styles.body, { fontWeight: '800' }]}>{Number(comparison.month.slice(5))}月 · みんなの記録</Text>
+    {[...comparison.rankings].sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id)).map((member) => <Pressable key={member.id} accessibilityRole="button" accessibilityLabel={`${member.name}、${member.sets}セット。詳細を見る`} onPress={() => onMember(member.id)} style={{ paddingVertical: 12 }}>
+      <Text style={styles.body}>{member.id === ownId ? 'あなた' : member.name} · {member.sets}セット</Text>
+    </Pressable>)}
+    {!comparison.rankings.length && <Text style={styles.small}>共有しているメンバーはいません。</Text>}
+  </>;
   const max = Math.max(0, ...rankings.map((r) => r.sets));
   return <>
     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
