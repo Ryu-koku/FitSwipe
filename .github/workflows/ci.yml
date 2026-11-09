@@ -28,6 +28,7 @@ jobs:
           pnpm typecheck
           pnpm lint
           pnpm test
+          pnpm doctor
       - name: Check Cloudflare Worker without Wrangler
         run: |
           node --check rooms-server/cloudflare/worker.mjs
