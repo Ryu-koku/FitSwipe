@@ -37,7 +37,8 @@ test('growth uses the daily best Epley estimate and includes declines', () => {
 
 test('estimated RM is validated and uses the Epley formula', () => {
   assert.equal(estimatedOneRepMax(100, 1), 100);
-  assert.equal(estimatedOneRepMax(100, 10), 130);
+  assert.equal(estimatedOneRepMax(100, 10), 133.3);
+  assert.equal(estimatedOneRepMax(100, 11), undefined);
   assert.equal(estimatedOneRepMax(0, 5), undefined);
   assert.equal(estimatedOneRepMax(100, 13), undefined);
 });

@@ -5,15 +5,18 @@ import * as ImagePicker from 'expo-image-picker';
 import { useApp } from '../context';
 import { Button, Card, Screen, useTheme } from '../ui';
 import { captureRef } from 'react-native-view-shot';
+import { reopenSkippedCard } from '../workout';
+import { SessionDetails } from '../components/SessionDetails';
 import { completedSessions, estimatedOneRepMax, formatWeight } from '../logic';
 
 type ShareKind = 'activity' | 'overlay' | 'story';
 
 export default function CompleteScreen() {
-  const { state } = useApp();
+  const { state, update } = useApp();
   const { colors, styles } = useTheme();
   const { sessionId } = useLocalSearchParams<{ sessionId: string }>();
   const session = state.sessions.find((s) => s.id === Number(sessionId));
+  const finalSkip = state.sets.find((set) => set.sessionId === session?.id && set.finalSkippedSide && set.skippedInputs?.[set.finalSkippedSide]);
   const sets = state.sets.filter((s) => s.sessionId === session?.id && s.isCompleted);
   const starts = sets.map((s) => new Date(s.createdAt ?? session?.startedAt ?? '1970-01-01').getTime());
   const ends = sets.map((s) => new Date(s.updatedAt ?? session?.endedAt ?? session?.startedAt ?? '1970-01-01').getTime());
@@ -92,24 +95,12 @@ export default function CompleteScreen() {
       </Card>}
       <View style={[styles.row, { marginBottom: 16 }]}>{[[exerciseCount, '種目'], [sets.length, 'セット'], [minutes, '分']].map(([value, label]) => <Card key={label} style={{ flex: 1, alignItems: 'center' }}><Text style={styles.metric}>{value}</Text><Text style={styles.small}>{label}</Text></Card>)}</View>
       <Text style={[styles.sectionTitle, { marginBottom: 12 }]}>今回の記録</Text>
-      {[...new Set(sets.map((set) => set.exerciseId))].map((id) => {
-        const exercise = state.exercises.find((item) => item.id === id);
-        const rows = sets.filter((set) => set.exerciseId === id).sort((a, b) => a.setOrder - b.setOrder);
-        return <Card key={id}>
-          <Text style={[styles.body, { fontWeight: '800', marginBottom: 4 }]}>{exerciseName(id)}</Text>
-          <Text style={[styles.small, { marginBottom: 12 }]}>{rows.length} セット完了</Text>
-          {rows.map((set, index) => <View key={set.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 16, paddingVertical: 10, backgroundColor: index % 2 === 0 ? colors.soft : undefined, borderRadius: 10, paddingHorizontal: 12 }}>
-            <Text style={styles.small}>セット {set.setOrder}</Text>
-            <View style={{ flex: 1 }}>
-              {exercise?.mode === 'BILATERAL' ? <>
-                <Text style={[styles.body, { fontWeight: '700' }]}>左　{formatWeight(set.leftWeightKg)} × {set.leftReps ?? '—'}回</Text>
-                <Text style={[styles.body, { fontWeight: '700' }]}>右　{formatWeight(set.rightWeightKg)} × {set.rightReps ?? '—'}回</Text>
-              </> : <Text style={[styles.body, { fontWeight: '700' }]}>{formatWeight(set.normalWeightKg)} × {set.normalReps ?? '—'}回</Text>}
-            </View>
-          </View>)}
-        </Card>;
-      })}
-      {!sets.length && <Card><Text style={styles.muted}>完了したセットはありません</Text></Card>}
+      <SessionDetails sessionIds={session ? [session.id] : []} />
+      {finalSkip && !state.sessions.some((item) => item.status === 'IN_PROGRESS') &&
+        <Button label="最後のスキップを取り消す" secondary onPress={() => {
+          update((s) => reopenSkippedCard(s, { setId: finalSkip.id, side: finalSkip.finalSkippedSide === 'normal' ? undefined : finalSkip.finalSkippedSide }));
+          router.replace('/workout');
+        }} />}
       <Button label="共有" secondary disabled={!session} onPress={() => setSheet(true)} />
       <Button label="ルームの比較を見る" secondary disabled={!session} onPress={() => router.push('/rooms')} />
       <Modal visible={sheet} transparent animationType="slide" onRequestClose={() => setSheet(false)}>

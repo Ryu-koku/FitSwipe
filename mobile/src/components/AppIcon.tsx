@@ -2,6 +2,9 @@ import React from 'react';
 import Svg, { Path } from 'react-native-svg';
 
 const paths = {
+  check: 'm5 12 4 4L19 6',
+  skip: 'm5 5 10 7-10 7ZM19 5v14',
+  dumbbell: 'M7 12h10M3 9v6m4-9v12m10-12v12m4-9v6M3 12h4m10 0h4',
   home: 'M3 10 12 3l9 7v11h-6v-7H9v7H3Z',
   people: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2m20 0v-2a4 4 0 0 0-3-3.87M13 7a4 4 0 1 1-8 0 4 4 0 1 1 8 0m4-3.87a4 4 0 0 1 0 7.75',
   settings: 'M9 3h6l1 3 3 1 2 5-2 5-3 1-1 3H9l-1-3-3-1-2-5 2-5 3-1Zm7 9a4 4 0 1 1-8 0 4 4 0 1 1 8 0',

@@ -1,6 +1,6 @@
 import type { Exercise } from './types';
 
-export const muscleGroups = ['胸', '背中', '肩', '腕', '脚', '腹', 'その他'];
+export const muscleGroups = ['胸', '背中', '肩', '腕', '脚', '腹', '有酸素運動', 'その他'];
 const defaults: Record<string, string> = {
   ベンチプレス: '胸', ラットプルダウン: '背中', レッグプレス: '脚',
   スクワット: '脚', 腕立て伏せ: '胸', 'ダンベルカール（左右）': '腕', プランク: '腹',

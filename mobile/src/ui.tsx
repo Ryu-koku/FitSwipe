@@ -30,13 +30,13 @@ import { useApp } from './context';
 import { AppIcon, symbolIcons } from './components/AppIcon';
 
 const light = {
-  ink: '#193039',
+  ink: '#172e36',
   muted: '#64777b',
-  line: '#d5e2de',
+  line: '#e0e9e9',
   surface: '#ffffff',
-  bg: '#f3f6f6',
-  primary: '#087f79',
-  soft: '#dcefeb',
+  bg: '#f5f9fa',
+  primary: '#007f78',
+  soft: '#eaf5f3',
   green: '#147c73',
   orange: '#b47731',
   red: '#ba1a1a',
@@ -58,7 +58,7 @@ type Palette = typeof light;
 function makeStyles(c: Palette) {
   return StyleSheet.create({
     screen: { flex: 1, backgroundColor: c.bg },
-    content: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 104 },
+    content: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 28 },
     header: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -66,8 +66,7 @@ function makeStyles(c: Palette) {
       minHeight: 56,
       paddingHorizontal: 16,
       backgroundColor: c.surface,
-      borderBottomWidth: 1,
-      borderBottomColor: c.line,
+      borderBottomWidth: 0,
       gap: 12,
     },
     title: { color: c.ink, fontWeight: '700', fontSize: 20, flexShrink: 1 },
@@ -80,18 +79,23 @@ function makeStyles(c: Palette) {
     },
     card: {
       backgroundColor: c.surface,
-      borderRadius: 18,
+      borderRadius: 20,
       padding: 18,
+      shadowColor: c.ink,
+      shadowOffset: { width: 0, height: 3 },
+      shadowOpacity: c === dark ? 0 : 0.045,
+      shadowRadius: 8,
+      elevation: 1,
       marginBottom: 12,
       borderWidth: 1,
       borderColor: c.line,
     },
     button: {
-      minHeight: 48,
+      minHeight: 52,
       alignItems: 'center',
       justifyContent: 'center',
       paddingHorizontal: 18,
-      borderRadius: 24,
+      borderRadius: 16,
       backgroundColor: c.primary,
       marginTop: 8,
     },
@@ -106,6 +110,8 @@ function makeStyles(c: Palette) {
     disabled: { opacity: 0.4 },
     chip: {
       borderRadius: 999,
+      minHeight: 44,
+      justifyContent: 'center',
       paddingVertical: 10,
       paddingHorizontal: 15,
       backgroundColor: c.soft,
@@ -352,6 +358,8 @@ export function Field({
   keyboardType = 'default',
   maxLength,
   autoFocus = false,
+  multiline = false,
+  secureTextEntry = false,
   onFocus,
   onBlur,
 }: {
@@ -362,6 +370,8 @@ export function Field({
   keyboardType?: 'default' | 'numeric' | 'decimal-pad' | 'number-pad';
   maxLength?: number;
   autoFocus?: boolean;
+  multiline?: boolean;
+  secureTextEntry?: boolean;
   onFocus?: () => void;
   onBlur?: () => void;
 }) {
@@ -376,6 +386,11 @@ export function Field({
         placeholder={placeholder}
         placeholderTextColor={colors.muted}
         keyboardType={keyboardType}
+        multiline={multiline}
+        secureTextEntry={secureTextEntry}
+        autoCapitalize={secureTextEntry ? 'none' : undefined}
+        autoCorrect={secureTextEntry ? false : undefined}
+        textAlignVertical={multiline ? 'top' : undefined}
         maxLength={maxLength}
         autoFocus={autoFocus}
         onFocus={onFocus}
@@ -440,7 +455,9 @@ export function Sheet({
   scroll = true,
   bottomSheet = false,
   popup = false,
-}: PropsWithChildren<{ title: string; onClose: () => void; scroll?: boolean; bottomSheet?: boolean; popup?: boolean }>) {
+  fullScreen = false,
+  onBack,
+}: PropsWithChildren<{ title: string; onClose: () => void; scroll?: boolean; bottomSheet?: boolean; popup?: boolean; fullScreen?: boolean; onBack?: () => void }>) {
   const { styles, colors } = useTheme();
   const insets = useSafeAreaInsets();
   const [sheetOffset] = useState(() => new Animated.Value(0));
@@ -498,22 +515,23 @@ export function Sheet({
     },
    }), [bottomSheet, dismiss, sheetOffset, sheetHeight, settledHeight, availableSheetHeight]);
   return (
-    <Modal transparent animationType={popup ? 'fade' : bottomSheet ? 'none' : 'slide'} onRequestClose={dismiss}>
+    <Modal transparent animationType={popup ? 'fade' : bottomSheet ? 'none' : 'slide'} onRequestClose={onBack ?? dismiss}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' || popup ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' || popup || fullScreen ? 'padding' : undefined}
         style={{
           flex: 1,
           justifyContent: popup ? 'center' : 'flex-end',
-          paddingTop: insets.top + 20,
+          paddingTop: fullScreen ? insets.top : insets.top + 20,
+          ...(fullScreen ? { backgroundColor: colors.bg, paddingLeft: insets.left, paddingRight: insets.right } : {}),
           ...(popup ? { paddingHorizontal: 20, paddingBottom: insets.bottom + 20 } : {}),
         }}
       >
-        <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: '#0007', opacity: backdropOpacity }]} />
+        {!fullScreen && <><Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: '#0007', opacity: backdropOpacity }]} />
         <Pressable
           accessibilityLabel="閉じる"
           onPress={dismiss}
           style={popup ? StyleSheet.absoluteFill : { flex: 1, minHeight: 20 }}
-        />
+        /></>}
         <Animated.View
           style={{
             width: popup ? '100%' : undefined,
@@ -528,6 +546,7 @@ export function Sheet({
             overflow: 'hidden',
             paddingBottom: popup ? 16 : insets.bottom + 16,
             ...(bottomSheet ? { height: sheetHeight } : scroll ? {} : { height: '90%' }),
+            ...(fullScreen ? { flex: 1, height: undefined, maxHeight: '100%', borderTopLeftRadius: 0, borderTopRightRadius: 0, paddingBottom: insets.bottom } : {}),
           }}
         >
           <View style={{ flexShrink: 0 }}>
@@ -544,6 +563,7 @@ export function Sheet({
           ) : <View
             style={[styles.header, { paddingHorizontal: 20, paddingTop: 8 }]}
           >
+            {onBack && <IconButton label="種目一覧に戻る" symbol="‹" onPress={onBack} />}
             <Text style={[styles.title, { flex: 1 }]}>{title}</Text>
             <IconButton label="閉じる" symbol="×" onPress={onClose} />
           </View>}

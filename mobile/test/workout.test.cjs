@@ -361,3 +361,116 @@ test('weekly streak keeps last week when this week has no record, for either wee
     assert.equal(achievementSummary(state).streakWeeks, 0);
   }
 });
+
+const { reorderWorkout, reopenSkippedCard } = require('../src/workout.ts');
+const { restRemaining } = require('../src/rest-progress.ts');
+
+test('reordering replaces a saved current card and preserves inputs, completed sets and rest', () => {
+  let state = advanceWorkout(startWorkout(seedState()));
+  const before = state;
+  const order = [...state.workout.exerciseOrder].reverse();
+  state = reorderWorkout(state, order);
+  const card = currentCard(state, state.workout.sessionId);
+  assert.equal(state.sets.find((set) => set.id === card.setId).exerciseId, order[0]);
+  assert.deepEqual(state.sets, before.sets);
+  assert.equal(state.workout.restStartedAt, before.workout.restStartedAt);
+  assert.equal(state.workout.restEndsAt, before.workout.restEndsAt);
+});
+
+test('skip survives restart, is excluded from records, and can be revisited and completed', () => {
+  let state = workout();
+  const card = currentCard(state, state.workout.sessionId);
+  state = updateSet(state, card.setId, { normalWeightKg: 27.5, normalReps: 7 });
+  state = JSON.parse(JSON.stringify(advanceWorkout(state, true)));
+  assert.deepEqual(state.sets[0].skippedInputs.normal, { weightKg: 27.5, reps: 7 });
+  assert.equal(state.sets[0].isCompleted, false);
+  assert.equal(achievementSummary(state).completedSets, 0);
+  state = reopenSkippedCard(state, card);
+  assert.deepEqual(currentCard(state, state.workout.sessionId), card);
+  assert.equal(state.sets[0].normalWeightKg, 27.5);
+  assert.equal(state.sets[0].normalReps, 7);
+  state = advanceWorkout(state);
+  assert.equal(state.sets[0].isCompleted, true);
+  assert.equal(state.sets[0].skippedInputs.normal, undefined);
+  assert.notEqual(currentCard(state, state.workout.sessionId).setId, card.setId);
+});
+
+test('last skipped card can reopen a finished workout after serialization', () => {
+  let state = workout({ sets: 1 });
+  const card = currentCard(state, state.workout.sessionId);
+  state = JSON.parse(JSON.stringify(advanceWorkout(state, true)));
+  assert.equal(state.workout, undefined);
+  assert.equal(achievementSummary(state).completedSets, 0);
+  assert.equal(state.sets[0].finalSkippedSide, 'normal');
+  state = reopenSkippedCard(state, { setId: state.sets[0].id, side: state.sets[0].finalSkippedSide === 'normal' ? undefined : state.sets[0].finalSkippedSide });
+  assert.equal(state.sessions[0].status, 'IN_PROGRESS');
+  assert.equal(state.sessions[0].endedAt, undefined);
+  assert.equal(state.sets[0].normalReps, 10);
+  state = advanceWorkout(state);
+  assert.equal(achievementSummary(state).completedSets, 1);
+  assert.equal(state.sets[0].finalSkippedSide, undefined);
+});
+
+test('bilateral skip keeps the performed side and restores only the skipped side', () => {
+  let state = workout({ sets: 1, bilateral: true });
+  const right = currentCard(state, state.workout.sessionId);
+  state = advanceWorkout(state, true);
+  state = advanceWorkout(state);
+  assert.equal(state.sets[0].isCompleted, true);
+  assert.equal(state.sets[0].leftCompleted, true);
+  assert.equal(state.sets[0].rightCompleted, false);
+  assert.equal(achievementSummary(state).liftedWeightKg, 200);
+  assert.equal(workoutSnapshot(state, state.sessions[0].id).exercises[0].sets.length, 1);
+  state = reopenSkippedCard(state, right);
+  assert.equal(state.sets[0].leftCompleted, true);
+  assert.equal(state.sets[0].rightWeightKg, 20);
+  state = advanceWorkout(state);
+  assert.equal(achievementSummary(state).liftedWeightKg, 400);
+});
+
+test('skipping both sides contributes no sets, weight, or shared exercises', () => {
+  let state = workout({ sets: 1, bilateral: true });
+  state = advanceWorkout(advanceWorkout(state, true), true);
+  assert.equal(state.sets[0].isCompleted, false);
+  assert.equal(achievementSummary(state).completedSets, 0);
+  assert.equal(achievementSummary(state).liftedWeightKg, 0);
+  assert.throws(() => workoutSnapshot(state, state.sessions[0].id), /完了セットがありません/);
+  state = reopenSkippedCard(state, { setId: state.sets[0].id, side: state.sets[0].finalSkippedSide === 'normal' ? undefined : state.sets[0].finalSkippedSide });
+  state = advanceWorkout(state);
+  assert.equal(state.sets[0].isCompleted, true);
+  assert.equal(achievementSummary(state).liftedWeightKg, 200);
+});
+
+test('revisiting a skip preserves later completed sets and refuses another active session', () => {
+  let state = workout({ sets: 3, rest: 0 });
+  const card = currentCard(state, state.workout.sessionId);
+  state = advanceWorkout(advanceWorkout(state, true));
+  const later = state.sets[1];
+  state = reopenSkippedCard(state, card);
+  assert.deepEqual(state.sets[1], later);
+  state = advanceWorkout(state);
+  assert.equal(currentCard(state, state.workout.sessionId).setId, state.sets[2].id);
+  state = finishWorkout(state, state.workout.sessionId);
+  const other = startWorkout(state);
+  assert.equal(reopenSkippedCard(other, card), other);
+});
+
+test('ring and seconds derive from elapsed time including background and expiry', () => {
+  assert.deepEqual(restRemaining(1000, 61000, 1000), { seconds: 60, fraction: 1 });
+  assert.deepEqual(restRemaining(1000, 61000, 16000), { seconds: 45, fraction: 0.75 });
+  assert.deepEqual(restRemaining(1000, 61000, 61001), { seconds: 0, fraction: 0 });
+  assert.equal(restRemaining(1000, 61000, 60999).seconds, 1);
+  assert.equal(restRemaining(1000, 1000, 1000).fraction, 0);
+});
+
+test('another device open session does not replace the workout in progress here', () => {
+  const { activeSession } = require('../src/workout.ts');
+  let state = workout({ sets: 2 });
+  const mine = state.workout.sessionId;
+  const other = { id: 9000, startedAt: '2026-10-01T00:00:00.000Z', status: 'IN_PROGRESS' };
+  state = { ...state, sessions: [other, ...state.sessions] };
+  assert.equal(activeSession(state).id, mine);
+  assert.equal(startWorkout(state), state);
+  const finished = finishWorkout(state, mine);
+  assert.equal(activeSession(finished).id, other.id);
+});

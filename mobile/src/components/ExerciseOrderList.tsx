@@ -97,7 +97,7 @@ export function ExerciseOrderList({ items, onMove, onEdit, onDelete, header, foo
     return () => clearTimeout(timer);
   }, [items, pendingOrder]);
    return <View style={{ flex: 1 }}>
-    <ScrollView ref={scroll} scrollEnabled={dragging === undefined} scrollEventThrottle={16}
+    <ScrollView ref={scroll} scrollEnabled={dragging === undefined} scrollEventThrottle={16} keyboardShouldPersistTaps="handled"
       onScrollBeginDrag={closeSwipe}
       onLayout={() => scroll.current?.measureInWindow((_x, y, _w, h) => { bounds.current.top = y; bounds.current.height = h; })}
       onContentSizeChange={(_w, h) => { bounds.current.content = h; }}

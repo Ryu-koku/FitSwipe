@@ -8,6 +8,7 @@ if (!["127.0.0.1", "localhost"].includes(new URL(baseUrl).hostname)) {
 }
 
 async function call(path, { method = "GET", token, body } = {}) {
+  if (path === '/v1/account' && method === 'POST') body = { ...body, termsVersion: '2026-11-09' };
   const headers = {};
   if (token) headers.Authorization = `Bearer ${token}`;
   if (body !== undefined) headers["Content-Type"] = "application/json";

@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from
 import { Animated, PanResponder, Pressable, Text, View } from 'react-native';
 import { useApp } from '../context';
 import { achievementSummary, completedSessions, completedSets, localDay } from '../logic';
-import { Card, Sheet, useTheme } from '../ui';
+import { Card, IconButton, Sheet, useTheme } from '../ui';
 import { SessionDetails } from './SessionDetails';
 import { AppIcon } from './AppIcon';
 import { useReducedMotion } from '../use-reduced-motion';
@@ -13,7 +13,7 @@ function startOfWeek(date: Date, monday: boolean) {
   return start;
 }
 
-export function WorkoutCalendar({ compact = false }: { compact?: boolean }) {
+export function WorkoutCalendar(_props: { compact?: boolean }) {
   const { state } = useApp();
   const { colors, styles } = useTheme();
   const reduced = useReducedMotion();
@@ -69,15 +69,17 @@ export function WorkoutCalendar({ compact = false }: { compact?: boolean }) {
     return () => clearTimeout(timer);
   }, [width, offset, move, reduced]);
   const sessions = completedSessions(state);
-  const days = new Set(sessions.map((s) => localDay(s.startedAt)));
+
   const streakWeeks = achievementSummary(state).streakWeeks;
   const today = localDay(new Date());
   const currentWeekStart = startOfWeek(new Date(), state.weekStartsMonday);
   const sessionsWithSets = new Set(completedSets(state).map((set) => set.sessionId));
+  // Mark only days with a completed set, like the streak and training-day count.
+  const days = new Set(sessions.filter((s) => sessionsWithSets.has(s.id)).map((s) => localDay(s.startedAt)));
   const recordedWeeks = new Set(sessions.filter((s) => sessionsWithSets.has(s.id) && localDay(s.startedAt) <= today)
     .map((s) => localDay(startOfWeek(new Date(s.startedAt), state.weekStartsMonday))));
   if (!recordedWeeks.has(localDay(currentWeekStart))) currentWeekStart.setDate(currentWeekStart.getDate() - 7);
-  const rowHeight = compact ? 32 : 38;
+  const rowHeight = 44;
   const renderMonth = (delta: number) => {
     const date = new Date(month.getFullYear(), month.getMonth() + delta, 1);
     const leading = state.weekStartsMonday ? (date.getDay() + 6) % 7 : date.getDay();
@@ -120,7 +122,7 @@ export function WorkoutCalendar({ compact = false }: { compact?: boolean }) {
           <Text accessibilityLiveRegion="polite" style={[styles.body, { fontWeight: '700' }]}>{date.getFullYear() !== new Date().getFullYear() ? `${date.getFullYear()}年` : ''}{date.getMonth() + 1}月</Text>
           <View style={{ height: 2, width: 18, marginTop: 2, borderRadius: 1, backgroundColor: isCurrentMonth ? colors.primary : 'transparent' }} />
         </View>
-        <View style={{ minWidth: 44 }} />
+        <View style={{ flexDirection: 'row' }}><IconButton label="前の月" symbol="‹" onPress={() => move(-1)} /><IconButton label="次の月" symbol="›" onPress={() => move(1)} /></View>
       </View>
        <View style={{ flexDirection: 'row' }}><View style={{ flex: 1.15 }} />
         {(state.weekStartsMonday ? ['月', '火', '水', '木', '金', '土', '日'] : ['日', '月', '火', '水', '木', '金', '土']).map((label) => <Text key={label} style={[styles.small, { flex: 1, textAlign: 'center' }]}>{label}</Text>)}
@@ -140,9 +142,11 @@ export function WorkoutCalendar({ compact = false }: { compact?: boolean }) {
             return <View key={col} style={{ flex: 1, height: rowHeight, alignItems: 'center', justifyContent: 'center' }}>
               {day > 0 && day <= length && <Pressable accessibilityRole="button" accessibilityLabel={`${date.getMonth() + 1}月${day}日${key === today ? '、今日' : ''}${done ? '、トレーニング記録あり' : ''}`}
                 disabled={!done || delta !== 0} onPress={() => setSelected(key)}
-                style={{ width: 30, height: 30, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: key === today ? colors.soft : done ? colors.primary : 'transparent', borderWidth: key === today || key === selected ? 1 : 0, borderColor: colors.primary }}>
+                style={{ width: '100%', height: rowHeight, alignItems: 'center', justifyContent: 'center' }}>
+                <View pointerEvents="none" style={{ width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: key === today ? colors.soft : done ? colors.primary : 'transparent', borderWidth: key === today || key === selected ? 1 : 0, borderColor: colors.primary }}>
                 <Text style={{ color: done && key !== today ? colors.bg : colors.ink, lineHeight: 17 }}>{day}</Text>
                 {done && <View style={{ position: 'absolute', bottom: 2, width: 4, height: 4, borderRadius: 2, backgroundColor: key === today || key === selected ? colors.primary : colors.bg }} />}
+                </View>
               </Pressable>}
             </View>;
           })}
@@ -151,7 +155,7 @@ export function WorkoutCalendar({ compact = false }: { compact?: boolean }) {
     </View>;
   };
   return <>
-    <Card style={{ padding: 8, marginBottom: 0 }}>
+    <Card style={{ padding: 12, marginBottom: 0 }}>
       <Animated.View onLayout={(e) => setWidth(e.nativeEvent.layout.width)} style={{ overflow: 'hidden', ...(heightReady ? { height: calendarHeight } : {}) }} {...responder?.panHandlers}>
         <Animated.View style={{ width, position: 'absolute', top: 0, left: 0, transform: [{ translateX: offset }] }}>
           {[-1, 0, 1].map(renderMonth)}

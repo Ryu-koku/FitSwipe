@@ -1,0 +1,126 @@
+[
+  {
+    "name": "ベンチプレス",
+    "muscleGroup": "胸"
+  },
+  {
+    "name": "ペックフライ",
+    "muscleGroup": "胸"
+  },
+  {
+    "name": "チェストプレス",
+    "muscleGroup": "胸"
+  },
+  {
+    "name": "スミスマシン・インクラインベンチプレス",
+    "muscleGroup": "胸"
+  },
+  {
+    "name": "ケーブルクロス",
+    "muscleGroup": "胸"
+  },
+  {
+    "name": "ディップス",
+    "muscleGroup": "胸"
+  },
+  {
+    "name": "ダンベルフライ",
+    "muscleGroup": "胸"
+  },
+  {
+    "name": "ダンベルプレス",
+    "muscleGroup": "胸"
+  },
+  {
+    "name": "インクラインベンチプレス",
+    "muscleGroup": "胸"
+  },
+  {
+    "name": "デッドリフト",
+    "muscleGroup": "背中"
+  },
+  {
+    "name": "ラットプルダウン",
+    "muscleGroup": "背中"
+  },
+  {
+    "name": "プーリーロー",
+    "muscleGroup": "背中"
+  },
+  {
+    "name": "チンニング（懸垂）",
+    "muscleGroup": "背中"
+  },
+  {
+    "name": "ベントオーバーロー",
+    "muscleGroup": "背中"
+  },
+  {
+    "name": "スクワット",
+    "muscleGroup": "脚"
+  },
+  {
+    "name": "スミスマシン・バーベルスクワット",
+    "muscleGroup": "脚"
+  },
+  {
+    "name": "レッグプレス",
+    "muscleGroup": "脚"
+  },
+  {
+    "name": "レッグエクステンション",
+    "muscleGroup": "脚"
+  },
+  {
+    "name": "レッグカール",
+    "muscleGroup": "脚"
+  },
+  {
+    "name": "サイドレイズ",
+    "muscleGroup": "肩"
+  },
+  {
+    "name": "ショルダープレス",
+    "muscleGroup": "肩"
+  },
+  {
+    "name": "フロントレイズ",
+    "muscleGroup": "肩"
+  },
+  {
+    "name": "ダンベルショルダープレス",
+    "muscleGroup": "肩"
+  },
+  {
+    "name": "ケーブルフェイスプル",
+    "muscleGroup": "肩"
+  },
+  {
+    "name": "バーベルカール",
+    "muscleGroup": "腕"
+  },
+  {
+    "name": "アームカール",
+    "muscleGroup": "腕"
+  },
+  {
+    "name": "ケーブルプレスダウン",
+    "muscleGroup": "腕"
+  },
+  {
+    "name": "アンダーグリップチンニング",
+    "muscleGroup": "腕"
+  },
+  {
+    "name": "プランク",
+    "muscleGroup": "腹"
+  },
+  {
+    "name": "上体起こし",
+    "muscleGroup": "腹"
+  },
+  {
+    "name": "ランニング",
+    "muscleGroup": "有酸素運動"
+  }
+]

@@ -6,6 +6,7 @@ import {
   WorkoutSet,
 } from './types';
 import { exerciseGroup } from './exercise-groups';
+import { ensureExerciseCatalog } from './exercise-catalog';
 
 export const now = () => new Date().toISOString();
 
@@ -57,7 +58,7 @@ const defaultConfig = (
 });
 
 export function seedState(): AppState {
-  return {
+  return ensureExerciseCatalog({
     nextId: 100,
     exercises: initialExercises.map((exercise) => ({ ...exercise, muscleGroup: exerciseGroup(exercise) })),
     bodyMeasurements: [],
@@ -107,7 +108,7 @@ export function seedState(): AppState {
     pendingPosts: [],
     roomDetails: {},
     rooms: [],
-  };
+  });
 }
 
 export const activeExercises = (state: AppState) =>
@@ -182,9 +183,8 @@ export function strengthGrowth(
     if (!date || date < firstDay || date > lastDay ||
         !set.isCompleted || set.exerciseId !== exerciseId) return;
     const [weight, reps] = performance(set, side);
-    if (!Number.isFinite(weight) || !Number.isFinite(reps) ||
-        weight <= 0 || reps < 1 || reps > 10 || !Number.isInteger(reps)) return;
-    const value = reps === 1 ? weight : weight * (1 + reps / 30);
+    const value = oneRepMax(weight, reps);
+    if (value === undefined) return;
     daily.set(date, Math.max(daily.get(date) ?? 0, value));
   });
   return [...daily].sort(([a], [b]) => a.localeCompare(b))
@@ -193,15 +193,18 @@ export function strengthGrowth(
 
 export function achievementSummary(state: AppState): AchievementSummary {
   const sessions = completedSessions(state);
-  const finished = completedSets(state).filter((set) =>
-    sessions.some(
-      (s) => s.id === set.sessionId && localDay(s.startedAt) <= localDay(now()),
-    ),
-  );
-  const recordedSessions = sessions.filter((s) =>
-    finished.some((set) => set.sessionId === s.id),
-  );
-  const days = new Set(recordedSessions.map((s) => localDay(s.startedAt)));
+  // Index once: this runs on every home render, over the whole history.
+  const today = localDay(now());
+  const sessionDays = new Map(sessions.map((s) => [s.id, localDay(s.startedAt)]));
+  const modes = new Map(state.exercises.map((e) => [e.id, e.mode]));
+  const finished = completedSets(state).filter((set) => {
+    const day = sessionDays.get(set.sessionId);
+    return day !== undefined && day <= today;
+  });
+  const finishedBySession = new Map<number, WorkoutSet[]>();
+  finished.forEach((set) => { const rows = finishedBySession.get(set.sessionId); if (rows) rows.push(set); else finishedBySession.set(set.sessionId, [set]); });
+  const recordedSessions = sessions.filter((s) => finishedBySession.has(s.id));
+  const days = new Set(recordedSessions.map((s) => sessionDays.get(s.id)!));
   const weeks = new Set(
     recordedSessions.map((s) => mondayKey(s.startedAt, state.weekStartsMonday)),
   );
@@ -223,15 +226,12 @@ export function achievementSummary(state: AppState): AchievementSummary {
     .map((s) => new Date(`${localDay(s.startedAt)}T00:00:00`).getTime())
     .sort((a, b) => a - b)[0];
   const totalReps = finished.reduce((sum, set) => {
-    if (
-      state.exercises.find((e) => e.id === set.exerciseId)?.mode === 'BILATERAL'
-    )
+    if (modes.get(set.exerciseId) === 'BILATERAL')
       return sum + (set.leftReps ?? 0) + (set.rightReps ?? 0);
     return sum + (set.normalReps ?? 0);
   }, 0);
   const volume = finished.reduce((sum, set) => {
-    const exercise = state.exercises.find((e) => e.id === set.exerciseId);
-    if (exercise?.mode === 'BILATERAL')
+    if (modes.get(set.exerciseId) === 'BILATERAL')
       return (
         sum +
         (set.leftWeightKg ?? 0) * (set.leftReps ?? 0) +
@@ -247,12 +247,9 @@ export function achievementSummary(state: AppState): AchievementSummary {
     .sort((a, b) => a.startedAt.localeCompare(b.startedAt) || a.id - b.id)
     .forEach((session) => {
       const sessionBests = new Map<string, [number, number]>();
-      finished
-        .filter((set) => set.sessionId === session.id)
+      (finishedBySession.get(session.id) ?? [])
         .forEach((set) => {
-          const bilateral =
-            state.exercises.find((e) => e.id === set.exerciseId)?.mode ===
-            'BILATERAL';
+          const bilateral = modes.get(set.exerciseId) === 'BILATERAL';
           (bilateral ? [1, 2] : [0]).forEach((side) => {
             const value = performance(set, side);
             const key = `${set.exerciseId}:${side}`;
@@ -285,14 +282,7 @@ export function achievementSummary(state: AppState): AchievementSummary {
     return Math.max(
       ...finished
         .filter((set) => ids.includes(set.exerciseId))
-        .map((set) => {
-          const [weight, reps] = performance(set);
-          return weight > 0 && reps > 0 && reps <= 10
-            ? reps === 1
-              ? weight
-              : weight * (1 + reps / 30)
-            : 0;
-        }),
+        .map((set) => oneRepMax(...performance(set)) ?? 0),
       0,
     );
   };
@@ -348,9 +338,16 @@ export function formatWeight(value?: number) {
   return `${Number(value.toFixed(2))} kg`;
 }
 
+// Single Epley estimate (1-10 reps) for graphs, rankings, BIG3, the calculator
+// and the completion highlight, so every screen shows the same value.
+export function oneRepMax(weightKg: number, reps: number) {
+  if (!Number.isFinite(weightKg) || weightKg <= 0 || !Number.isInteger(reps) || reps < 1 || reps > 10) return undefined;
+  return reps === 1 ? weightKg : weightKg * (1 + reps / 30);
+}
+
 export function estimatedOneRepMax(weightKg: number, reps: number) {
-  if (!Number.isFinite(weightKg) || weightKg <= 0 || !Number.isInteger(reps) || reps < 1 || reps > 12) return undefined;
-  return Math.round(weightKg * (1 + (reps - 1) / 30) * 10) / 10;
+  const value = oneRepMax(weightKg, reps);
+  return value === undefined ? undefined : Math.round(value * 10) / 10;
 }
 
 export function lastExerciseTrainingDays(state: AppState, exerciseId: number, today = new Date()) {

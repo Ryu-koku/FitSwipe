@@ -24,7 +24,7 @@ export function validateChanges(data) {
 }
 
 export async function pushChanges(env, user, data) {
-  if (!user.google_subject) throw new SyncError(403, "Googleログインが必要です");
+  if (!user.google_subject && !user.review_login) throw new SyncError(403, "アカウントへのログインが必要です");
   const changes = validateChanges(data);
   const statements = [env.DB.prepare("INSERT OR IGNORE INTO sync_accounts(user_id) VALUES (?)").bind(user.id)];
   for (const change of changes) {
@@ -40,8 +40,8 @@ export async function pushChanges(env, user, data) {
         ON CONFLICT(user_id, kind, record_id) DO UPDATE SET
           revision = excluded.revision, deleted = excluded.deleted, payload = excluded.payload
       `).bind(user.id, change.kind, change.id, Number(change.deleted), change.payload, user.id, user.id, change.mutationId),
-      env.DB.prepare("INSERT OR IGNORE INTO sync_receipts(user_id, mutation_id) VALUES (?, ?)")
-        .bind(user.id, change.mutationId),
+      env.DB.prepare("INSERT OR IGNORE INTO sync_receipts(user_id, mutation_id, created_at) VALUES (?, ?, ?)")
+        .bind(user.id, change.mutationId, Math.floor(Date.now() / 1000)),
     );
   }
   // D1 batch is transactional; no partially acknowledged mutations.
@@ -50,7 +50,7 @@ export async function pushChanges(env, user, data) {
 }
 
 export async function pullChanges(env, user, cursor) {
-  if (!user.google_subject) throw new SyncError(403, "Googleログインが必要です");
+  if (!user.google_subject && !user.review_login) throw new SyncError(403, "アカウントへのログインが必要です");
   if (!/^\d{1,15}$/u.test(cursor ?? "0")) throw new SyncError(400, "同期位置を確認してください");
   const { results } = await env.DB.prepare(`
     SELECT kind, record_id AS id, revision, deleted, payload FROM sync_records
@@ -62,4 +62,14 @@ export async function pullChanges(env, user, cursor) {
     cursor: page.length ? page.at(-1).revision : Number(cursor ?? 0),
     hasMore: results.length > 100,
   };
+}
+
+// A retry older than this is not a plausible transport retry of the same push.
+export const RECEIPT_RETENTION_SECONDS = 90 * 86_400;
+
+export async function pruneSync(env, now = Math.floor(Date.now() / 1000)) {
+  await env.DB.batch([
+    env.DB.prepare("DELETE FROM account_sessions WHERE expires_at <= ?").bind(now),
+    env.DB.prepare("DELETE FROM sync_receipts WHERE created_at < ?").bind(now - RECEIPT_RETENTION_SECONDS),
+  ]);
 }

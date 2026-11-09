@@ -1,126 +1,95 @@
 import React, { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
+import { router } from 'expo-router';
 import { useApp } from '../context';
-import {
-  Button,
-  Card,
-  Field,
-  IconButton,
-  Screen,
-  SectionTitle,
-  Sheet,
-  useTheme,
-} from '../ui';
+import { selectedPreset, formatWeight } from '../logic';
+import { Button, Card, IconButton, Screen, SectionTitle, useTheme } from '../ui';
+import { AppIcon } from '../components/AppIcon';
 import { PresetEditor } from '../components/PresetEditor';
+import { PresetCreator } from '../components/PresetCreator';
 
 export default function PrepareScreen() {
   const { state, update } = useApp();
   const { colors, styles } = useTheme();
   const [editing, setEditing] = useState<string>();
+  const [editingExercise, setEditingExercise] = useState<number>();
   const [adding, setAdding] = useState(false);
-  const [name, setName] = useState('');
+  const preset = selectedPreset(state);
+  const configs = preset?.exercises.filter((c) => state.exercises.some((e) => e.id === c.exerciseId && !e.archived)) ?? [];
+  const edit = (exerciseId?: number) => {
+    if (!preset) return;
+    setEditingExercise(exerciseId);
+    setEditing(preset.id);
+  };
   return (
-    <Screen title="トレーニング"
-      overlay={<View pointerEvents="box-none" style={{ position: 'absolute', right: 20, bottom: 20 }}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="プリセットを追加"
-          onPress={() => { setName(''); setAdding(true); }}
-          style={{ width: 58, height: 58, borderRadius: 29, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', elevation: 6 }}
-        >
-          <Text style={{ color: '#fff', fontSize: 34, lineHeight: 40 }}>＋</Text>
-        </Pressable>
-      </View>}>
-      <SectionTitle>プリセット</SectionTitle>
+    <Screen title="メニュー" onBack={() => router.replace('/')}
+      right={<IconButton label="プリセットを追加" symbol="＋" onPress={() => setAdding(true)} />}>
+      <SectionTitle>プリセットから選ぶ</SectionTitle>
       <View style={[styles.wrap, { gap: 10 }]}>
-        {state.presets.map((preset) => {
-          const selected = preset.id === state.selectedPresetId;
-          const configs = preset.exercises.filter((c) =>
-            state.exercises.some((e) => e.id === c.exerciseId && !e.archived),
-          );
-          return (
-            <Pressable
-              key={preset.id}
-              accessibilityRole="button"
-              accessibilityLabel={preset.name}
-              accessibilityState={{ selected }}
-              onPress={() =>
-                update((s) => ({ ...s, selectedPresetId: preset.id }))
-              }
-              style={{ width: '48%' }}
-            >
-              <Card
-                style={{
-                   minHeight: 150,
-                   paddingBottom: 60,
-                  backgroundColor: selected ? colors.soft : colors.surface,
-                  borderColor: selected ? colors.primary : colors.line,
-                  borderWidth: selected ? 2 : 1,
-                }}
-              >
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <Text style={{ color: colors.primary, fontSize: 24 }}>
-                    {selected ? '●' : '○'}
-                  </Text>
-                  <Text
-                    style={[styles.body, { flex: 1, fontSize: 20, fontWeight: '800' }]}
-                  >
-                    {preset.name}
-                  </Text>
-                </View>
-                <Text style={styles.small}>
-                  {configs.length}種目 ·{' '}
-                  {configs.reduce((sum, c) => sum + Math.max(1, c.sets), 0)}
-                  セット
-                </Text>
-                <View style={{ position: 'absolute', right: 8, bottom: 8 }}>
-                  <IconButton
-                    label={`${preset.name}を編集`}
-                    symbol="✎"
-                    onPress={() => {
-                      update((s) => ({ ...s, selectedPresetId: preset.id }));
-                      setEditing(preset.id);
-                    }}
-                  />
-                </View>
-              </Card>
-            </Pressable>
-          );
+        {state.presets.map((item) => {
+          const selected = item.id === preset?.id;
+          const items = item.exercises.filter((c) => state.exercises.some((e) => e.id === c.exerciseId && !e.archived));
+          return <Pressable key={item.id} accessibilityRole="button" accessibilityLabel={item.name}
+            accessibilityState={{ selected }}
+            onPress={() => update((s) => ({ ...s, selectedPresetId: item.id }))}
+            style={{ width: '48%' }}>
+            <Card style={{ minHeight: 150, paddingBottom: 60,
+              backgroundColor: selected ? colors.soft : colors.surface,
+              borderColor: selected ? colors.primary : colors.line, borderWidth: selected ? 2 : 1 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Text style={{ color: colors.primary, fontSize: 24 }}>{selected ? '●' : '○'}</Text>
+                <Text style={[styles.body, { flex: 1, fontSize: 20, fontWeight: '800' }]}>{item.name}</Text>
+              </View>
+              <Text style={styles.small}>{items.length}種目 · {items.reduce((sum, c) => sum + Math.max(1, c.sets), 0)}セット</Text>
+              <View style={{ position: 'absolute', right: 8, bottom: 8 }}>
+                <IconButton label={`${item.name}を編集`} symbol="✎" onPress={() => {
+                  update((s) => ({ ...s, selectedPresetId: item.id }));
+                  setEditingExercise(undefined); setEditing(item.id);
+                }} />
+              </View>
+            </Card>
+          </Pressable>;
         })}
       </View>
-      {editing && (
-        <PresetEditor
-          presetId={editing}
-          onClose={() => setEditing(undefined)}
-        />
-      )}
-      {adding && (
-        <Sheet title="プリセットを追加" onClose={() => setAdding(false)}>
-          <Field
-            label="名前"
-            value={name}
-            onChangeText={setName}
-            maxLength={24}
-          />
-          <Button
-            label="作成して編集"
-            disabled={!name.trim()}
-            onPress={() => {
-              const id = `preset-${Date.now()}`;
-              update((s) => ({
-                ...s,
-                presets: [
-                  ...s.presets,
-                  { id, name: name.trim(), exercises: [] },
-                ],
-                selectedPresetId: id,
-              }));
-              setAdding(false);
-              setEditing(id);
-            }}
-          />
-        </Sheet>
-      )}
+      {preset ? <>
+        <View style={[styles.row, { marginTop: 16, marginBottom: 16 }]}>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.body, { fontWeight: '800', fontSize: 18 }]}>{preset.name}</Text>
+            <Text style={styles.small}>{configs.length}種目 · {configs.reduce((sum, c) => sum + Math.max(1, c.sets), 0)}セット</Text>
+          </View>
+          <Pressable accessibilityRole="button" accessibilityLabel={`${preset.name}を編集・並べ替え`}
+            onPress={() => edit()} style={{ minHeight: 44, justifyContent: 'center', paddingHorizontal: 8 }}>
+            <Text style={[styles.body, { color: colors.primary, fontWeight: '700' }]}>編集・並べ替え</Text>
+          </Pressable>
+        </View>
+        {configs.map((config) => {
+          const exercise = state.exercises.find((e) => e.id === config.exerciseId)!;
+          return <Pressable key={exercise.id} accessibilityRole="button" accessibilityLabel={`${exercise.name}を編集`}
+            onPress={() => edit(exercise.id)} style={({ pressed }) => pressed && styles.pressed}>
+            <Card style={{ padding: 16 }}>
+              <View style={styles.row}>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.body, { fontWeight: '700', fontSize: 17 }]}>{exercise.name}</Text>
+                  <Text style={[styles.small, { marginTop: 4 }]}>
+                    {exercise.mode === 'BILATERAL'
+                      ? `左 ${formatWeight(config.leftWeightKg)} / 右 ${formatWeight(config.rightWeightKg)}`
+                      : formatWeight(config.weightKg)} × {config.reps ?? '—'}回 · {config.sets}セット
+                  </Text>
+                </View>
+                <AppIcon name="next" color={colors.muted} size={18} />
+              </View>
+            </Card>
+          </Pressable>;
+        })}
+        {!configs.length && <Card><Text style={styles.body}>種目を追加して、トレーニングの準備をしましょう。</Text></Card>}
+        <Button label="メニューを編集・種目を追加" secondary onPress={() => edit()} />
+      </> : <Card style={{ marginTop: 16 }}>
+        <Text style={styles.body}>よく使う種目をまとめて、トレーニングを始めましょう。</Text>
+        <Button label="プリセットを作成" onPress={() => setAdding(true)} />
+      </Card>}
+      {editing && <PresetEditor presetId={editing} initialExerciseId={editingExercise}
+        onClose={() => { setEditing(undefined); setEditingExercise(undefined); }} />}
+      {adding && <PresetCreator onClose={() => setAdding(false)} />}
     </Screen>
   );
 }

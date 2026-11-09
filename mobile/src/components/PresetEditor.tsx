@@ -1,19 +1,28 @@
 import React, { useState } from 'react';
 import { Alert, Switch, Text, View } from 'react-native';
 import { useApp } from '../context';
-import { activeExercises } from '../logic';
 import type { PresetExerciseConfig } from '../types';
-import { exerciseDefaults } from '../workout';
-import { Button, Chip, Field, NumberField, Sheet, useTheme } from '../ui';
+import { addPresetExercises } from '../exercise-additions';
+import { ExerciseEditor } from './ExerciseEditor';
+import { Button, Field, NumberField, Sheet, useTheme } from '../ui';
 import { ExerciseOrderList } from './ExerciseOrderList';
 import { moveItem } from '../reorder';
 
-export function PresetEditor({ presetId, onClose }: { presetId: string; onClose: () => void }) {
+export function PresetEditor({ presetId, onClose: close, initialExerciseId }: { presetId: string; onClose: () => void; initialExerciseId?: number }) {
   const { state, update } = useApp();
   const { styles } = useTheme();
-  const [editing, setEditing] = useState<number>();
+  const [editing, setEditing] = useState<number | undefined>(initialExerciseId);
   const [adding, setAdding] = useState(false);
+  // Edit the name locally and save it once: a blank name keeps the old one, and
+  // typing does not queue one sync change per keystroke.
+  const [draftName, setDraftName] = useState<string>();
   const preset = state.presets.find((p) => p.id === presetId);
+  const commitName = () => {
+    const name = draftName?.trim();
+    if (name && name !== preset?.name) update((s) => ({ ...s, presets: s.presets.map((p) => p.id === presetId ? { ...p, name } : p) }));
+    setDraftName(undefined);
+  };
+  const onClose = () => { commitName(); close(); };
   if (!preset) return null;
   const configs = preset.exercises.filter((c) => state.exercises.some((e) => e.id === c.exerciseId && !e.archived));
   const config = configs.find((c) => c.exerciseId === editing);
@@ -24,12 +33,9 @@ export function PresetEditor({ presetId, onClose }: { presetId: string; onClose:
   return <Sheet title="プリセットを編集" onClose={onClose} scroll={false}>
     <ExerciseOrderList items={configs.map((c) => ({ id: c.exerciseId, name: state.exercises.find((e) => e.id === c.exerciseId)!.name, detail: `${c.sets}セット × ${c.reps ?? '—'}回` }))}
       onEdit={setEditing} onMove={(from, to) => update((s) => ({ ...s, presets: s.presets.map((p) => p.id === presetId ? { ...p, exercises: moveItem(configs, from, to).concat(p.exercises.filter((c) => !configs.includes(c))) } : p) }))}
-      header={<Field label="プリセット名" value={preset.name} maxLength={24} onChangeText={(name) => update((s) => ({ ...s, presets: s.presets.map((p) => p.id === presetId ? { ...p, name } : p) }))} />}
+      header={<Field label="プリセット名" value={draftName ?? preset.name} maxLength={24} onChangeText={setDraftName} onBlur={commitName} />}
       footer={<>
-        <Button label="種目を追加" secondary onPress={() => setAdding(!adding)} />
-        {adding && <View style={styles.wrap}>{activeExercises(state).filter((e) => !preset.exercises.some((c) => c.exerciseId === e.id)).map((e) => <Chip key={e.id} label={e.name} onPress={() => {
-          update((s) => ({ ...s, presets: s.presets.map((p) => p.id === presetId ? { ...p, exercises: [...p.exercises, exerciseDefaults(e)] } : p) })); setEditing(e.id); setAdding(false);
-        }} />)}</View>}
+        <Button label="種目を追加" secondary onPress={() => setAdding(true)} />
         <Button label="完了" onPress={onClose} />
         <Button label="このプリセットを削除" secondary onPress={() => Alert.alert('プリセットを削除', `「${preset.name}」を削除しますか？`, [
           { text: 'キャンセル' }, { text: '削除', style: 'destructive', onPress: () => {
@@ -37,6 +43,9 @@ export function PresetEditor({ presetId, onClose }: { presetId: string; onClose:
           } },
         ])} />
       </>} />
+    {adding && <ExerciseEditor onClose={() => setAdding(false)}
+      excludedIds={preset.exercises.map((item) => item.exerciseId)}
+      onAdded={(ids) => update((s) => addPresetExercises(s, presetId, ids))} />}
     {config && exercise && <Sheet title={exercise.name} onClose={() => setEditing(undefined)}>
       {exercise.mode === 'BILATERAL' ? <View style={styles.row}>
         <NumberField label="左kg" value={config.leftWeightKg} onChange={(leftWeightKg) => patch({ leftWeightKg })} />
