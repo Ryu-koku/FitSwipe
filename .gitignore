@@ -18,11 +18,12 @@ signing/
 .env*
 !.env.example
 
-# Room server runtime data and credentials
-rooms-server/__pycache__/
-rooms-server/.venv/
-rooms-server/.env
 rooms-server/*.sqlite3*
 rooms-server/cloudflare/.wrangler/
 rooms-server/cloudflare/.dev.vars
 akapen
+# Local Wrangler state (D1 SQLite, caches) wherever wrangler was run.
+.wrangler/
+
+# Local review artifacts (builds, recordings, screenshots)
+output/

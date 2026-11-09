@@ -1,0 +1,122 @@
+[
+  {
+    "name": "インクラインダンベルプレス",
+    "muscleGroup": "胸",
+    "mode": "NORMAL"
+  },
+  {
+    "name": "インクラインダンベルフライ",
+    "muscleGroup": "胸",
+    "mode": "NORMAL"
+  },
+  {
+    "name": "スミスマシン・ベンチプレス",
+    "muscleGroup": "胸",
+    "mode": "NORMAL"
+  },
+  {
+    "name": "ワンハンドダンベルロー",
+    "muscleGroup": "背中",
+    "mode": "BILATERAL"
+  },
+  {
+    "name": "Tバーロー",
+    "muscleGroup": "背中",
+    "mode": "NORMAL"
+  },
+  {
+    "name": "バックエクステンション",
+    "muscleGroup": "背中",
+    "mode": "NORMAL"
+  },
+  {
+    "name": "リアレイズ",
+    "muscleGroup": "肩",
+    "mode": "NORMAL"
+  },
+  {
+    "name": "アーノルドプレス",
+    "muscleGroup": "肩",
+    "mode": "NORMAL"
+  },
+  {
+    "name": "ハンマーカール",
+    "muscleGroup": "腕",
+    "mode": "NORMAL"
+  },
+  {
+    "name": "プリーチャーカール",
+    "muscleGroup": "腕",
+    "mode": "NORMAL"
+  },
+  {
+    "name": "インクラインダンベルカール",
+    "muscleGroup": "腕",
+    "mode": "NORMAL"
+  },
+  {
+    "name": "トライセプスエクステンション",
+    "muscleGroup": "腕",
+    "mode": "NORMAL"
+  },
+  {
+    "name": "ブルガリアンスクワット",
+    "muscleGroup": "脚",
+    "mode": "BILATERAL"
+  },
+  {
+    "name": "ランジ",
+    "muscleGroup": "脚",
+    "mode": "BILATERAL"
+  },
+  {
+    "name": "ゴブレットスクワット",
+    "muscleGroup": "脚",
+    "mode": "NORMAL"
+  },
+  {
+    "name": "ルーマニアンデッドリフト",
+    "muscleGroup": "脚",
+    "mode": "NORMAL"
+  },
+  {
+    "name": "ヒップスラスト",
+    "muscleGroup": "脚",
+    "mode": "NORMAL"
+  },
+  {
+    "name": "カーフレイズ",
+    "muscleGroup": "脚",
+    "mode": "NORMAL"
+  },
+  {
+    "name": "ヒップアブダクション",
+    "muscleGroup": "脚",
+    "mode": "NORMAL"
+  },
+  {
+    "name": "ヒップアダクション",
+    "muscleGroup": "脚",
+    "mode": "NORMAL"
+  },
+  {
+    "name": "クランチ",
+    "muscleGroup": "腹",
+    "mode": "NORMAL"
+  },
+  {
+    "name": "レッグレイズ",
+    "muscleGroup": "腹",
+    "mode": "NORMAL"
+  },
+  {
+    "name": "腹筋ローラー",
+    "muscleGroup": "腹",
+    "mode": "NORMAL"
+  },
+  {
+    "name": "ロシアンツイスト",
+    "muscleGroup": "腹",
+    "mode": "NORMAL"
+  }
+]

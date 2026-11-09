@@ -59,7 +59,7 @@ test('removing all completed sets retracts the shared record without sharing unf
 test('an older device does not retract an unseen workout from another device', () => {
   const { state, room, now } = fixture();
   assert.deepEqual(sharingPlan(state, room, ['unseen-account-session'], now).remove, []);
-  state.cloud = { mapping: {}, records: { 'session:unseen-account-session': { kind: 'session', id: 'unseen-account-session', deleted: true } }, pending: [] };
+  state.cloud = { mapping: {}, deletedSessions: ['unseen-account-session'], pending: [] };
   assert.deepEqual(sharingPlan(state, room, ['unseen-account-session'], now).remove, ['unseen-account-session']);
 });
 
@@ -116,4 +116,120 @@ test('disk failure or an account switch cannot publish or acknowledge another ac
   await synchronizeAutomaticSharing(options);
   assert.equal(state.roomIdentity.id, 'other');
   assert.equal(state.automaticRoomReceipts, undefined);
+});
+
+test('automatic retention rolls over at Japan midnight without deleting local workouts', () => {
+  const { state, room } = fixture();
+  room.sharingSince = '2025-01';
+  state.sessions[0].startedAt = '2025-10-31T15:00:00Z';
+  state.sessions[0].endedAt = '2025-10-31T16:00:00Z';
+  const before = new Date('2026-10-31T14:59:59Z');
+  const after = new Date('2026-10-31T15:00:00Z');
+  assert.equal(automaticWorkouts(state, room, before).length, 1);
+  assert.equal(automaticWorkouts(state, room, after).length, 0);
+  assert.equal(state.sessions.length, 1);
+  state.sessions[0].startedAt = '2025-11-30T15:00:00Z';
+  state.sessions[0].endedAt = '2025-11-30T16:00:00Z';
+  assert.equal(automaticWorkouts(state, room, after).length, 1);
+});
+
+test('a refused workout is skipped durably and does not block later workouts or rooms', async () => {
+  const { RoomsApiError } = require('../src/rooms.ts');
+  const f = fixture(); let state = f.state;
+  state.roomIdentity = { id: 'owner', token: 'test-token', name: 'Owner' };
+  state.sessions = [...state.sessions, { id: 200, startedAt: '2026-10-02T15:00:00Z', endedAt: '2026-10-02T16:00:00Z', status: 'COMPLETED' }];
+  state.sets = [...state.sets, { ...state.sets[0], id: 201, sessionId: 200 }];
+  const rooms = [{ ...f.room }, { ...f.room, id: 'gone' }, { ...f.room, id: 'other' }];
+  const saved = [], remote = new Set();
+  const client = {
+    list: async () => rooms, automaticKeys: async (_a, room) => ({ clientIds: [...remote].filter((k) => k.startsWith(`${room}/`)).map((k) => k.slice(room.length + 1)) }),
+    saveAutomatic: async (_a, room, payload) => {
+      if (room === 'gone') throw new RoomsApiError(403, 'consent');
+      if (room === 'room' && payload.legacyClientId.endsWith('-100')) throw new RoomsApiError(400, 'invalid');
+      saved.push(`${room}:${payload.legacyClientId}`); remote.add(`${room}/${payload.clientId}`);
+    },
+    deleteAutomatic: async () => {},
+  };
+  const options = { client, getState: () => state, persist: async u => { state = u(state); }, isCurrent: () => true };
+  await synchronizeAutomaticSharing(options);
+  assert.deepEqual(saved.map(s => s.replace(/rn-.*-/, '')), ['room:200', 'other:100', 'other:200']);
+  saved.length = 0;
+  await synchronizeAutomaticSharing(options);
+  assert.deepEqual(saved, []); // The refused payload is not retried every cycle.
+  state = { ...state, sets: state.sets.map((s) => s.id === 101 ? { ...s, normalReps: 12 } : s) };
+  await assert.doesNotReject(() => synchronizeAutomaticSharing(options));
+  assert.ok(Object.values(state.automaticRoomReceipts.room).some((v) => v.startsWith('rejected:')));
+});
+
+test('network and capacity failures stay local to a room and recover without duplicate uploads', async () => {
+  const { RoomsApiError } = require('../src/rooms.ts');
+  const f = fixture(); let state = { ...f.state, roomIdentity: { id: 'owner' } };
+  const rooms = [f.room, { ...f.room, id: 'capacity', name: 'Capacity' }, { ...f.room, id: 'good', name: 'Good' }];
+  let fail = true;
+  const remote = { room: new Set(), capacity: new Set(), good: new Set() };
+  const calls = [];
+  const options = {
+    getState: () => state, persist: async f => { state = f(state); }, isCurrent: () => true,
+    client: {
+      list: async () => rooms,
+      automaticKeys: async (_, id) => {
+        if (id === 'room' && fail) throw Error('offline');
+        return { clientIds: [...remote[id]], limit: 1000 };
+      },
+      saveAutomatic: async (_, id, payload) => {
+        if (id === 'capacity' && fail) throw new RoomsApiError(409, 'capacity full');
+        calls.push(id); remote[id].add(payload.clientId);
+      },
+      deleteAutomatic: async () => {},
+    },
+  };
+  await assert.rejects(synchronizeAutomaticSharing(options), /offline/);
+  assert.deepEqual(calls, ['good']);
+  assert.equal(state.automaticRoomStatus.room.issues[0].retryable, true);
+  assert.equal(state.automaticRoomStatus.capacity.issues[0].retryable, true);
+  assert.equal(state.automaticRoomStatus.good.issues.length, 0);
+  assert.equal(state.automaticRoomReceipts.capacity, undefined);
+  fail = false;
+  await synchronizeAutomaticSharing(options);
+  assert.deepEqual(calls, ['good', 'room', 'capacity']);
+  assert.equal(state.automaticRoomStatus.capacity.issues.length, 0);
+});
+
+test('a failed retraction does not block an upload or another room', async () => {
+  const f = fixture(); let state = { ...f.state, roomIdentity: { id: 'owner' }, automaticRoomReceipts: { room: { removed: 'old' } } };
+  const saved = [];
+  await assert.rejects(synchronizeAutomaticSharing({
+    getState: () => state, persist: async f => { state = f(state); }, isCurrent: () => true,
+    client: { list: async () => [f.room, { ...f.room, id: 'other' }],
+      automaticKeys: async (_, id) => ({ clientIds: id === 'room' ? ['removed'] : [] }),
+      deleteAutomatic: async () => { throw Error('offline delete'); },
+      saveAutomatic: async (_, id) => { saved.push(id); },
+    },
+  }), /offline delete/);
+  assert.deepEqual(saved, ['room', 'other']);
+  assert.equal(state.automaticRoomReceipts.room.removed, 'old');
+});
+
+test('period choices cover twelve Japan-calendar months across years', () => {
+  const { roomMonths } = require('../src/room-period.ts');
+  const months = roomMonths(new Date('2026-12-31T15:00:00Z'));
+  assert.equal(months.length, 12); assert.equal(months[0], '2027-01'); assert.equal(months[11], '2026-02');
+});
+
+test('a full member quota stops only new copies in that room and does not block sync', async () => {
+  const { RoomsApiError } = require('../src/rooms.ts');
+  const f = fixture(); let state = f.state;
+  state.roomIdentity = { id: 'owner', token: 'test-token', name: 'Owner' };
+  state.sessions = [...state.sessions, { id: 200, startedAt: '2026-10-02T15:00:00Z', endedAt: '2026-10-02T16:00:00Z', status: 'COMPLETED' }];
+  state.sets = [...state.sets, { ...state.sets[0], id: 201, sessionId: 200 }];
+  const rooms = [{ ...f.room }, { ...f.room, id: 'other' }];
+  const calls = [];
+  const client = {
+    list: async () => rooms, automaticKeys: async () => ({ clientIds: [], limit: 1000 }),
+    saveAutomatic: async (_a, room) => { calls.push(room); if (room === 'room') throw new RoomsApiError(409, 'full'); },
+    deleteAutomatic: async () => {},
+  };
+  await synchronizeAutomaticSharing({ client, getState: () => state, persist: async u => { state = u(state); }, isCurrent: () => true });
+  assert.deepEqual(calls, ['room', 'other', 'other']);
+  assert.equal(state.automaticRoomStatus.room.issues.length, 1);
 });

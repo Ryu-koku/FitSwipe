@@ -1,3 +1,4 @@
+import { googleDisplayName, googlePicture } from './google-profile.mjs';
 // Verify locally against Google's public signing keys; never trust decoded claims
 // or a client-supplied email as proof of identity.
 let cachedKeys;
@@ -64,5 +65,7 @@ export async function verifyGoogleToken(token, audience, options = {}) {
   } catch {
     throw new GoogleAuthError("Invalid token signature");
   }
-  return { subject: claims.sub };
+  const picture = googlePicture(claims.picture);
+  const name = googleDisplayName(claims.name);
+  return { subject: claims.sub, ...(picture ? { picture } : {}), ...(name ? { name } : {}) };
 }

@@ -1,7 +1,5 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { spawn } = require('node:child_process');
-const path = require('node:path');
 const {
   createRoomsClient,
   inviteCode,
@@ -16,50 +14,18 @@ test('existing Kotlin invitation URLs are accepted', () => {
   assert.equal(inviteCode(' ABC123 '), 'ABC123');
 });
 
-test('React Native client interoperates with the Python rooms API, including automatic sharing', async (t) => {
-  const python = spawn(
-    'python3',
-    [
-      '-u',
-      '-c',
-      `
-import tempfile
-from wsgiref.simple_server import make_server, WSGIRequestHandler
-from server import Application, Store
-class Quiet(WSGIRequestHandler):
-    def log_message(self, *args): pass
-with tempfile.TemporaryDirectory(prefix="rn-rooms-") as directory:
-    app = Application(Store(directory + "/rooms.sqlite3"))
-    server = make_server("127.0.0.1", 0, app, handler_class=Quiet)
-    print(server.server_port, flush=True)
-    server.serve_forever()
-`,
-    ],
-    {
-      cwd: path.resolve(__dirname, '../../rooms-server'),
-      stdio: ['ignore', 'pipe', 'pipe'],
-    },
-  );
-  t.after(() => python.kill());
-  const port = await new Promise((resolve, reject) => {
-    const timer = setTimeout(
-      () => reject(new Error('test server did not start')),
-      10000,
-    );
-    python.stdout.once('data', (data) => {
-      clearTimeout(timer);
-      resolve(Number(String(data).trim()));
-    });
-    python.stderr.once('data', (data) => {
-      clearTimeout(timer);
-      reject(new Error(String(data)));
-    });
-    python.once('error', reject);
-  });
-  const api = createRoomsClient(`http://127.0.0.1:${port}`);
-  const alice = await api.register('Alice');
-  const bob = await api.register('Bob');
-  const outsider = await api.register('Outsider');
+test('React Native client interoperates with the rooms Worker, including automatic sharing', async (t) => {
+  // The real Worker on an in-process SQLite D1, served over loopback HTTP.
+  const { serveWorker } = await import('../../rooms-server/cloudflare/test/local-worker.mjs');
+  const server = await serveWorker();
+  t.after(() => server.close());
+  const api = createRoomsClient(server.url);
+  // Accounts require the terms version the app ships with.
+  const { TERMS_VERSION } = require('../src/legal.ts');
+  await assert.rejects(() => api.register('NoConsent'), (e) => e.status === 428);
+  const alice = await api.register('Alice', null, TERMS_VERSION);
+  const bob = await api.register('Bob', null, TERMS_VERSION);
+  const outsider = await api.register('Outsider', null, TERMS_VERSION);
   const created = await api.create(alice, 'Friends', false);
   assert.deepEqual(Object.keys(created), ['id']);
   let list = await api.list(alice);
@@ -114,15 +80,44 @@ with tempfile.TemporaryDirectory(prefix="rn-rooms-") as directory:
   assert.deepEqual((await api.automaticKeys(alice, created.id)).clientIds, []);
   await api.sharing(alice, created.id, false);
   assert.equal((await api.detail(alice, created.id)).posts.length, 1);
+  const previousCode = (await api.list(alice))[0].inviteCode;
+  await assert.rejects(() => api.rotateInvite(bob, created.id), e => e.status === 403);
+  await api.rotateInvite(alice, created.id);
+  await assert.rejects(() => api.join(outsider, previousCode), e => e.status === 404);
+  await api.removeMember(alice, created.id, bob.id);
+  await assert.rejects(() => api.detail(bob, created.id), e => e.status === 404);
+  await api.join(bob, (await api.list(alice))[0].inviteCode);
   await api.leave(bob, created.id);
   await assert.rejects(
     () => api.detail(bob, created.id),
     (e) => e.status === 404,
   );
+  const transferred = await api.create(alice, 'Transfer');
+  const transferRoom = (await api.list(alice)).find(r => r.id === transferred.id);
+  assert.equal(transferRoom.competitive, false);
+  await api.join(bob, transferRoom.inviteCode);
+  await api.leave(alice, transferred.id);
+  assert.equal((await api.list(bob))[0].ownerId, bob.id);
+  await api.deleteRoom(bob, transferred.id);
   await api.deleteAccount(alice);
   assert.equal((await api.list(bob)).length, 0);
   await assert.rejects(
     () => api.list(alice),
     (e) => e.status === 401,
   );
+});
+
+test('shared snapshots stay within server limits without changing local data', () => {
+  const { workoutSnapshot } = require('../src/rooms.ts');
+  const state = seedState();
+  const exercise = { ...state.exercises[0], name: `${'あ'.repeat(90)}\u0007` };
+  state.exercises = [exercise];
+  state.presets = [{ id: 'p', name: '   ', exercises: [] }];
+  state.sessions = [{ id: 10, presetId: 'p', status: 'COMPLETED', startedAt: '2026-10-01T00:00:00.000Z', endedAt: '2026-10-20T00:00:00.000Z' }];
+  state.sets = [{ id: 11, sessionId: 10, exerciseId: exercise.id, setOrder: 1, normalWeightKg: 50, normalReps: 5, isCompleted: true, leftCompleted: false, rightCompleted: false }];
+  const snapshot = workoutSnapshot(state, 10);
+  assert.equal(snapshot.presetName, 'トレーニング');
+  assert.equal([...snapshot.exercises[0].name].length, 80);
+  assert.equal(snapshot.endedAt, '2026-10-08T00:00:00.000Z');
+  assert.equal(state.exercises[0].name.length, 91);
 });

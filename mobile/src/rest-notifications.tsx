@@ -16,7 +16,9 @@ Notifications.setNotificationHandler({
   }),
 });
 
-export async function prepareRestNotifications() {
+// Exact alarms are recommended, not required: without them Android still
+// delivers the rest alarm, possibly a little late. Never block training on it.
+export async function prepareRestNotifications({ resume = false } = {}) {
   if (Platform.OS === 'web') return true;
   if (Platform.OS === 'android')
     await Notifications.setNotificationChannelAsync(channelId, {
@@ -30,33 +32,23 @@ export async function prepareRestNotifications() {
   const permission = await Notifications.getPermissionsAsync();
   if (!permission.granted && permission.canAskAgain)
     await Notifications.requestPermissionsAsync();
-  if (Platform.OS === 'android') {
+  if (Platform.OS === 'android' && !resume) {
     const exact = await Notifications.getExactAlarmPermissionsAsync();
     if (!exact.granted) {
-      const open = await new Promise<boolean>((resolve) =>
+      const choice = await new Promise<'cancel' | 'start' | 'settings'>((resolve) =>
         Alert.alert(
           'バックグラウンドの休憩アラーム',
-          '別のアプリを開いている時や画面が消えている時も休憩終了を知らせるには「アラームとリマインダー」の許可が必要です。設定後にトレーニングを開始します。',
+          '別のアプリを開いている時や画面が消えている時も休憩終了を時間どおりに知らせるには「アラームとリマインダー」の許可をおすすめします。許可しない場合、通知が少し遅れることがあります。',
           [
-            {
-              text: 'キャンセル',
-              style: 'cancel',
-              onPress: () => resolve(false),
-            },
-            { text: '設定を開く', onPress: () => resolve(true) },
+            { text: 'キャンセル', style: 'cancel', onPress: () => resolve('cancel') },
+            { text: 'このまま開始', onPress: () => resolve('start') },
+            { text: '設定を開く', onPress: () => resolve('settings') },
           ],
-          { cancelable: true, onDismiss: () => resolve(false) },
+          { cancelable: true, onDismiss: () => resolve('cancel') },
         ),
       );
-      if (!open) return false;
-      const result = await Notifications.requestExactAlarmPermissionsAsync();
-      if (!result.granted) {
-        Alert.alert(
-          '休憩アラーム',
-          '許可されていないためトレーニングを開始しませんでした',
-        );
-        return false;
-      }
+      if (choice === 'cancel') return false;
+      if (choice === 'settings') await Notifications.requestExactAlarmPermissionsAsync();
     }
   }
   return true;

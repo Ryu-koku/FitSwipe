@@ -25,10 +25,11 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     plugins: [
       ...(config.plugins ?? []),
       './plugins/with-play-upload-signing',
+      './plugins/with-async-storage-size',
       ['@appeeky/expo-healthkit', {
         healthSharePermission: false,
         healthUpdatePermission: false,
-        healthConnectPrivacyPolicyUrl: 'https://kintorememo.jp/privacy/',
+        healthConnectPrivacyPolicyUrl: `${(process.env.EXPO_PUBLIC_ROOMS_URL ?? 'https://fitswipe-rooms-api.prompt-tem.workers.dev').replace(/\/$/, '')}/privacy`,
         healthConnectPermissions: ['READ_WEIGHT', 'READ_HEIGHT', 'READ_BODY_FAT'],
       }],
       // Android uses an explicit webClientId (no google-services.json).

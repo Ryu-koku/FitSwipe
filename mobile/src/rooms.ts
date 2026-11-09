@@ -1,3 +1,4 @@
+import type { SafetyStatus, ReportReason } from './legal';
 import type {
   AppState,
   PendingPost,
@@ -48,7 +49,7 @@ export function createRoomsClient(
         },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       });
-      const data = await response.json();
+      const data = await response.json().catch(() => { throw new RoomsApiError(response.status, 'サーバーに接続できませんでした。再度お試しください'); });
       if (!response.ok)
         throw new RoomsApiError(
           response.status,
@@ -60,30 +61,37 @@ export function createRoomsClient(
     }
   }
   return {
-    google: (idToken: string, name: string, identity?: RoomIdentity) =>
-      request<RoomIdentity & { expiresAt: number }>('/v1/auth/google', identity?.token, 'POST', { idToken, name }),
+    review: (login: string, password: string, termsVersion: string) =>
+      request<RoomIdentity & { expiresAt: number }>('/v1/auth/review', undefined, 'POST', { login, password, termsVersion }),
+    google: (idToken: string, name: string, identity?: RoomIdentity, termsVersion?: string) =>
+      request<RoomIdentity & { expiresAt: number }>('/v1/auth/google', identity?.token, 'POST', { idToken, name, termsVersion }),
     push: (identity: RoomIdentity, changes: import('./sync').Mutation[]) =>
       request<{ acknowledged: string[] }>('/v1/sync', identity.token, 'POST', { changes }),
     pull: (identity: RoomIdentity, cursor: number) =>
       request<import('./sync').SyncPage>(`/v1/sync?cursor=${cursor}`, identity.token),
     configured: !!endpoint,
-    sharing: (identity: RoomIdentity, roomId: string, enabled: boolean) =>
-      request(`/v1/rooms/${roomId}/sharing`, identity.token, 'PUT', { enabled }),
+    safety: (identity: RoomIdentity) => request<SafetyStatus>('/v1/safety', identity.token),
+    acceptTerms: (identity: RoomIdentity, termsVersion: string) => request('/v1/safety/terms', identity.token, 'POST', { termsVersion }),
+    block: (identity: RoomIdentity, targetId: string, enabled: boolean) => request(`/v1/safety/blocks/${targetId}`, identity.token, enabled ? 'PUT' : 'DELETE', enabled ? {} : undefined),
+    report: (identity: RoomIdentity, roomId: string, targetId: string, reason: ReportReason, details: string, postId?: string) =>
+      request<{ id: string }>(`/v1/rooms/${roomId}/reports`, identity.token, 'POST', { targetId, reason, details, postId }),
+    sharing: (identity: RoomIdentity, roomId: string, enabled: boolean, sinceMonth?: string) =>
+      request(`/v1/rooms/${roomId}/sharing`, identity.token, 'PUT', { enabled, sinceMonth }),
     automaticKeys: (identity: RoomIdentity, roomId: string) =>
-      request<{ clientIds: string[] }>(`/v1/rooms/${roomId}/auto-workouts`, identity.token),
+      request<{ clientIds: string[]; used?: number; limit?: number }>(`/v1/rooms/${roomId}/auto-workouts`, identity.token),
     saveAutomatic: (identity: RoomIdentity, roomId: string, payload: SharedWorkout) =>
       request(`/v1/rooms/${roomId}/auto-workouts`, identity.token, 'PUT', payload),
     deleteAutomatic: (identity: RoomIdentity, roomId: string, clientId: string) =>
       request(`/v1/rooms/${roomId}/auto-workouts/${encodeURIComponent(clientId)}`, identity.token, 'DELETE'),
-    comparison: (identity: RoomIdentity, roomId: string, month: string, cursor?: string | null) =>
-      request<RoomComparison>(`/v1/rooms/${roomId}/comparison?month=${encodeURIComponent(month)}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`, identity.token),
-    register: (name: string) =>
+    comparison: (identity: RoomIdentity, roomId: string, month: string, cursor?: string | null, memberId?: string) =>
+      request<RoomComparison>(`/v1/rooms/${roomId}/comparison?month=${encodeURIComponent(month)}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}${memberId ? `&memberId=${encodeURIComponent(memberId)}` : ''}`, identity.token),
+    register: (name: string, avatar?: string | null, termsVersion?: string) =>
       request<RoomIdentity>('/v1/account', undefined, 'POST', {
-        name: name.trim(),
+        name: name.trim(), avatar, termsVersion,
       }),
     list: async (identity: RoomIdentity) =>
       (await request<{ rooms: Room[] }>('/v1/rooms', identity.token)).rooms,
-    create: (identity: RoomIdentity, name: string, competitive = true) =>
+    create: (identity: RoomIdentity, name: string, competitive = false) =>
       request<{ id: string }>('/v1/rooms', identity.token, 'POST', {
         name: name.trim() ? name : '筋トレ仲間',
         competitive,
@@ -116,12 +124,22 @@ export function createRoomsClient(
       ),
     deletePost: (identity: RoomIdentity, roomId: string, postId: string) =>
       request(`/v1/rooms/${roomId}/posts/${postId}`, identity.token, 'DELETE'),
+    rotateInvite: (identity: RoomIdentity, roomId: string) =>
+      request(`/v1/rooms/${roomId}/invite`, identity.token, 'POST', {}),
+    removeMember: (identity: RoomIdentity, roomId: string, memberId: string) =>
+      request(`/v1/rooms/${roomId}/members/${memberId}`, identity.token, 'DELETE'),
     leave: (identity: RoomIdentity, roomId: string) =>
+      request(`/v1/rooms/${roomId}/leave`, identity.token, 'POST', {}),
+    deleteRoom: (identity: RoomIdentity, roomId: string) =>
       request(`/v1/rooms/${roomId}`, identity.token, 'DELETE'),
+    profile: (identity: RoomIdentity, name: string, avatar: string | null) =>
+      request<{ name: string; avatar: string | null }>('/v1/account', identity.token, 'PUT', { name: name.trim(), avatar }),
     rename: (identity: RoomIdentity, name: string) =>
       request('/v1/account', identity.token, 'PUT', { name: name.trim() }),
     deleteAccount: (identity: RoomIdentity) =>
       request('/v1/account', identity.token, 'DELETE'),
+    revokeSession: (identity: RoomIdentity) =>
+      request('/v1/auth/session', identity.token, 'DELETE'),
   };
 }
 
@@ -135,9 +153,24 @@ export function inviteCode(raw: string) {
   return raw.trim();
 }
 
+// Keep shared text within the servers' limits: no control characters, not
+// blank, at most 80 characters. Local names stay unchanged.
+function sharedText(value: string | undefined, fallback: string) {
+  const text = [...(value ?? '').replace(/[\u0000-\u001f\u007f-\u009f]/gu, ' ').trim()].slice(0, 80).join('').trim();
+  return text || fallback;
+}
+const MAX_SHARED_MS = 7 * 86_400_000;
+function sharedEnd(startedAt: string, endedAt: string | undefined) {
+  const start = Date.parse(startedAt), end = Date.parse(endedAt ?? startedAt);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return startedAt;
+  return end - start > MAX_SHARED_MS ? new Date(start + MAX_SHARED_MS).toISOString() : endedAt ?? startedAt;
+}
+
 export function workoutSnapshot(
   state: AppState,
   sessionId: number,
+  // Callers snapshotting many sessions pass the sets grouped once by session.
+  sessionSets = state.sets.filter((set) => set.sessionId === sessionId),
 ): SharedWorkout {
   const session = state.sessions.find((s) => s.id === sessionId);
   if (!session || session.status !== 'COMPLETED')
@@ -145,10 +178,8 @@ export function workoutSnapshot(
   const exercises: SharedWorkout['exercises'] = [];
   state.exercises.forEach((exercise) => {
     const sets: SharedWorkout['exercises'][number]['sets'] = [];
-    state.sets
-      .filter(
-        (set) => set.sessionId === sessionId && set.exerciseId === exercise.id,
-      )
+    sessionSets
+      .filter((set) => set.exerciseId === exercise.id)
       .sort((a, b) => a.setOrder - b.setOrder)
       .forEach((set) => {
         if (exercise.mode === 'BILATERAL') {
@@ -173,16 +204,19 @@ export function workoutSnapshot(
             order: set.setOrder,
           });
       });
-    if (sets.length) exercises.push({ name: exercise.name, sets });
+    if (sets.length) exercises.push({ name: sharedText(exercise.name, '種目'), sets });
   });
   if (!exercises.length) throw new Error('共有できる完了セットがありません');
   return {
     clientId: `${state.installationId}-${sessionId}`,
-    presetName:
-      state.presets.find((p) => p.id === session.presetId)?.name ??
+    presetName: sharedText(
+      state.presets.find((p) => p.id === session.presetId)?.name,
       'トレーニング',
+    ),
     startedAt: session.startedAt,
-    endedAt: session.endedAt ?? session.startedAt,
+    // A session left open for days (or reopened later) is still shareable;
+    // the servers reject spans over seven days.
+    endedAt: sharedEnd(session.startedAt, session.endedAt),
     exercises,
   };
 }

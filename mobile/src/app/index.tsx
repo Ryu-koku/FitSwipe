@@ -4,7 +4,7 @@ import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { IconButton, Screen } from '../ui';
 import { WorkoutCalendar } from '../components/WorkoutCalendar';
-import { GrowthRanking } from '../components/GrowthRanking';
+import { HomeProgress } from '../components/HomeProgress';
 
 export default function HomeScreen() {
   const { height } = useWindowDimensions();
@@ -14,6 +14,6 @@ export default function HomeScreen() {
   return <Screen title="FitSwipe" scrollOnlyWhenOverflow
     right={<IconButton label="設定" symbol="⚙" onPress={() => router.push('/settings')} />}>
       <WorkoutCalendar compact={compact} />
-      <GrowthRanking />
+      <HomeProgress />
   </Screen>;
 }

@@ -4,7 +4,7 @@
 
 ## 実装済みのサーバー基盤（未公開）
 
-- Python/Cloudflare両APIで、アカウント削除時のルーム引継ぎをトランザクション化。参加順で移し、本人の投稿と認証は削除する。
+- Cloudflare APIで、アカウント削除時のルーム引継ぎをトランザクション化。参加順で移し、本人の投稿と認証は削除する。
 - CloudflareにGoogle IDトークンの署名・発行者・audience・有効期限検証を追加。メールアドレスではなくGoogleの`sub`で本人を識別する。
 - `POST /v1/auth/google`。`idToken`と、新規登録時は`name`を送る。既存端末Bearerトークン付きならその参加者へ連携する。他アカウントへの無断統合は409で拒否する。Bearerなしの既存Googleログインでは同じ本人に戻る。
 - 追加端末ごとのセッショントークンを発行（30日）。既存端末のトークンをローテーションして他端末を追い出すことはしない。
@@ -17,6 +17,8 @@
 
 - 初回起動時にGoogleログインを必須化。ログイン前はアプリの全機能を表示せず、ログアウト後も再ログイン画面に留まる。設定のアカウント管理も提供。Nitro Google Sign-InによるAndroid Credential Manager認証を使用。Expo GoではGoogle認証できず、ネイティブ再ビルドが必要。
 - 種目・セッション・セット・プリセットのUUID変換、設定の同期。ローカル数値IDの衝突を避け、参照関係も変換する。
+- サーバー記録の写しは端末に持たない。取得した変更は端末の記録へ直接反映し、未送信の編集がある記録は送信までその編集を優先する。削除されたセッションのUUIDだけを残し、ルームの自動共有の取り下げに使う。
+- 端末保存は項目ごと・大きな配列は256件ずつのページに分け、変わったページだけ新しいキーへ書く。最後に目次を書き換えて切り替えるため、途中で落ちても前の完全な状態が残る。
 - 変更とUUID対応表・永続outboxを同じ端末保存に記録。アプリ起動中は変更後と30秒間隔で同期を試行し、通信できなければ保留する。OSがアプリを停止している間のバックグラウンド送信は保証しない。
 - Googleログイン後に既存記録の取り込みを確認。取り込まない元の個人データは端末へ保管し、ログアウト後に設定から明示的に戻せる（現在のゲストデータとの入替）。別参加者のルーム参加情報は統合しない。
 - ログアウトでは個人・共有の未送信があれば切替を止める。元アカウントのデータは別領域へ保管し、ゲストには空のデータを表示。同じGoogleで再ログインすると保管データと同期を再開する。
@@ -34,7 +36,7 @@
 
 Cloudflareに`GOOGLE_WEB_CLIENT_ID`（Web OAuthクライアントID。秘密ではない）を設定する。Androidアプリのパッケージ名・署名証明書に対応したGoogle Cloud OAuth設定も必要。GoogleがAndroidクライアントを`azp`として返す構成では`GOOGLE_ANDROID_CLIENT_ID`も設定する（検証するaudienceは必ずWebクライアントID）。ID未設定時は503で拒否する。実ユーザーのGoogleトークンをログへ出力しない。
 
-`0002_google_sync.sql`を既存の`0001`の後へ適用する。既存DBのmigration前には新Workerを公開しない。Python APIはGoogle/個人同期の新エンドポイントには未対応。
+`0002_google_sync.sql`を既存の`0001`の後へ適用する。既存DBのmigration前には新Workerを公開しない。
 
 単体検証: `node --test rooms-server/cloudflare/test/google-auth.test.mjs`。
 ローカルWorker結合検証: CloudflareのREADMEのWrangler手順を使う。本番へのデプロイや実データへのmigrationはこの変更では行っていない。
@@ -63,3 +65,31 @@ WORKER_URL=http://127.0.0.1:8790 SYNC_TEST_PERSIST=/tmp/opencode/fitswipe-sync-l
 ```
 
 ローカルHTTPはlocalhost/127.0.0.1/Androidエミュレータの10.0.2.2だけ許可し、本番接続はHTTPS必須。アプリのGoogle同期UIと認証は `mobile/` のExpo版に実装している。
+
+## 実環境への反映（2026-10-28）
+
+- 既存の本番D1 `fitswipe-rooms` を確認し、wrangler設定を実DBのIDへ更新した。新しい別DBは作成していない。
+- DBバックアップを取得してから、リモートへ`0002_google_sync.sql`を適用済み。
+- Workerを既存変数を保持する`wrangler deploy --keep-vars`で公開済み。
+- 公開先: `https://fitswipe-rooms-api.prompt-tem.workers.dev`。`/health`は200、未認証`/v1/sync`は401を確認。
+- EASプロジェクトのproduction環境へ`EXPO_PUBLIC_ROOMS_URL`を設定済み。
+
+### 所有者の同意後の設定
+
+- 所有者によるポリシー同意を確認し、Google Cloudの既存プロジェクト `fitswipe-play-releases` でGoogle Auth Platformの構成を完了した。
+- 同じGoogle CloudプロジェクトにWebクライアント（バックエンドのaudience用）とAndroidクライアントを作成した。クライアントシークレットはこの構成では使用せず、リポジトリやアプリには保存しない。
+- Android OAuthには`dev.local.fitlogsolo`と、Play Consoleから確認した**アプリ署名鍵**のSHA-1を登録した。アップロード鍵のSHA-1とは異なる。現在はPlay経由の署名を対象とし、別署名のAPKを直接インストールする場合は別途登録が必要。
+- 公開ステータスは「テスト中」のまま、本人のアカウント1件だけをOAuthテストユーザーへ登録済み。一般公開やテスターの追加は行っていない。
+- EAS production環境の`EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`とWorkerの`GOOGLE_WEB_CLIENT_ID`を一致させ、Workerへ`GOOGLE_ANDROID_CLIENT_ID`も設定して再公開済み。両IDは公開値として`wrangler.jsonc`の`vars`に記載している（`wrangler deploy`で消えないようにするため）。
+- 公開WorkerのGoogleログインは、設定不足の503ではなく不正トークン拒否の401を返すことを確認した。これは実Googleログイン成功の検証ではない。
+- そのEAS環境変数と既存のPlayアップロード鍵を使い、versionCode **38** のAndroidビルドを開始した。内部テストへの提出もキューへ登録した。
+  - Build: `50c9e1e2-c72d-40ed-b2b2-8f17610aa2e8`
+  - Submission: `2357ffbf-3cb8-4c73-bb83-6f0487f15e33`
+
+### 署名不一致の修正
+
+versionCode 38のネイティブビルドは成功したが、EASのリモート既定鍵が旧鍵だったため内部テスト提出が拒否された。Playが要求する既存アップロード鍵とローカル`upload-reset.p12`のSHA-1一致を確認し、`production-local-key`プロファイルでversionCode **39**を再ビルド・提出予約した。新しい鍵は生成していない。アップロード用の一時`credentials.json`は削除済み。
+
+- Build: `04a5066e-08aa-47e7-9e84-cef8ace9131e`
+- Submission: `ebd3c1b0-04ae-422f-a3e2-25f465a5a37d`
+- 提出完了・配信・実機のGoogleログイン成功は、この記録の時点では未確認。

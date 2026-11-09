@@ -3,12 +3,17 @@ const test = require('node:test');
 const Module = require('node:module');
 const data = new Map();
 const secrets = new Map();
+let failKey;
 const original = Module._load;
 Module._load = function (name, ...args) {
   if (name === '@react-native-async-storage/async-storage') return {
+    multiGet: async keys => keys.map(key => [key, data.get(key) ?? null]),
+    multiSet: async entries => { for (const [key, value] of entries) { if (key === failKey) throw Error('disk full'); data.set(key, value); } },
+    multiRemove: async keys => { keys.forEach(key => data.delete(key)); },
+    getAllKeys: async () => [...data.keys()],
     getItem: async (key) => data.get(key) ?? null,
-    setItem: async (key, value) => data.set(key, value),
-    removeItem: async (key) => data.delete(key),
+    setItem: async (key, value) => { if (key === failKey) throw Error("disk full"); data.set(key, value); },
+    removeItem: async (key) => { if (`remove:${key}` === failKey) throw Error("disk full"); data.delete(key); },
   };
   if (name === 'expo-secure-store') return {
     getItemAsync: async (key) => secrets.get(key) ?? null,
@@ -17,7 +22,7 @@ Module._load = function (name, ...args) {
   };
   return original.call(this, name, ...args);
 };
-const { saveState, loadState, archiveState, loadArchive, removeArchive, saveGuest, loadGuest } = require('../src/storage.ts');
+const { saveState, loadState, archiveState, loadArchive, removeArchive, saveGuest, loadGuest, swapGuest } = require('../src/storage.ts');
 Module._load = original;
 const { emptyCloud } = require('../src/sync.ts');
 const { seedState } = require('../src/logic.ts');
@@ -51,4 +56,117 @@ test('corrupt persisted state fails visibly rather than resetting user records',
   data.set('fitlogsolo.react-native.state.v1', '{broken');
   await assert.rejects(loadState());
   assert.equal(data.get('fitlogsolo.react-native.state.v1'), '{broken');
+});
+
+test('home view, exercise, metric, side and ranking survive local save/load', async () => {
+  const state = { ...seedState(), homeGrowthExerciseId: 42,
+    homeProgress: { view: 'ranking', metric: 'reps', ranking: 'updates', side: 2 } };
+  await saveState(state);
+  const loaded = await loadState();
+  assert.equal(loaded.homeGrowthExerciseId, 42);
+  assert.deepEqual(loaded.homeProgress, state.homeProgress);
+});
+
+for (const stage of ['journal', 'main', 'guest', 'cleanup']) test(`guest swap survives failure at ${stage} and restart`, async () => {
+  data.clear();
+  const key = 'fitlogsolo.react-native.state.v1';
+  const current = { ...seedState(), heightCm: 180 }, archived = { ...seedState(), heightCm: 170 };
+  await saveState(current); await saveGuest(archived);
+  failKey = { journal: `${key}.guest-swap`, main: key, guest: `${key}.guest`, cleanup: `remove:${key}.guest-swap` }[stage];
+  try {
+    if (stage === 'journal') await assert.rejects(swapGuest(current, archived), /disk full/);
+    else await swapGuest(current, archived);
+  } finally { failKey = undefined; }
+  // Read from durable storage as on restart, without using the provider's memory.
+  assert.equal((await loadState()).heightCm, stage === 'journal' ? 180 : 170);
+  assert.equal((await loadGuest()).heightCm, stage === 'journal' ? 170 : 180);
+  assert.equal(data.has(`${key}.guest-swap`), false);
+  await saveState({ ...seedState(), heightCm: 190 });
+  assert.equal((await loadState()).heightCm, 190);
+});
+
+const mainKey = 'fitlogsolo.react-native.state.v1';
+test('large state, archives, guest and swap journal use bounded chunks', async () => {
+  data.clear();
+  const large = { ...seedState(), marker: '筋'.repeat(1100000), cloud: emptyCloud({ id: 'large', name: 'L', token: 'secret', expiresAt: 9999999999 }) };
+  await saveState(large);
+  assert.equal((await loadState()).marker, large.marker);
+  await archiveState(large); assert.equal((await loadArchive('large')).marker, large.marker);
+  await saveGuest(large); assert.equal((await loadGuest()).marker, large.marker);
+  failKey = mainKey;
+  await swapGuest(large, { ...large, heightCm: 172 });
+  failKey = undefined;
+  assert.ok(data.has(`${mainKey}.guest-swap`));
+  for (const value of data.values()) assert.ok(Buffer.byteLength(value) <= 512 * 1024);
+  assert.equal((await loadState()).heightCm, 172);
+  assert.equal((await loadGuest()).marker, large.marker);
+  const old = Object.values(JSON.parse(data.get(mainKey)).parts).flat(2);
+  await saveState(seedState());
+  const current = new Set(Object.values(JSON.parse(data.get(mainKey)).parts).flat(2));
+  assert.ok(old.filter(key => !current.has(key)).every(key => !data.has(key)));
+});
+test('legacy single-key state loads and missing chunks never reset it', async () => {
+  data.clear(); data.set(mainKey, JSON.stringify({ ...seedState(), heightCm: 166 }));
+  assert.equal((await loadState()).heightCm, 166);
+  await saveState(seedState());
+  const raw = data.get(mainKey), m = JSON.parse(raw);
+  data.delete(m.parts.base[0][0]);
+  await assert.rejects(loadState(), /不完全/);
+  assert.equal(data.get(mainKey), raw);
+});
+test('failed manifest commit preserves previous complete generation', async () => {
+  data.clear(); await saveState({ ...seedState(), heightCm: 166 });
+  failKey = mainKey;
+  await assert.rejects(saveState({ ...seedState(), heightCm: 180 }));
+  failKey = undefined;
+  assert.equal((await loadState()).heightCm, 166);
+});
+
+function largeState() {
+  const state = { ...seedState(), cloud: emptyCloud({ id: 'big', name: 'B', token: 'secret', expiresAt: 9999999999 }) };
+  let id = 1000;
+  for (let d = 0; d < 300; d++) {
+    const sessionId = id++;
+    state.sessions.push({ id: sessionId, startedAt: new Date(Date.UTC(2026, 0, 1 + d)).toISOString(), status: 'COMPLETED' });
+    for (let k = 0; k < 20; k++) {
+      const setId = id++;
+      state.sets.push({ id: setId, sessionId, exerciseId: state.exercises[k % 5].id, setOrder: k + 1, normalWeightKg: 60, normalReps: 10, isCompleted: true, leftCompleted: false, rightCompleted: false });
+      state.cloud.mapping[`set:${setId}`] = `00000000-0000-4000-8000-${String(setId).padStart(12, '0')}`;
+    }
+  }
+  return { ...state, nextId: id };
+}
+const bytesWritten = async (work) => {
+  const before = new Map(data);
+  await work();
+  return [...data].filter(([key, value]) => before.get(key) !== value).reduce((sum, [key, value]) => sum + (key === mainKey ? 0 : Buffer.byteLength(value)), 0);
+};
+
+test('a one-set edit rewrites only its page, and the state round-trips exactly', async () => {
+  data.clear();
+  const state = largeState();
+  const full = await bytesWritten(() => saveState(state));
+  const edited = { ...state, sets: state.sets.map((set, i) => i === 4000 ? { ...set, normalReps: 12 } : set), workout: { sessionId: 1, exerciseOrder: [], history: [] } };
+  const delta = await bytesWritten(() => saveState(edited));
+  assert.ok(full > 1_000_000, `full write ${full}`);
+  assert.ok(delta < full / 20, `delta ${delta} of ${full}`);
+  const loaded = await loadState();
+  // JSON drops undefined fields, as every storage format always has.
+  const plain = (value) => JSON.parse(JSON.stringify({ ...value, cloud: { ...value.cloud, identity: { ...value.cloud.identity, token: '' } } }));
+  assert.deepEqual(plain(loaded), plain(edited));
+  assert.equal(loaded.cloud.identity.token, 'secret');
+  // After loading, an unchanged save writes only the small base.
+  assert.ok(await bytesWritten(() => saveState(loaded)) < 20_000);
+});
+
+test('keys of an interrupted save are removed on the next load', async () => {
+  data.clear();
+  await saveState(largeState());
+  failKey = mainKey;
+  await assert.rejects(saveState({ ...largeState(), heightCm: 181 }));
+  failKey = undefined;
+  const referenced = () => new Set(Object.values(JSON.parse(data.get(mainKey)).parts).flat(2));
+  assert.ok([...data.keys()].some(key => key.startsWith(`${mainKey}.s.`) && !referenced().has(key)));
+  assert.equal((await loadState()).heightCm, undefined);
+  assert.ok(![...data.keys()].some(key => key.startsWith(`${mainKey}.s.`) && !referenced().has(key)));
 });

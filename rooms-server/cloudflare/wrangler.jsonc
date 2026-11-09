@@ -4,13 +4,20 @@
   "main": "worker.mjs",
   "compatibility_date": "2026-05-25",
   "workers_dev": true,
+  // Public OAuth client IDs (not secrets). `wrangler deploy` replaces plain
+  // vars with these, so keep them here to avoid disabling Google login.
+  "vars": {
+    "GOOGLE_WEB_CLIENT_ID": "338806163060-66m1b1iodo2t423tkdi15qlfajsocbgv.apps.googleusercontent.com",
+    "GOOGLE_ANDROID_CLIENT_ID": "338806163060-lisvbgnj73hutpghgo1fiat17mblrkum.apps.googleusercontent.com"
+  },
+  "triggers": { "crons": ["0 15 * * *"] },
   "observability": { "enabled": true },
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "fitswipe-rooms",
-      // Replace with the ID printed by `wrangler d1 create fitswipe-rooms`.
-      "database_id": "00000000-0000-4000-8000-000000000001",
+      // Existing FitSwipe production database; do not create a replacement.
+      "database_id": "851c476f-1937-4285-9ad9-6e78dbd05ecb",
       "migrations_dir": "migrations"
     }
   ],
@@ -19,6 +26,11 @@
       "name": "API_LIMIT",
       "namespace_id": "6271038241",
       "simple": { "limit": 300, "period": 60 }
+    },
+    {
+      "name": "PUBLIC_LIMIT",
+      "namespace_id": "6271038243",
+      "simple": { "limit": 5, "period": 60 }
     },
     {
       "name": "REGISTER_LIMIT",

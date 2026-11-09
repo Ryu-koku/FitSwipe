@@ -1,11 +1,14 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, Animated, Pressable, ScrollView, Text, View } from 'react-native';
+import { Alert, Animated, Image, Pressable, ScrollView, Text, View } from 'react-native';
 import type { RoomComparison } from '../types';
 import { useTheme } from '../ui';
+import { isGoogleAvatar } from '../profile';
 import { useMotionPreference } from '../use-reduced-motion';
 
-export function MemberAvatar({ name, size = 40 }: { name: string; size?: number }) {
+export function MemberAvatar({ name, avatar, size = 40 }: { name: string; avatar?: string | null; size?: number }) {
   const { colors } = useTheme();
+  const [failed, setFailed] = useState<string>();
+  if (avatar && (avatar.startsWith('data:image/jpeg;base64,') || isGoogleAvatar(avatar)) && avatar !== failed) return <Image accessible={false} source={{ uri: avatar }} onError={() => setFailed(avatar)} style={{ width: size, height: size, borderRadius: size / 2 }} />;
   return <View accessible={false} style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: colors.soft, borderColor: colors.surface, borderWidth: 2, alignItems: 'center', justifyContent: 'center' }}>
     <Text style={{ color: colors.primary, fontSize: size * 0.35, fontWeight: '700' }}>{Array.from(name.trim())[0] ?? '?'}</Text>
   </View>;
@@ -30,7 +33,7 @@ function Column({ member, index, max, own, onPress }: { member: RoomComparison['
         <Text style={[styles.body, { fontWeight: '800', color: own ? colors.primary : colors.ink }]}>{member.sets}</Text>
         <Animated.View style={{ width: 28, height: 84, transformOrigin: 'bottom', transform: [{ scaleY: height }], borderTopLeftRadius: 8, borderTopRightRadius: 8, backgroundColor: own ? colors.primary : colors.soft }} />
       </View>
-      <View style={{ marginTop: 6 }}><MemberAvatar name={member.name} size={28} /></View>
+      <View style={{ marginTop: 6 }}><MemberAvatar name={member.name} avatar={member.avatar} size={28} /></View>
       <Text numberOfLines={1} style={[styles.small, { maxWidth: 60 }]}>{own ? 'あなた' : member.name}</Text>
     </Pressable>
   </Animated.View>;
@@ -52,7 +55,7 @@ export function RoomComparisonChart({ comparison, ownId, onMember, enableMock = 
   if (!competitive) return <>
     <Text style={[styles.body, { fontWeight: '800' }]}>{Number(comparison.month.slice(5))}月 · みんなの記録</Text>
     {[...comparison.rankings].sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id)).map((member) => <Pressable key={member.id} accessibilityRole="button" accessibilityLabel={`${member.name}、${member.sets}セット。詳細を見る`} onPress={() => onMember(member.id)} style={{ paddingVertical: 12 }}>
-      <Text style={styles.body}>{member.id === ownId ? 'あなた' : member.name} · {member.sets}セット</Text>
+      <MemberAvatar name={member.name} avatar={member.avatar} size={32} /><Text style={styles.body}>{member.id === ownId ? 'あなた' : member.name} · {member.sets}セット</Text>
     </Pressable>)}
     {!comparison.rankings.length && <Text style={styles.small}>共有しているメンバーはいません。</Text>}
   </>;

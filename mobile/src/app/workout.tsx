@@ -20,17 +20,21 @@ import {
 } from '../ui';
 import {
   advanceWorkout,
-  cardCompleted,
   currentCard,
+  reopenSkippedCard,
+  activeSession,
   finishWorkout,
   startWorkout,
   updateSet,
   workoutCards,
 } from '../workout';
-import { SwipeCard } from '../components/SwipeCard';
+import { SwipeCard, SwipeActions } from '../components/SwipeCard';
 import { WorkoutOrderEditor } from '../components/WorkoutOrderEditor';
 import type { WorkoutCard } from '../types';
 import { ExercisePictogram } from '../components/ExercisePictogram';
+import Svg, { Circle } from 'react-native-svg';
+import { useReducedMotion } from '../use-reduced-motion';
+import { restRemaining } from '../rest-progress';
 import { WorkoutProgressBar } from '../components/WorkoutProgressBar';
 
 export default function WorkoutScreen() {
@@ -41,12 +45,17 @@ export default function WorkoutScreen() {
   const [exitPrompt, setExitPrompt] = useState(false);
   const [browsing, setBrowsing] = useState<WorkoutCard>();
   const [preparingNext, setPreparingNext] = useState(false);
-  const session = state.sessions.find((s) => s.status === 'IN_PROGRESS');
+  const session = activeSession(state);
   const progress = state.workout;
   const current = session ? currentCard(state, session.id) : undefined;
   const validBrowsing = browsing && state.sets.some((item) => item.id === browsing.setId && item.sessionId === session?.id) ? browsing : undefined;
   const card = validBrowsing ?? current;
-  const set = state.sets.find((s) => s.id === card?.setId);
+  const storedSet = state.sets.find((s) => s.id === card?.setId);
+  const draft = storedSet?.skippedInputs?.[card?.side ?? 'normal'];
+  const set = storedSet && draft ? { ...storedSet,
+    [`${card?.side ?? 'normal'}WeightKg`]: draft.weightKg,
+    [`${card?.side ?? 'normal'}Reps`]: draft.reps,
+  } : storedSet;
   const exercise = state.exercises.find((e) => e.id === set?.exerciseId);
   const locked = useRef(false);
   useEffect(() => {
@@ -89,10 +98,16 @@ export default function WorkoutScreen() {
     );
   const rows = state.sets.filter((s) => s.sessionId === session.id);
   const cards = workoutCards(state, session.id);
-  const completedCount = cards.filter((c) => cardCompleted(state, c)).length;
-  const remainingExercises = new Set(cards.filter((item) => !cardCompleted(state, item))
-    .map((item) => rows.find((row) => row.id === item.setId)?.exerciseId)
-    .filter((id) => id !== undefined)).size;
+  const exerciseIds = [...new Set(cards.map((item) => rows.find((row) => row.id === item.setId)!.exerciseId))];
+  const segments = exerciseIds.map((id) => {
+    const exerciseCards = cards.filter((item) => rows.find((row) => row.id === item.setId)?.exerciseId === id);
+    return { id, name: state.exercises.find((item) => item.id === id)?.name ?? '種目',
+      total: exerciseCards.length, completed: exerciseCards.filter((item) => {
+        const row = rows.find((entry) => entry.id === item.setId)!;
+        return !row.skippedInputs?.[item.side ?? 'normal'] && (item.side ? row[`${item.side}Completed`] : row.isCompleted);
+      }).length };
+  });
+  const completedExercises = segments.filter((item) => item.completed === item.total).length;
   const exerciseSets = rows.filter((s) => s.exerciseId === exercise.id);
   const older = state.sessions
     .filter((s) => s.status === 'COMPLETED')
@@ -130,7 +145,13 @@ export default function WorkoutScreen() {
   const advance = (skip = false) => {
     if (validBrowsing) {
       const next = cards[position + 1];
-      if (next) setBrowsing(next.setId === current?.setId && next.side === current?.side ? undefined : next);
+      if (next) {
+        const nextSet = state.sets.find((row) => row.id === next.setId);
+        if (nextSet?.skippedInputs?.[next.side ?? 'normal']) {
+          update((s) => reopenSkippedCard(s, next));
+          setBrowsing(undefined);
+        } else setBrowsing(next.setId === current?.setId && next.side === current?.side ? undefined : next);
+      }
       return;
     }
     if (locked.current) return;
@@ -167,27 +188,21 @@ export default function WorkoutScreen() {
       scroll={false}
       headerShown={false}
     >
-      <View style={[styles.row, { marginBottom: 8 }]}>
-        <Text style={[styles.body, { flex: 1, fontSize: 22, fontWeight: '700' }]}>
-          {state.presets.find((preset) => preset.id === session.presetId)?.name ?? 'トレーニング'}
-        </Text>
-        <Pressable accessibilityRole="button" accessibilityLabel="トレーニングの終了方法を選ぶ"
-          onPress={() => setExitPrompt(true)}
-          style={{ minHeight: 48, minWidth: 48, alignItems: 'center', justifyContent: 'center' }}>
-          <Text style={[styles.body, { color: colors.primary, fontWeight: '700' }]}>終了</Text>
-        </Pressable>
+      <View style={[styles.row, { marginBottom: 4 }]}>
+        <IconButton label="トレーニングの終了方法を選ぶ" symbol="‹" onPress={() => setExitPrompt(true)} />
+        <Text style={[styles.title, { flex: 1, textAlign: 'center' }]}>トレーニング</Text>
+        <IconButton label="種目を編集" symbol="⋯" onPress={() => setOrderEditor(true)} />
       </View>
-      <View style={[styles.row, { marginBottom: 8 }]}>
-        <Text style={[styles.small, { marginLeft: 'auto', textAlign: 'right' }]}>
-          残り{remainingExercises}種目
-        </Text>
-      </View>
-      <WorkoutProgressBar progress={cards.length ? completedCount / cards.length : 0} />
-      <View style={{ flex: 1, paddingBottom: 16 }}>
+      <Text accessibilityLabel={`全${segments.length}種目中${completedExercises}種目完了`} style={[styles.title, { textAlign: 'center', color: colors.primary, marginBottom: 10 }]}>
+        {completedExercises} / {segments.length}
+      </Text>
+      <WorkoutProgressBar segments={segments} />
+      <View style={{ flex: 1, maxHeight: 520, width: '100%', maxWidth: 440, alignSelf: 'center', paddingBottom: 16 }}>
         {rest ? (
           <RestCard
             key={progress.restEndsAt}
             endsAt={progress.restEndsAt!}
+            startedAt={progress.restStartedAt}
             exerciseName={exercise.name}
             next={`${formatWeight(set[weightKey])} × ${set[repsKey] ?? '—'}回`}
             onSkip={skipRest}
@@ -199,37 +214,23 @@ export default function WorkoutScreen() {
             onSkip={() => advance(true)}
             onSwipeStart={prepareNext}
           >
+            <View style={{ flex: 1, borderRadius: 20, backgroundColor: colors.surface,
+              shadowColor: '#193039', shadowOffset: { width: 0, height: 6 },
+              shadowOpacity: 0.06, shadowRadius: 12, elevation: 2 }}>
             <Card
               style={{
                 flex: 1,
                 overflow: 'hidden',
                 padding: 0,
-                backgroundColor: colors.soft,
+                backgroundColor: colors.surface,
                 marginBottom: 0,
               }}
             >
-              <View
-                style={[
-                  styles.row,
-                  { padding: 18, backgroundColor: colors.primary },
-                ]}
-              >
-                <ExercisePictogram name={exercise.name} />
-                <Text
-                  style={{
-                    color: colors.bg,
-                    fontSize: 24,
-                    fontWeight: '800',
-                    flex: 1,
-                  }}
-                >
-                  {exercise.name}
-                </Text>
-                <Text style={{ color: colors.bg, fontWeight: '700' }}>
-                  {set.setOrder}/{exerciseSets.length}
-                </Text>
+              <View style={{ flex: 1, minHeight: 48, padding: 12 }}>
+                <ExercisePictogram name={exercise.name} large />
               </View>
-              <View style={{ flex: 1, padding: 16, justifyContent: 'center' }}>
+              <Text style={[styles.title, { textAlign: 'center', paddingHorizontal: 16, marginBottom: 4 }]}>{exercise.name}</Text>
+              <View style={{ paddingHorizontal: 12, paddingBottom: 8 }}>
                 {card.side && (
                   <Text
                     style={[
@@ -242,7 +243,7 @@ export default function WorkoutScreen() {
                 )}
                 <View
                   style={{
-                    flex: 1,
+                    minHeight: 100,
                     flexDirection: 'row',
                     alignItems: 'center',
                   }}
@@ -254,7 +255,6 @@ export default function WorkoutScreen() {
                     onIncrease={() => change(weightKey, step)}
                     onDecrease={() => change(weightKey, -step)}
                   />
-                  <Text style={{ color: colors.primary, fontSize: 28 }}>×</Text>
                   <TapNumber
                     label="回数"
                     unit="回"
@@ -262,6 +262,26 @@ export default function WorkoutScreen() {
                     onIncrease={() => change(repsKey, 1)}
                     onDecrease={() => change(repsKey, -1)}
                   />
+                </View>
+                <View style={styles.row}>
+        <IconButton
+          label="前のカードへ"
+          symbol="‹"
+          disabled={position <= 0}
+          onPress={() => {
+            const previousCard = cards[position - 1];
+            const previousSet = state.sets.find((row) => row.id === previousCard?.setId);
+            if (previousSet?.skippedInputs?.[previousCard.side ?? 'normal']) {
+              update((s) => reopenSkippedCard(s, previousCard));
+              setBrowsing(undefined);
+            } else setBrowsing(previousCard);
+          }}
+        />
+                  <Text style={[styles.body, { color: colors.primary, fontWeight: '700' }]}>セット {set.setOrder} / {exerciseSets.length}</Text>
+                  <IconButton label="次のカードを見る" symbol="›" disabled={position >= cards.findIndex((item) => item.setId === current?.setId && item.side === current?.side)} onPress={() => {
+                    const next = cards[position + 1];
+                    setBrowsing(next?.setId === current?.setId && next?.side === current?.side ? undefined : next);
+                  }} />
                 </View>
                 <Pressable
                   accessibilityRole="button"
@@ -274,20 +294,13 @@ export default function WorkoutScreen() {
                   </Text>
                 </Pressable>
               </View>
+              <SwipeActions reviewing={!!validBrowsing} onAdvance={() => advance()} onSkip={() => advance(true)} />
             </Card>
+            </View>
           </SwipeCard>
         )}
         {preparingNext && !rest && nextCard && <View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 16, opacity: 0 }}><PreloadedCard card={nextCard} state={state} /></View>}
       </View>
-      {!rest && <View style={{ marginBottom: 8 }}>
-        <Text style={[styles.small, { textAlign: 'center' }]}>
-          {validBrowsing ? '右にスワイプして次のカードへ' : '← スキップ　スワイプで操作　完了 →'}
-        </Text>
-        <View style={styles.row}>
-          {!validBrowsing && <View style={{ flex: 1 }}><Button label="スキップ" secondary onPress={() => advance(true)} /></View>}
-          <View style={{ flex: 1 }}><Button label={validBrowsing ? '次のカードへ' : 'セット完了'} onPress={() => advance()} /></View>
-        </View>
-      </View>}
       {exitPrompt && <Sheet title="トレーニングを終了しますか？" popup onClose={() => setExitPrompt(false)}>
         <Text style={styles.body}>終了すると、ここまで完了したセットが今回の記録になります。あとで続ける場合は「ホームに戻る」を選んでください。</Text>
         <Button label="終了して記録を見る" onPress={() => {
@@ -301,23 +314,10 @@ export default function WorkoutScreen() {
         }} />
         <Button label="トレーニングを続ける" secondary onPress={() => setExitPrompt(false)} />
       </Sheet>}
-      <View style={[styles.row, { marginBottom: 8 }]}>
-        <IconButton
-          label="前のカードへ"
-          symbol="↶"
-          disabled={position <= 0}
-          onPress={() => setBrowsing(cards[position - 1])}
-        />
-          <IconButton
-            label="種目を編集"
-            symbol="✎"
-            onPress={() => setOrderEditor(true)}
-          />
-      </View>
       {orderEditor && (
         <WorkoutOrderEditor
           sessionId={session.id}
-          onClose={() => setOrderEditor(false)}
+          onClose={() => { setOrderEditor(false); setBrowsing(undefined); }}
         />
       )}
       {history && (
@@ -365,7 +365,7 @@ function PreloadedCard({ card, state }: { card: WorkoutCard; state: ReturnType<t
   const reps = set[`${side}Reps` as const];
   const exerciseSets = state.sets.filter((row) => row.sessionId === set.sessionId && row.exerciseId === exercise.id);
   return <Card style={{ flex: 1, overflow: 'hidden', padding: 0, backgroundColor: colors.soft, marginBottom: 0 }}>
-    <View style={[styles.row, { padding: 18, backgroundColor: colors.primary }]}>
+    <View style={[styles.row, { padding: 18, backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.line }]}>
       <ExercisePictogram name={exercise.name} />
       <Text style={{ color: colors.bg, fontSize: 24, fontWeight: '800', flex: 1 }}>{exercise.name}</Text>
       <Text style={{ color: colors.bg, fontWeight: '700' }}>{set.setOrder}/{exerciseSets.length}</Text>
@@ -396,12 +396,16 @@ function TapNumber({
       style={{
         flex: 1,
         alignSelf: 'stretch',
+        backgroundColor: colors.soft,
+        borderRadius: 18,
+        marginHorizontal: 4,
+        marginVertical: 12,
         justifyContent: 'center',
         alignItems: 'center',
       }}
     >
       <Text
-        style={{ color: colors.ink, fontSize: 54, fontWeight: '800' }}
+        style={{ color: colors.primary, fontSize: 40, fontWeight: '800' }}
         adjustsFontSizeToFit
         numberOfLines={1}
       >
@@ -430,34 +434,38 @@ function TapNumber({
 
 function RestCard({
   endsAt,
+  startedAt,
   exerciseName,
   next,
   onSkip,
 }: {
   endsAt: number;
+  startedAt?: number;
   exerciseName: string;
   next: string;
   onSkip: () => void;
 }) {
   const { colors, styles } = useTheme();
   const [clock, setClock] = useState(() => Date.now());
+  const [fallbackStart] = useState(() => Date.now());
+  const reducedMotion = useReducedMotion();
   const latestSkip = useRef(onSkip);
   useEffect(() => {
     latestSkip.current = onSkip;
   }, [onSkip]);
   useEffect(() => {
     const refresh = () => setClock(Date.now());
-    const timer = setInterval(refresh, 250);
+    const timer = setInterval(refresh, reducedMotion ? 250 : 50);
     const subscription = NativeAppState.addEventListener('change', refresh);
     return () => {
       clearInterval(timer);
       subscription.remove();
     };
-  }, []);
+  }, [reducedMotion]);
   useEffect(() => {
     if (clock >= endsAt + 3000) latestSkip.current();
   }, [clock, endsAt]);
-  const remaining = Math.max(0, Math.ceil((endsAt - clock) / 1000));
+  const { seconds: remaining, fraction } = restRemaining(startedAt ?? fallbackStart, endsAt, clock);
   return (
     <SwipeCard rest onAdvance={onSkip} onSkip={onSkip}>
       <Card
@@ -474,13 +482,19 @@ function RestCard({
             width: 230,
             height: 230,
             maxWidth: '100%',
-            borderRadius: 115,
-            borderColor: colors.primary,
-            borderWidth: 7,
             justifyContent: 'center',
             alignItems: 'center',
           }}
         >
+          <Svg width="100%" height="100%" viewBox="0 0 230 230"
+            pointerEvents="none" accessible={false} style={{ position: 'absolute' }}>
+            <Circle cx={115} cy={115} r={105} fill="none" stroke={colors.line} strokeWidth={9} />
+            {fraction > 0 && <Circle cx={115} cy={115} r={105} fill="none"
+              stroke={colors.primary} strokeWidth={9} strokeLinecap="round"
+              strokeDasharray={[2 * Math.PI * 105, 2 * Math.PI * 105]}
+              strokeDashoffset={2 * Math.PI * 105 * (1 - fraction)}
+              rotation={-90} origin="115, 115" />}
+          </Svg>
           <Text
             accessibilityLabel={
               remaining ? `次のセットまで残り${remaining}秒` : '休憩終了'

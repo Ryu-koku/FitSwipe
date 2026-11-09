@@ -70,3 +70,22 @@ test("sync validates UUID identities, kinds, deletion and size before persistenc
   assert.throws(() => validateChanges({ changes: Array(51).fill(item) }));
   assert.throws(() => validateChanges({}));
 });
+
+test('only verified Google-hosted picture claims become profile defaults', async () => {
+  const picture = 'https://lh3.googleusercontent.com/a/profile=s96-c';
+  assert.deepEqual(await verifyGoogleToken(await token({ picture }), 'web-client-id', options), { subject: 'google-user', picture });
+  for (const invalid of [null, 123, 'http://lh3.googleusercontent.com/a', 'https://googleusercontent.com.attacker.test/a', 'https://user:password@lh3.googleusercontent.com/a', 'https://lh3.googleusercontent.com:8443/a', 'data:image/svg+xml,<svg/>']) {
+    assert.deepEqual(await verifyGoogleToken(await token({ picture: invalid }), 'web-client-id', options), { subject: 'google-user' });
+  }
+  const [header, , signature] = (await token()).split('.');
+  await assert.rejects(verifyGoogleToken(`${header}.${encode({ ...claims, picture })}.${signature}`, 'web-client-id', options));
+});
+
+test('verified Google display name is available for the initial room profile', async () => {
+  assert.deepEqual(await verifyGoogleToken(await token({ name: '  山田 太郎  ' }), 'web-client-id', options), { subject: 'google-user', name: '山田 太郎' });
+  for (const name of ['', '   ', null, 42, 'invalid\nname']) {
+    assert.deepEqual(await verifyGoogleToken(await token({ name }), 'web-client-id', options), { subject: 'google-user' });
+  }
+  const [header, , signature] = (await token()).split('.');
+  await assert.rejects(verifyGoogleToken(`${header}.${encode({ ...claims, name: '偽の名前' })}.${signature}`, 'web-client-id', options));
+});

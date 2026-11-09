@@ -2,10 +2,11 @@ import React, { useState } from 'react';
 import { Switch, Text, View } from 'react-native';
 import { useApp } from '../context';
 import { Button, NumberField, Sheet, useTheme } from '../ui';
-import { resizeSets, updateSet } from '../workout';
+import { reorderWorkout, resizeSets, updateSet } from '../workout';
 import { ExerciseEditor } from './ExerciseEditor';
 import { ExerciseOrderList } from './ExerciseOrderList';
 import { moveItem } from '../reorder';
+import { addWorkoutExercises } from '../exercise-additions';
 
 export function WorkoutOrderEditor({ sessionId, onClose }: { sessionId: number; onClose: () => void }) {
   const { state, update } = useApp();
@@ -16,10 +17,7 @@ export function WorkoutOrderEditor({ sessionId, onClose }: { sessionId: number; 
   const order = [...new Set([...(state.workout?.exerciseOrder ?? []), ...sets.map((s) => s.exerciseId)])].filter((id) => sets.some((s) => s.exerciseId === id));
   const exercise = state.exercises.find((e) => e.id === editing);
   const rows = sets.filter((s) => s.exerciseId === editing).sort((a, b) => a.setOrder - b.setOrder);
-  const add = (id: number) => update((s) => {
-    const next = resizeSets(s, sessionId, id, 1);
-    return { ...next, workout: next.workout ? { ...next.workout, exerciseOrder: [...new Set([...next.workout.exerciseOrder, id])] } : undefined };
-  });
+  const add = (ids: number[]) => update((s) => addWorkoutExercises(s, sessionId, ids));
   return <Sheet title="種目を編集" onClose={onClose} scroll={false} bottomSheet>
     <ExerciseOrderList items={order.map((id) => ({ id, name: state.exercises.find((e) => e.id === id)?.name ?? '種目', detail: `${sets.filter((s) => s.exerciseId === id).length}セット` }))}
       header={<View style={{ flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-end', gap: 8, marginBottom: 12 }}>
@@ -31,7 +29,7 @@ export function WorkoutOrderEditor({ sessionId, onClose }: { sessionId: number; 
           }))} />
       </View>}
       onDelete={(id) => update((s) => ({ ...s, sets: s.sets.filter((set) => !(set.sessionId === sessionId && set.exerciseId === id)), workout: s.workout ? { ...s.workout, exerciseOrder: s.workout.exerciseOrder.filter((exerciseId) => exerciseId !== id) } : undefined }))}
-      onEdit={setEditing} onMove={(from, to) => update((s) => ({ ...s, workout: s.workout ? { ...s.workout, exerciseOrder: moveItem(order, from, to) } : undefined }))}
+      onEdit={setEditing} onMove={(from, to) => update((s) => reorderWorkout(s, moveItem(order, from, to)))}
       footer={<>
         <Button label="種目を追加" secondary onPress={() => setAddNew(true)} />
       </>} />

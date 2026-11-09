@@ -23,7 +23,10 @@
       "permissions": [
         "android.permission.SCHEDULE_EXACT_ALARM"
       ],
-      "versionCode": 37
+      "versionCode": 37,
+      "blockedPermissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"

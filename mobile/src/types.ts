@@ -26,6 +26,8 @@ export type WorkoutSet = {
   sessionId: number;
   exerciseId: number;
   setOrder: number;
+  finalSkippedSide?: 'normal' | 'left' | 'right';
+  skippedInputs?: Partial<Record<'normal' | 'left' | 'right', { weightKg?: number; reps?: number }>>;
   normalWeightKg?: number;
   normalReps?: number;
   leftWeightKg?: number;
@@ -54,7 +56,7 @@ export type WorkoutPreset = {
   exercises: PresetExerciseConfig[];
 };
 
-export type RoomIdentity = { id: string; name: string; token: string };
+export type RoomIdentity = { id: string; name: string; avatar?: string | null; token: string };
 export type Room = {
   id: string;
   name: string;
@@ -64,6 +66,7 @@ export type Room = {
   competitive?: boolean; // Older servers and saved rooms default to competitive.
   sharingSince?: string | null;
   memberNames?: string[];
+  memberProfiles?: { name: string; avatar?: string | null }[];
 };
 export type SharedWorkout = {
   clientId: string;
@@ -86,14 +89,16 @@ export type RoomPost = {
   automatic?: boolean;
 };
 export type RoomDetail = {
-  members: { id: string; name: string }[];
+  members: { id: string; name: string; avatar?: string | null }[];
   posts: RoomPost[];
   nextCursor?: string | null;
 };
 export type PendingPost = { roomId: string; workout: SharedWorkout };
 export type RoomComparison = {
   month: string;
-  rankings: { id: string; name: string; sets: number; rank: number }[];
+  memberId?: string | null;
+  fetchedAt?: string;
+  rankings: { id: string; name: string; avatar?: string | null; sets: number; rank: number }[];
   posts: RoomPost[];
   nextCursor?: string | null;
 };
@@ -108,6 +113,7 @@ export type WorkoutProgress = {
 };
 
 export type AppState = {
+  exerciseCatalogVersion?: number;
   cloud?: import('./sync').CloudState;
   loginPromptDismissed?: boolean;
   nextId: number;
@@ -119,6 +125,7 @@ export type AppState = {
   presets: WorkoutPreset[];
   selectedPresetId?: string;
   homeGrowthExerciseId?: number;
+  homeProgress?: import('./home-progress').ProgressPreferences;
   themeMode: ThemeMode;
   weekStartsMonday: boolean;
   weightStepKg: number;
@@ -136,6 +143,7 @@ export type AppState = {
   roomIdentity?: RoomIdentity;
   rooms: Room[];
   activeRoomId?: string;
+  automaticRoomStatus?: Record<string, { accountId: string; checkedAt: string; used?: number; limit?: number; issues: { clientId?: string; label: string; message: string; retryable: boolean }[] }>;
   automaticRoomReceipts?: Record<string, Record<string, string>>;
 };
 
