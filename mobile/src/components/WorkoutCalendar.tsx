@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from
 import { Animated, PanResponder, Pressable, Text, View } from 'react-native';
 import { useApp } from '../context';
 import { achievementSummary, completedSessions, completedSets, localDay } from '../logic';
-import { Card, IconButton, Sheet, useTheme } from '../ui';
+import { Card, Sheet, useTheme } from '../ui';
 import { SessionDetails } from './SessionDetails';
 import { AppIcon } from './AppIcon';
 import { useReducedMotion } from '../use-reduced-motion';
@@ -13,7 +13,7 @@ function startOfWeek(date: Date, monday: boolean) {
   return start;
 }
 
-export function WorkoutCalendar(_props: { compact?: boolean }) {
+export function WorkoutCalendar() {
   const { state } = useApp();
   const { colors, styles } = useTheme();
   const reduced = useReducedMotion();
@@ -75,11 +75,19 @@ export function WorkoutCalendar(_props: { compact?: boolean }) {
   const currentWeekStart = startOfWeek(new Date(), state.weekStartsMonday);
   const sessionsWithSets = new Set(completedSets(state).map((set) => set.sessionId));
   // Mark only days with a completed set, like the streak and training-day count.
-  const days = new Set(sessions.filter((s) => sessionsWithSets.has(s.id)).map((s) => localDay(s.startedAt)));
+  // Each day takes the color of its last workout's preset; earlier presets that
+  // day show as small dots. Sessions without a preset use the theme color.
+  const dayColors = new Map<string, string[]>();
+  const colorOf = (presetId?: string) => state.presets.find((p) => p.id === presetId)?.color ?? colors.primary;
+  for (const s of sessions.filter((s) => sessionsWithSets.has(s.id)).sort((a, b) => a.startedAt.localeCompare(b.startedAt))) {
+    const key = localDay(s.startedAt), color = colorOf(s.presetId);
+    dayColors.set(key, [...(dayColors.get(key) ?? []).filter((c) => c !== color), color]);
+  }
+  const days = new Set(dayColors.keys());
   const recordedWeeks = new Set(sessions.filter((s) => sessionsWithSets.has(s.id) && localDay(s.startedAt) <= today)
     .map((s) => localDay(startOfWeek(new Date(s.startedAt), state.weekStartsMonday))));
   if (!recordedWeeks.has(localDay(currentWeekStart))) currentWeekStart.setDate(currentWeekStart.getDate() - 7);
-  const rowHeight = 44;
+  const rowHeight = 36;
   const renderMonth = (delta: number) => {
     const date = new Date(month.getFullYear(), month.getMonth() + delta, 1);
     const leading = state.weekStartsMonday ? (date.getDay() + 6) % 7 : date.getDay();
@@ -115,14 +123,14 @@ export function WorkoutCalendar(_props: { compact?: boolean }) {
       const next = event.nativeEvent.layout.height;
       monthHeights.current.set(monthKey, next);
       if (delta === 0) resizeCalendar(next);
-    }} style={{ width, ...(delta !== 0 ? { position: 'absolute' as const, top: 0, left: delta * width } : {}) }} aria-hidden={delta !== 0} accessibilityElementsHidden={delta !== 0} importantForAccessibility={delta ? 'no-hide-descendants' : 'auto'}>
+    }} style={{ width: '100%', ...(delta !== 0 ? { position: 'absolute' as const, top: 0, left: delta * width } : {}) }} aria-hidden={delta !== 0} accessibilityElementsHidden={delta !== 0} importantForAccessibility={delta ? 'no-hide-descendants' : 'auto'}>
       <View style={[styles.row, { justifyContent: 'space-between' }]}>
-        <View accessibilityLabel={showStreak ? `${isCurrentMonth ? 'ストリーク' : '月内最長ストリーク'} ${displayedStreak}週` : undefined} style={{ minWidth: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>{showStreak && <><AppIcon name="flame" size={20} color={colors.primary} /><Text style={{ color: colors.primary, fontSize: 16, fontWeight: '800', marginLeft: 3 }}>{displayedStreak}</Text></>}</View>
+        <View accessibilityLabel={showStreak ? `${isCurrentMonth ? 'ストリーク' : '月内最長ストリーク'} ${displayedStreak}週` : undefined} style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>{showStreak && <><AppIcon name="flame" size={20} color={colors.primary} /><Text style={{ color: colors.primary, fontSize: 16, fontWeight: '800', marginLeft: 3 }}>{displayedStreak}週連続!</Text></>}</View>
         <View accessibilityLabel={isCurrentMonth ? '今月' : undefined} style={{ alignItems: 'center' }}>
           <Text accessibilityLiveRegion="polite" style={[styles.body, { fontWeight: '700' }]}>{date.getFullYear() !== new Date().getFullYear() ? `${date.getFullYear()}年` : ''}{date.getMonth() + 1}月</Text>
           <View style={{ height: 2, width: 18, marginTop: 2, borderRadius: 1, backgroundColor: isCurrentMonth ? colors.primary : 'transparent' }} />
         </View>
-        <View style={{ flexDirection: 'row' }}><IconButton label="前の月" symbol="‹" onPress={() => move(-1)} /><IconButton label="次の月" symbol="›" onPress={() => move(1)} /></View>
+        <View style={{ flex: 1 }} />
       </View>
        <View style={{ flexDirection: 'row' }}><View style={{ flex: 1.15 }} />
         {(state.weekStartsMonday ? ['月', '火', '水', '木', '金', '土', '日'] : ['日', '月', '火', '水', '木', '金', '土']).map((label) => <Text key={label} style={[styles.small, { flex: 1, textAlign: 'center' }]}>{label}</Text>)}
@@ -139,13 +147,18 @@ export function WorkoutCalendar(_props: { compact?: boolean }) {
             const day = first + col;
             const key = localDay(new Date(date.getFullYear(), date.getMonth(), day));
             const done = days.has(key);
+            const dayColor = dayColors.get(key)?.at(-1) ?? colors.primary;
+            const others = dayColors.get(key)?.slice(0, -1) ?? [];
             return <View key={col} style={{ flex: 1, height: rowHeight, alignItems: 'center', justifyContent: 'center' }}>
               {day > 0 && day <= length && <Pressable accessibilityRole="button" accessibilityLabel={`${date.getMonth() + 1}月${day}日${key === today ? '、今日' : ''}${done ? '、トレーニング記録あり' : ''}`}
                 disabled={!done || delta !== 0} onPress={() => setSelected(key)}
                 style={{ width: '100%', height: rowHeight, alignItems: 'center', justifyContent: 'center' }}>
-                <View pointerEvents="none" style={{ width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: key === today ? colors.soft : done ? colors.primary : 'transparent', borderWidth: key === today || key === selected ? 1 : 0, borderColor: colors.primary }}>
+                <View pointerEvents="none" style={{ width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: key === today ? colors.soft : done ? dayColor : 'transparent', borderWidth: key === today || key === selected ? 1 : 0, borderColor: done ? dayColor : colors.primary }}>
                 <Text style={{ color: done && key !== today ? colors.bg : colors.ink, lineHeight: 17 }}>{day}</Text>
-                {done && <View style={{ position: 'absolute', bottom: 2, width: 4, height: 4, borderRadius: 2, backgroundColor: key === today || key === selected ? colors.primary : colors.bg }} />}
+                {done && <View style={{ position: 'absolute', bottom: 2, flexDirection: 'row', gap: 2 }}>
+                  {(others.length ? others : [key === today || key === selected ? dayColor : colors.bg]).slice(0, 3).map((c, i) =>
+                    <View key={i} style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: c, borderWidth: others.length ? 0.5 : 0, borderColor: colors.bg }} />)}
+                </View>}
                 </View>
               </Pressable>}
             </View>;
@@ -157,8 +170,9 @@ export function WorkoutCalendar(_props: { compact?: boolean }) {
   return <>
     <Card style={{ padding: 12, marginBottom: 0 }}>
       <Animated.View onLayout={(e) => setWidth(e.nativeEvent.layout.width)} style={{ overflow: 'hidden', ...(heightReady ? { height: calendarHeight } : {}) }} {...responder?.panHandlers}>
-        <Animated.View style={{ width, position: 'absolute', top: 0, left: 0, transform: [{ translateX: offset }] }}>
-          {[-1, 0, 1].map(renderMonth)}
+        {/* Keep the current month in flow so the record card has its final position on the first layout. */}
+        <Animated.View style={{ transform: [{ translateX: offset }] }}>
+          {(width ? [-1, 0, 1] : [0]).map(renderMonth)}
         </Animated.View>
       </Animated.View>
     </Card>

@@ -73,18 +73,32 @@ export async function saveAutomatic(env, userId, roomId, data, validate) {
   if (await env.DB.prepare('SELECT 1 FROM hidden_workouts WHERE room_id=? AND user_id=? AND client_id IN (?,?)').bind(roomId,userId,payload.clientId,legacy ?? payload.clientId).first()) throw new ComparisonError(403, '運営により削除された記録は再共有できません');
   // Quota belongs to each member, so one prolific member cannot block others.
   // Check in the INSERT statement as well to serialize concurrent requests.
-  const result = await env.DB.prepare(`INSERT INTO auto_workouts(id,room_id,user_id,client_id,legacy_client_id,created_at,payload,deleted)
+  const insert = env.DB.prepare(`INSERT INTO auto_workouts(id,room_id,user_id,client_id,legacy_client_id,created_at,payload,deleted)
     SELECT ?,?,?,?,?,?,?,0 WHERE EXISTS(SELECT 1 FROM room_sharing WHERE room_id=? AND user_id=? AND since_month=?)
+      AND NOT EXISTS(SELECT 1 FROM auto_workouts WHERE room_id=? AND user_id=? AND legacy_client_id=? AND client_id<>?)
       AND ((SELECT count(*) FROM auto_workouts WHERE room_id=? AND user_id=? AND deleted=0) < 1000
-        OR EXISTS(SELECT 1 FROM auto_workouts WHERE room_id=? AND user_id=? AND client_id=? AND deleted=0))
+        OR EXISTS(SELECT 1 FROM auto_workouts WHERE room_id=? AND user_id=? AND client_id IN (?,?) AND deleted=0))
     ON CONFLICT(room_id,user_id,client_id) DO UPDATE SET payload=excluded.payload, deleted=0,
       legacy_client_id=coalesce(auto_workouts.legacy_client_id, excluded.legacy_client_id)`)
     .bind(crypto.randomUUID(), roomId, userId, payload.clientId, legacy ?? null, new Date().toISOString(), JSON.stringify(payload),
-      roomId, userId, consent.since_month, roomId, userId, roomId, userId, payload.clientId).run();
+      roomId, userId, consent.since_month, roomId, userId, payload.clientId, payload.clientId,
+      roomId, userId, roomId, userId, payload.clientId, legacy ?? payload.clientId);
+  // A pre-login device ID and the personal-sync UUID identify the same
+  // automatic copy. Commit replacement and cleanup together so a retry or a
+  // failed insert cannot leave two ranked workouts or erase the only copy.
+  const [result] = await env.DB.batch([
+    insert,
+    env.DB.prepare(`DELETE FROM auto_workouts WHERE room_id=? AND user_id=? AND client_id=? AND client_id<>?
+      AND EXISTS(SELECT 1 FROM auto_workouts WHERE room_id=? AND user_id=? AND client_id=? AND deleted=0)`)
+      .bind(roomId, userId, legacy ?? payload.clientId, payload.clientId, roomId, userId, payload.clientId),
+  ]);
   if (!result.meta.changes) {
     const current = await env.DB.prepare('SELECT 1 FROM room_sharing WHERE room_id=? AND user_id=? AND since_month=?')
       .bind(roomId, userId, consent.since_month).first();
     if (!current) throw new ComparisonError(403, '自動共有の設定が変わりました。更新してください');
+    // A delayed retry of an ID already migrated to a sync UUID is obsolete.
+    if (await env.DB.prepare('SELECT 1 FROM auto_workouts WHERE room_id=? AND user_id=? AND legacy_client_id=? AND client_id<>?')
+      .bind(roomId, userId, payload.clientId, payload.clientId).first()) return {};
     throw new ComparisonError(409, 'このルームのあなたの自動共有が1,000件に達しました。保存期限による空きを待つか、自動共有を停止できます。個人記録の削除は不要です');
   }
   return {};

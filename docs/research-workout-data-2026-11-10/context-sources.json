@@ -1,0 +1,219 @@
+[
+  {
+    "id": "R01",
+    "service": "筋トレMEMO",
+    "title": "筋トレMEMO / 開発者ストア説明",
+    "url": "https://apps.apple.com/jp/app/id1109688815",
+    "note": "重量・回数・補助の有無、細かな部位、種目履歴、RM、部位ごとの前回からの経過時間、画像共有"
+  },
+  {
+    "id": "R02",
+    "service": "REPLOG",
+    "title": "REPLOG / 開発者ストア説明",
+    "url": "https://apps.apple.com/jp/app/id6792484714",
+    "note": "前回記録、PR、重量変更時のPR更新に必要な回数、次セット目安、ジムごとのマシン重量、Watchで心拍・推定消費カロリー"
+  },
+  {
+    "id": "R03",
+    "service": "レップログ",
+    "title": "レップログ / AMETENのストア説明",
+    "url": "https://apps.apple.com/jp/app/id6799612395",
+    "note": "週の負荷をカレンダー横で比較、部位セットの人体図、連続週・月のPR・月比較・年マップ、総負荷/最大重量/e1RM"
+  },
+  {
+    "id": "R04",
+    "service": "Tailrep",
+    "title": "Tailrep / 公式",
+    "url": "https://tailrep.com/",
+    "note": "e1RM・週次の部位別ボリューム・PR、並べ替え可能なダッシュボード、7種の記録方式、セット/種目メモのピン留め"
+  },
+  {
+    "id": "R05",
+    "service": "Tailrep",
+    "title": "Tailrep / 分析機能",
+    "url": "https://tailrep.com/features/analysis",
+    "note": "分析ページの存在と指標を確認。ページ内で取得できる説明は限定的なためR04を主な根拠にする"
+  },
+  {
+    "id": "R06",
+    "service": "Lift1up",
+    "title": "Lift1up / 公式",
+    "url": "https://lift1up.app/",
+    "note": "重量・回数の推移、PR、体重・体脂肪率・筋肉量、写真の比較/重ね合わせ、次の通知日時。写真は端末に保存する説明"
+  },
+  {
+    "id": "R07",
+    "service": "BurnFit",
+    "title": "BurnFit / 日本語公式",
+    "url": "https://burnfit.io/ja/",
+    "note": "セット別%1RM・6段階強度、期間/種目別傾向、部位別ボリューム・セット数・疲労マップ、食事/PFCタイムライン"
+  },
+  {
+    "id": "R08",
+    "service": "BurnFit",
+    "title": "BurnFit / 公開FAQ",
+    "url": "https://burnfit01.oopy.io/1508af48-9376-803d-bf82-fe677881c32e",
+    "note": "週の各運動日を時間またはボリュームで比較"
+  },
+  {
+    "id": "R09",
+    "service": "Last Rep Pro",
+    "title": "Last Rep Pro / 公式",
+    "url": "https://last-rep-pro.web.app/",
+    "note": "計画重量・回数・セット、トップセット、e1RM、ボリューム、部位傾向、PDF/Excelで見返す導線"
+  },
+  {
+    "id": "R10",
+    "service": "Calistree",
+    "title": "Calistree / Skill trees",
+    "url": "https://calistree.app/knowledge?id=skillTrees",
+    "note": "易しい/難しい変化への経路、難度帯、実施/習熟の状態"
+  },
+  {
+    "id": "R11",
+    "service": "Calistree",
+    "title": "Calistree / Progress analytics",
+    "url": "https://calistree.com/features/progress-analytics/",
+    "note": "筋肉の回復マップ、筋力/柔軟/バランス/有酸素の経験プロファイル、目標・種目到達度、XP、年次振り返り"
+  },
+  {
+    "id": "R12",
+    "service": "Calistree",
+    "title": "Calistree / Experience profiles",
+    "url": "https://calistree.app/knowledge?id=experienceProfiles",
+    "note": "履歴からの疲労・回復・超回復・脱トレーニングの独自推定、今後7日間の予測表示という説明"
+  },
+  {
+    "id": "R13",
+    "service": "Calistree",
+    "title": "Calistree / Mastery",
+    "url": "https://calistree.app/knowledge?id=tipMastery",
+    "note": "1セッション内の回数または保持秒数による習熟判定"
+  },
+  {
+    "id": "R14",
+    "service": "Calistree",
+    "title": "Calistree / Readiness",
+    "url": "https://calistree.app/knowledge?id=tipReadiness",
+    "note": "類似種目の経験をもとにする技能到達度。体調スコアとは区別が必要"
+  },
+  {
+    "id": "R15",
+    "service": "Calistree",
+    "title": "Calistree / Assistance and resistance",
+    "url": "https://calistree.app/knowledge?id=tipResistAssist",
+    "note": "バンド・重量による補助/抵抗を種目変化として保持"
+  },
+  {
+    "id": "R16",
+    "service": "Calistree",
+    "title": "Calistree / Resistance band standard",
+    "url": "https://calistree.app/knowledge?id=resistanceBandStandard",
+    "note": "100%伸長時の張力F100を比較基準にする。別の伸長率からの換算は近似と表示し、本人が修正できる"
+  },
+  {
+    "id": "R17",
+    "service": "Thenics",
+    "title": "Thenics / 開発者ストア説明",
+    "url": "https://play.google.com/store/apps/details?id=com.abad.thenics",
+    "note": "スキルごとの段階的な変化、目標別の計画、セット・回数・進行を記録"
+  },
+  {
+    "id": "R18",
+    "service": "PlayThenics",
+    "title": "PlayThenics / 公式",
+    "url": "https://playthenics.com/",
+    "note": "期間を明示した指標、休息を含む継続、データ不足時のCalibrating、根拠セットへの導線。独自の量/回復モデルの精度は未検証"
+  },
+  {
+    "id": "R19",
+    "service": "Strength Level",
+    "title": "Strength Level / 基準",
+    "url": "https://strengthlevel.com/strength-standards",
+    "note": "同種目・体重・年齢・性別で比較するコミュニティ基準"
+  },
+  {
+    "id": "R20",
+    "service": "Strength Level",
+    "title": "Strength Level / FAQ",
+    "url": "https://strengthlevel.com/faq",
+    "note": "レベルのパーセンタイル定義、バー重量を含む入力、単一セットで計算、投稿データの品質チェック"
+  },
+  {
+    "id": "R21",
+    "service": "GymStreak",
+    "title": "GymStreak / 自社データ分析",
+    "url": "https://www.gymstreak.com/research/strength-standards",
+    "note": "推定1RMの比較、集団サイズと母集団の明記、一般人口を代表しない説明"
+  },
+  {
+    "id": "R22",
+    "service": "OpenPowerlifting",
+    "title": "OpenPowerlifting / FAQ",
+    "url": "https://www.openpowerlifting.org/faq",
+    "note": "大会全体の結果を文脈ごと記録し、個人PRだけを独立して登録しない方針"
+  },
+  {
+    "id": "R23",
+    "service": "IPF",
+    "title": "IPF / GL Formula",
+    "url": "https://www.powerlifting.sport/rules/codes/info/ipf-formula",
+    "note": "競技結果を体重などの条件に応じて比較するIPF GL Points"
+  },
+  {
+    "id": "R24",
+    "service": "InBody",
+    "title": "InBody / App",
+    "url": "https://inbodyusa.com/inbody-app/",
+    "note": "身体組成の履歴と部位分布の表示"
+  },
+  {
+    "id": "R25",
+    "service": "InBody",
+    "title": "InBody / 結果解説",
+    "url": "https://qr.inbody.com/ri/770/adult/en",
+    "note": "体重、骨格筋量、脂肪、部位別除脂肪、水分、BMI、周囲径、身体組成履歴、独自スコア等。全てをFitSwipeに推奨する意味ではない"
+  },
+  {
+    "id": "R26",
+    "service": "MacroFactor",
+    "title": "MacroFactor / Weight Trend",
+    "url": "https://help.macrofactorapp.com/dashboard/weight_trend",
+    "note": "生の体重と、過去のデータから推定するトレンドを別表示"
+  },
+  {
+    "id": "R27",
+    "service": "MacroFactor",
+    "title": "MacroFactor / Change Rate",
+    "url": "https://help.macrofactorapp.com/en/articles/19-change-rate",
+    "note": "トレンド体重の一定期間の変化を週あたりに換算して表示"
+  },
+  {
+    "id": "R28",
+    "service": "ABC Trainerize",
+    "title": "ABC Trainerize / Insights",
+    "url": "https://help.trainerize.com/hc/en-us/articles/46648417703956-Using-the-Client-Insights-Dashboard",
+    "note": "遵守、予定・実績、睡眠/歩数/体重・週平均/身体組成/写真、チェックインを並べ、表示を選択する"
+  },
+  {
+    "id": "R29",
+    "service": "Physitrack",
+    "title": "Physitrack / Patient progress",
+    "url": "https://support.physitrack.com/article/376-track-the-progress-of-your-patient",
+    "note": "予定した運動の実施、痛み、患者の経過を確認する専門家向け画面"
+  },
+  {
+    "id": "R30",
+    "service": "Physitrack",
+    "title": "Physitrack / Adherence definition",
+    "url": "https://support.physitrack.com/article/46-how-is-patient-adherence-calculated",
+    "note": "処方した運動に対する実施の集計定義"
+  },
+  {
+    "id": "R31",
+    "service": "Hevy",
+    "title": "Hevy / 公開フィードバック（2024）",
+    "url": "https://www.reddit.com/r/Hevy/comments/1fvy81l/graphs_and_data_in_hevy/",
+    "note": "前回比較、部位別の週/月セット表、グラフから元記録、時間間隔を正しく示す軸等の利用者要望。自己選択された少人数で需要の順位は示さない"
+  }
+]

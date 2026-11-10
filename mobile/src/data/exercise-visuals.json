@@ -1,0 +1,507 @@
+[
+  {
+    "key": "bench-press",
+    "name": "ベンチプレス",
+    "aliases": [
+      "バーベルベンチプレス"
+    ],
+    "group": "胸",
+    "animated": true
+  },
+  {
+    "key": "lat-pulldown",
+    "name": "ラットプルダウン",
+    "aliases": [
+      "ラットプル"
+    ],
+    "group": "背中",
+    "animated": true
+  },
+  {
+    "key": "leg-press",
+    "name": "レッグプレス",
+    "aliases": [],
+    "group": "脚",
+    "animated": true
+  },
+  {
+    "key": "squat",
+    "name": "スクワット",
+    "aliases": [
+      "バーベルスクワット",
+      "バックスクワット"
+    ],
+    "group": "脚",
+    "animated": true
+  },
+  {
+    "key": "push-up",
+    "name": "腕立て伏せ",
+    "aliases": [
+      "プッシュアップ"
+    ],
+    "group": "胸",
+    "animated": true
+  },
+  {
+    "key": "dumbbell-curl",
+    "name": "ダンベルカール（左右）",
+    "aliases": [
+      "ダンベルカール",
+      "ダンベルカール(左右別)"
+    ],
+    "group": "腕",
+    "animated": true
+  },
+  {
+    "key": "plank",
+    "name": "プランク",
+    "aliases": [
+      "フロントプランク"
+    ],
+    "group": "腹",
+    "animated": false
+  },
+  {
+    "key": "pec-fly",
+    "name": "ペックフライ",
+    "aliases": [
+      "ペクトラルフライ",
+      "ペックデック",
+      "ペックデックフライ"
+    ],
+    "group": "胸",
+    "animated": true
+  },
+  {
+    "key": "chest-press",
+    "name": "チェストプレス",
+    "aliases": [
+      "マシンチェストプレス"
+    ],
+    "group": "胸",
+    "animated": true
+  },
+  {
+    "key": "smith-incline-bench-press",
+    "name": "スミスマシン・インクラインベンチプレス",
+    "aliases": [
+      "スミスマシンインクラインベンチプレス"
+    ],
+    "group": "胸",
+    "animated": true
+  },
+  {
+    "key": "cable-crossover",
+    "name": "ケーブルクロス",
+    "aliases": [
+      "ケーブルクロスオーバー"
+    ],
+    "group": "胸",
+    "animated": true
+  },
+  {
+    "key": "dip",
+    "name": "ディップス",
+    "aliases": [],
+    "group": "胸",
+    "animated": true
+  },
+  {
+    "key": "dumbbell-fly",
+    "name": "ダンベルフライ",
+    "aliases": [],
+    "group": "胸",
+    "animated": true
+  },
+  {
+    "key": "dumbbell-press",
+    "name": "ダンベルプレス",
+    "aliases": [
+      "ダンベルベンチプレス"
+    ],
+    "group": "胸",
+    "animated": true
+  },
+  {
+    "key": "incline-bench-press",
+    "name": "インクラインベンチプレス",
+    "aliases": [
+      "インクラインバーベルプレス"
+    ],
+    "group": "胸",
+    "animated": true
+  },
+  {
+    "key": "deadlift",
+    "name": "デッドリフト",
+    "aliases": [
+      "バーベルデッドリフト"
+    ],
+    "group": "背中",
+    "animated": true
+  },
+  {
+    "key": "seated-cable-row",
+    "name": "プーリーロー",
+    "aliases": [
+      "シーテッドロー",
+      "シーテッドケーブルロー",
+      "ケーブルロー"
+    ],
+    "group": "背中",
+    "animated": true
+  },
+  {
+    "key": "pull-up",
+    "name": "チンニング（懸垂）",
+    "aliases": [
+      "懸垂",
+      "チンニング",
+      "プルアップ"
+    ],
+    "group": "背中",
+    "animated": true
+  },
+  {
+    "key": "bent-over-row",
+    "name": "ベントオーバーロー",
+    "aliases": [
+      "バーベルロー",
+      "ベントオーバーロウ"
+    ],
+    "group": "背中",
+    "animated": true
+  },
+  {
+    "key": "smith-squat",
+    "name": "スミスマシン・バーベルスクワット",
+    "aliases": [
+      "スミスマシンバーベルスクワット",
+      "スミスマシンスクワット"
+    ],
+    "group": "脚",
+    "animated": true
+  },
+  {
+    "key": "leg-extension",
+    "name": "レッグエクステンション",
+    "aliases": [],
+    "group": "脚",
+    "animated": true
+  },
+  {
+    "key": "leg-curl",
+    "name": "レッグカール",
+    "aliases": [
+      "ライイングレッグカール"
+    ],
+    "group": "脚",
+    "animated": true
+  },
+  {
+    "key": "lateral-raise",
+    "name": "サイドレイズ",
+    "aliases": [
+      "ダンベルサイドレイズ",
+      "ダンベルラテラルレイズ"
+    ],
+    "group": "肩",
+    "animated": true
+  },
+  {
+    "key": "machine-shoulder-press",
+    "name": "ショルダープレス",
+    "aliases": [
+      "マシンショルダープレス"
+    ],
+    "group": "肩",
+    "animated": true
+  },
+  {
+    "key": "front-raise",
+    "name": "フロントレイズ",
+    "aliases": [
+      "ダンベルフロントレイズ"
+    ],
+    "group": "肩",
+    "animated": true
+  },
+  {
+    "key": "dumbbell-shoulder-press",
+    "name": "ダンベルショルダープレス",
+    "aliases": [],
+    "group": "肩",
+    "animated": true
+  },
+  {
+    "key": "face-pull",
+    "name": "ケーブルフェイスプル",
+    "aliases": [
+      "フェイスプル"
+    ],
+    "group": "肩",
+    "animated": true
+  },
+  {
+    "key": "barbell-curl",
+    "name": "バーベルカール",
+    "aliases": [],
+    "group": "腕",
+    "animated": true
+  },
+  {
+    "key": "machine-arm-curl",
+    "name": "アームカール",
+    "aliases": [
+      "マシンアームカール"
+    ],
+    "group": "腕",
+    "animated": true
+  },
+  {
+    "key": "cable-pushdown",
+    "name": "ケーブルプレスダウン",
+    "aliases": [
+      "トライセプスプレスダウン",
+      "ケーブルプッシュダウン"
+    ],
+    "group": "腕",
+    "animated": true
+  },
+  {
+    "key": "chin-up",
+    "name": "アンダーグリップチンニング",
+    "aliases": [
+      "逆手懸垂",
+      "チンアップ"
+    ],
+    "group": "腕",
+    "animated": true
+  },
+  {
+    "key": "sit-up",
+    "name": "上体起こし",
+    "aliases": [
+      "シットアップ"
+    ],
+    "group": "腹",
+    "animated": true
+  },
+  {
+    "key": "running",
+    "name": "ランニング",
+    "aliases": [
+      "ジョギング"
+    ],
+    "group": "有酸素運動",
+    "animated": true
+  },
+  {
+    "key": "incline-dumbbell-press",
+    "name": "インクラインダンベルプレス",
+    "aliases": [
+      "インクラインダンベルベンチプレス"
+    ],
+    "group": "胸",
+    "animated": true
+  },
+  {
+    "key": "incline-dumbbell-fly",
+    "name": "インクラインダンベルフライ",
+    "aliases": [],
+    "group": "胸",
+    "animated": true
+  },
+  {
+    "key": "smith-bench-press",
+    "name": "スミスマシン・ベンチプレス",
+    "aliases": [
+      "スミスマシンベンチプレス"
+    ],
+    "group": "胸",
+    "animated": true
+  },
+  {
+    "key": "one-arm-dumbbell-row",
+    "name": "ワンハンドダンベルロー",
+    "aliases": [
+      "ワンハンドロー",
+      "ワンハンドダンベルロウ"
+    ],
+    "group": "背中",
+    "animated": true
+  },
+  {
+    "key": "t-bar-row",
+    "name": "Tバーロー",
+    "aliases": [
+      "Tバーロウ"
+    ],
+    "group": "背中",
+    "animated": true
+  },
+  {
+    "key": "back-extension",
+    "name": "バックエクステンション",
+    "aliases": [
+      "ハイパーエクステンション"
+    ],
+    "group": "背中",
+    "animated": true
+  },
+  {
+    "key": "rear-delt-raise",
+    "name": "リアレイズ",
+    "aliases": [
+      "ダンベルリアレイズ",
+      "ベントオーバーリアレイズ"
+    ],
+    "group": "肩",
+    "animated": true
+  },
+  {
+    "key": "arnold-press",
+    "name": "アーノルドプレス",
+    "aliases": [],
+    "group": "肩",
+    "animated": true
+  },
+  {
+    "key": "hammer-curl",
+    "name": "ハンマーカール",
+    "aliases": [
+      "ダンベルハンマーカール"
+    ],
+    "group": "腕",
+    "animated": true
+  },
+  {
+    "key": "preacher-curl",
+    "name": "プリーチャーカール",
+    "aliases": [],
+    "group": "腕",
+    "animated": true
+  },
+  {
+    "key": "incline-dumbbell-curl",
+    "name": "インクラインダンベルカール",
+    "aliases": [],
+    "group": "腕",
+    "animated": true
+  },
+  {
+    "key": "triceps-extension",
+    "name": "トライセプスエクステンション",
+    "aliases": [
+      "オーバーヘッドトライセプスエクステンション"
+    ],
+    "group": "腕",
+    "animated": true
+  },
+  {
+    "key": "bulgarian-split-squat",
+    "name": "ブルガリアンスクワット",
+    "aliases": [
+      "ブルガリアンスプリットスクワット"
+    ],
+    "group": "脚",
+    "animated": true
+  },
+  {
+    "key": "lunge",
+    "name": "ランジ",
+    "aliases": [
+      "ダンベルランジ",
+      "スプリットスクワット"
+    ],
+    "group": "脚",
+    "animated": true
+  },
+  {
+    "key": "goblet-squat",
+    "name": "ゴブレットスクワット",
+    "aliases": [],
+    "group": "脚",
+    "animated": true
+  },
+  {
+    "key": "romanian-deadlift",
+    "name": "ルーマニアンデッドリフト",
+    "aliases": [
+      "RDL"
+    ],
+    "group": "脚",
+    "animated": true
+  },
+  {
+    "key": "hip-thrust",
+    "name": "ヒップスラスト",
+    "aliases": [
+      "バーベルヒップスラスト"
+    ],
+    "group": "脚",
+    "animated": true
+  },
+  {
+    "key": "calf-raise",
+    "name": "カーフレイズ",
+    "aliases": [
+      "スタンディングカーフレイズ"
+    ],
+    "group": "脚",
+    "animated": true
+  },
+  {
+    "key": "hip-abduction",
+    "name": "ヒップアブダクション",
+    "aliases": [
+      "アブダクター"
+    ],
+    "group": "脚",
+    "animated": true
+  },
+  {
+    "key": "hip-adduction",
+    "name": "ヒップアダクション",
+    "aliases": [
+      "アダクター"
+    ],
+    "group": "脚",
+    "animated": true
+  },
+  {
+    "key": "crunch",
+    "name": "クランチ",
+    "aliases": [],
+    "group": "腹",
+    "animated": true
+  },
+  {
+    "key": "leg-raise",
+    "name": "レッグレイズ",
+    "aliases": [
+      "ライイングレッグレイズ"
+    ],
+    "group": "腹",
+    "animated": true
+  },
+  {
+    "key": "ab-wheel",
+    "name": "腹筋ローラー",
+    "aliases": [
+      "アブローラー",
+      "アブホイール",
+      "膝コロ"
+    ],
+    "group": "腹",
+    "animated": true
+  },
+  {
+    "key": "russian-twist",
+    "name": "ロシアンツイスト",
+    "aliases": [],
+    "group": "腹",
+    "animated": true
+  }
+]

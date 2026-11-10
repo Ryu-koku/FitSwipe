@@ -9,7 +9,7 @@ Module._load = function (name, ...args) {
   if (name === '@react-native-async-storage/async-storage') return {
     multiGet: async keys => keys.map(key => [key, data.get(key) ?? null]),
     multiSet: async entries => { for (const [key, value] of entries) { if (key === failKey) throw Error('disk full'); data.set(key, value); } },
-    multiRemove: async keys => { keys.forEach(key => data.delete(key)); },
+    multiRemove: async keys => { if (keys.some(key => `remove:${key}` === failKey)) throw Error('disk full'); keys.forEach(key => data.delete(key)); },
     getAllKeys: async () => [...data.keys()],
     getItem: async (key) => data.get(key) ?? null,
     setItem: async (key, value) => { if (key === failKey) throw Error("disk full"); data.set(key, value); },
@@ -169,4 +169,32 @@ test('keys of an interrupted save are removed on the next load', async () => {
   assert.ok([...data.keys()].some(key => key.startsWith(`${mainKey}.s.`) && !referenced().has(key)));
   assert.equal((await loadState()).heightCm, undefined);
   assert.ok(![...data.keys()].some(key => key.startsWith(`${mainKey}.s.`) && !referenced().has(key)));
+});
+
+test('raw recovery export retains room/sync data and legacy plaintext tokens (known product decision)', async () => {
+  // Recovery intentionally preserves bytes, unlike the portable backup boundary.
+  const { exportRawStorage } = require('../src/storage.ts');
+  data.clear();
+  data.set(mainKey, '{broken');
+  data.set('fitswipe.archive.legacy', JSON.stringify({
+    roomIdentity: { id: 'legacy', token: 'synthetic-legacy-private-token' },
+    rooms: [{ inviteCode: 'PRIVATE-INVITE' }], cloud: { cursor: 12345 },
+  }));
+  await assert.rejects(loadState());
+  const exported = await exportRawStorage();
+  for (const retained of ['synthetic-legacy-private-token', 'PRIVATE-INVITE', 'cursor', '{broken']) {
+    assert.ok(exported.includes(retained), retained);
+  }
+});
+
+test('garbage collection failure after commit cannot report a failed save', async () => {
+  data.clear();
+  const state = { ...seedState(), heightCm: 166 };
+  await saveState(state);
+  const oldKey = JSON.parse(data.get(mainKey)).parts.base[0][0];
+  failKey = `remove:${oldKey}`;
+  try {
+    await assert.doesNotReject(saveState({ ...state, heightCm: 180 }));
+    assert.equal((await loadState()).heightCm, 180);
+  } finally { failKey = undefined; }
 });

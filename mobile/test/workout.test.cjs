@@ -395,6 +395,21 @@ test('skip survives restart, is excluded from records, and can be revisited and 
   assert.notEqual(currentCard(state, state.workout.sessionId).setId, card.setId);
 });
 
+test('editing skipped inputs survives restart and reopening without restoring stale values', () => {
+  for (const bilateral of [false, true]) {
+    let state = workout({ bilateral });
+    const card = currentCard(state, state.workout.sessionId);
+    const side = card.side ?? 'normal';
+    state = advanceWorkout(state, true);
+    state = updateSet(state, card.setId, { [`${side}WeightKg`]: 32.5, [`${side}Reps`]: 6 });
+    state = reopenSkippedCard(JSON.parse(JSON.stringify(state)), card);
+    const row = state.sets.find(item => item.id === card.setId);
+    assert.equal(row[`${side}WeightKg`], 32.5);
+    assert.equal(row[`${side}Reps`], 6);
+    assert.equal(row.isCompleted, false);
+  }
+});
+
 test('last skipped card can reopen a finished workout after serialization', () => {
   let state = workout({ sets: 1 });
   const card = currentCard(state, state.workout.sessionId);

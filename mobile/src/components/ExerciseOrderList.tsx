@@ -3,6 +3,7 @@ import { Animated, PanResponder, Pressable, ScrollView, Text, View } from 'react
 import { Card, feedback, useTheme } from '../ui';
 import { moveItem } from '../reorder';
 import { useReducedMotion } from '../use-reduced-motion';
+import { ExercisePictogram } from './ExercisePictogram';
 
 const ROW = 72;
 type Item = { id: number; name: string; detail: string };
@@ -111,7 +112,7 @@ export function ExerciseOrderList({ items, onMove, onEdit, onDelete, header, foo
             <Text style={{ color: colors.bg, fontWeight: '700' }}>削除</Text>
           </Pressable>}
           <SwipePosition active={swipedId === item.id} position={swipeX} reduced={reduced}>
-          <DragGrip label={`${item.name}、${item.detail}。タップで編集、ドラッグで並べ替え`}
+          <DragGrip draggable={false} label={`${item.name}、${item.detail}。タップで編集`}
             onTouchBegin={() => { if (swipedIdRef.current !== undefined && swipedIdRef.current !== item.id) closeSwipe(); }}
             onStart={(y) => { closeSwipe(); beginDrag(index, item.id, y); }}
             onSwipe={onDelete ? (dx) => {
@@ -133,7 +134,20 @@ export function ExerciseOrderList({ items, onMove, onEdit, onDelete, header, foo
             onTap={() => { if (swipedIdRef.current !== undefined) closeSwipe(); else onEdit(item.id); }}
             onStep={(delta) => onMove(index, Math.max(0, Math.min(items.length - 1, index + delta)))}>
             <Card style={{ height: ROW - 8, marginBottom: 0, paddingHorizontal: 14, paddingVertical: 8, borderColor: dragging === item.id ? colors.primary : colors.line }}>
-              <View style={styles.row}><View style={{ flex: 1 }}><Text numberOfLines={1} style={[styles.body, { fontWeight: '700' }]}>{item.name}</Text><Text style={styles.small}>{item.detail}</Text></View>
+              <View style={styles.row}>
+                <ExercisePictogram name={item.name} size={48} animate={false} />
+                <View style={{ flex: 1, minWidth: 0 }}><Text numberOfLines={1} style={[styles.body, { fontWeight: '700' }]}>{item.name}</Text><Text numberOfLines={1} style={styles.small}>{item.detail}</Text></View>
+                <DragGrip label={`${item.name}を並べ替え`}
+                  onTouchBegin={() => { if (swipedIdRef.current !== undefined) closeSwipe(); }}
+                  onStart={(y) => beginDrag(index, item.id, y)}
+                  onSwipeEnd={() => {}}
+                  onMove={(dy) => { if (drag.current) { drag.current.pointer = drag.current.origin + dy; updatePosition(); } }}
+                  onEnd={finish}
+                  onTap={() => {}}
+                  onStep={(delta) => onMove(index, Math.max(0, Math.min(items.length - 1, index + delta)))}
+                  style={{ width: 44, height: 44, marginRight: -8, alignItems: 'center', justifyContent: 'center' }}>
+                  <Text style={{ fontSize: 24, color: colors.muted }}>≡</Text>
+                </DragGrip>
               </View>
             </Card>
           </DragGrip>
@@ -177,8 +191,8 @@ function OrderRow({ index, dragging, dragY, reduced, children }: { index: number
   return <Animated.View style={{ position: 'absolute', left: 0, right: 0, top: 0, zIndex: dragging ? 10 : 0, elevation: dragging ? 8 : 0, transform: [{ translateY: dragging ? dragY : y }, { scale: dragging ? 1.02 : 1 }] }}>{children}</Animated.View>;
 }
 
-function DragGrip({ label, onStart, onMove, onEnd, onTap, onStep, onSwipe, onSwipeEnd, onTouchBegin, style, children }: {
-  label: string; onStart: (y: number) => void; onMove: (dy: number) => void; onEnd: (cancel?: boolean) => void;
+function DragGrip({ draggable = true, label, onStart, onMove, onEnd, onTap, onStep, onSwipe, onSwipeEnd, onTouchBegin, style, children }: {
+  draggable?: boolean; label: string; onStart: (y: number) => void; onMove: (dy: number) => void; onEnd: (cancel?: boolean) => void;
   onTap: () => void; onStep: (delta: number) => void;
   onTouchBegin: () => void;
   onSwipe?: (dx: number) => void; onSwipeEnd: (dx: number) => void;
@@ -188,15 +202,15 @@ function DragGrip({ label, onStart, onMove, onEnd, onTap, onStep, onSwipe, onSwi
   useEffect(() => { callbacks.current = { onStart, onMove, onEnd, onTap, onSwipe, onSwipeEnd, onTouchBegin }; });
   const [responder, setResponder] = useState<ReturnType<typeof PanResponder.create> | null>(null);
   useEffect(() => {
-    let axis: 'horizontal' | 'vertical' | undefined;
+    let axis: 'horizontal' | 'vertical' | 'none' | undefined;
     let origin = 0;
     const pan = PanResponder.create({
     onStartShouldSetPanResponder: () => true,
-    onMoveShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponder: (_, gesture) => draggable || Math.abs(gesture.dx) > Math.abs(gesture.dy),
     onPanResponderGrant: (event) => { axis = undefined; origin = event.nativeEvent.pageY; callbacks.current.onTouchBegin(); },
     onPanResponderMove: (_, gesture) => {
       if (!axis && Math.max(Math.abs(gesture.dx), Math.abs(gesture.dy)) > 6) {
-        axis = callbacks.current.onSwipe && Math.abs(gesture.dx) > Math.abs(gesture.dy) ? 'horizontal' : 'vertical';
+        axis = callbacks.current.onSwipe && Math.abs(gesture.dx) > Math.abs(gesture.dy) ? 'horizontal' : draggable ? 'vertical' : 'none';
         if (axis === 'vertical') callbacks.current.onStart(origin);
       }
       if (axis === 'horizontal') callbacks.current.onSwipe?.(gesture.dx);
@@ -208,14 +222,14 @@ function DragGrip({ label, onStart, onMove, onEnd, onTap, onStep, onSwipe, onSwi
       else if (Math.abs(gesture.dx) < 6 && Math.abs(gesture.dy) < 6) callbacks.current.onTap();
     },
     onPanResponderTerminate: () => { if (axis === 'vertical') callbacks.current.onEnd(true); else if (axis === 'horizontal') callbacks.current.onSwipeEnd(0); },
-    onPanResponderTerminationRequest: () => false,
-    onShouldBlockNativeResponder: () => true,
+    onPanResponderTerminationRequest: () => axis === 'none',
+    onShouldBlockNativeResponder: () => draggable,
     });
     const timer = setTimeout(() => setResponder(pan), 0);
     return () => clearTimeout(timer);
-  }, []);
-  return <View collapsable={false} accessible accessibilityRole="button" accessibilityLabel={label}
-    accessibilityActions={[{ name: 'activate', label: '編集' }, { name: 'increment', label: '下へ' }, { name: 'decrement', label: '上へ' }]}
+  }, [draggable]);
+  return <View collapsable={false} accessible accessibilityRole={draggable ? 'adjustable' : 'button'} accessibilityLabel={label}
+    accessibilityActions={draggable ? [{ name: 'increment', label: '下へ' }, { name: 'decrement', label: '上へ' }] : [{ name: 'activate', label: '編集' }]}
     onAccessibilityAction={(event) => { if (event.nativeEvent.actionName === 'activate') onTap(); else onStep(event.nativeEvent.actionName === 'increment' ? 1 : -1); }}
     style={style} {...responder?.panHandlers}>{children}</View>;
 }

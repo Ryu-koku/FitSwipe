@@ -10,7 +10,6 @@ import { formatWeight } from '../logic';
 import { Button, Card, Field, IconButton, Screen, Sheet, useTheme } from '../ui';
 import { useRooms } from '../use-rooms';
 import { MemberAvatar, RoomComparisonChart } from '../components/RoomComparisonChart';
-import { AppIcon } from '../components/AppIcon';
 import { japanMonth } from '../automatic-sharing';
 import { monthLabel, roomMonths } from '../room-period';
 import { RoomSharingPanel } from '../components/RoomSharingPanel';
@@ -113,13 +112,6 @@ export default function RoomsScreen() {
         <Animated.Text style={{ color: '#fff', fontSize: 34, lineHeight: 40, transform: [{ rotate: actionProgress.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '45deg'] }) }] }}>＋</Animated.Text>
       </Pressable>
     </View> : undefined}>
-    <Card style={{ backgroundColor: colors.soft }}>
-      <View style={[styles.row, { justifyContent: 'flex-start', gap: 12 }]}>
-        <AppIcon name="people" color={colors.primary} size={30} />
-        <View style={{ flex: 1 }}><Text style={[styles.body, { fontWeight: '800', fontSize: 18 }]}>仲間とトレーニング</Text>
-          <Text style={styles.small}>記録をシェアして、一緒に続けよう。</Text></View>
-      </View>
-    </Card>
     {!!rooms.notice && <Card><Text accessibilityLiveRegion="polite" style={styles.body}>{rooms.notice}</Text></Card>}
     {(rooms.error || roomSyncError) && <Card><Text accessibilityRole="alert" style={styles.body}>{rooms.error || roomSyncError}</Text><Button label="再試行" secondary disabled={rooms.busy} onPress={() => void rooms.run(rooms.refresh)} /></Card>}
     {!rooms.configured ? <Card><Text style={styles.body}>ルーム共有は準備中です</Text></Card> : !rooms.account ? <>

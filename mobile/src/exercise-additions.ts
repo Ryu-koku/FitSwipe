@@ -1,5 +1,20 @@
-import type { AppState } from './types';
+import type { AppState, Exercise } from './types';
+import { exerciseKey } from './exercise-catalog';
 import { exerciseDefaults, resizeSets } from './workout';
+
+// Old imports or sync data can contain equal exercises with different IDs.
+// Keep their records intact while offering each name/mode only once.
+export function availableExerciseChoices(exercises: Exercise[], excludedIds: number[] = []): Exercise[] {
+  const seen = new Set(exercises.filter((exercise) => excludedIds.includes(exercise.id)).map(exerciseKey));
+  return exercises.filter((exercise) => !exercise.archived)
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+    .filter((exercise) => {
+      const key = exerciseKey(exercise);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
 
 // Recheck against current state at confirmation time so stale selections cannot
 // duplicate exercises or shrink sets already added to the workout.

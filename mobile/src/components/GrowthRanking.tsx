@@ -104,6 +104,5 @@ function GrowthLine({ points }: { points: { date: string; value: number }[] }) {
         {positions.map((point, index) => <Circle key={points[index].date} cx={point.x} cy={point.y} r={3} fill={colors.primary} />)}
       </Svg>
     </View>
-    <Text style={styles.small}>変化が見やすいよう、縦軸の範囲を調整しています。</Text>
   </View>;
 }

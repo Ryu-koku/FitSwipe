@@ -52,7 +52,7 @@ export function project(state: AppState, mapping: Record<string, string>, uuid: 
   state.exercises.forEach((e) => { if (skip('exercises', e)) { id('exercise', e.id); return; } add('exercise', e.id, { ...e, id: undefined }); });
   state.presets.forEach((p) => {
     if (skip('presets', p)) { p.exercises.forEach(e => id('exercise', e.exerciseId)); id('preset', p.id); return; }
-    add('preset', p.id, { name: p.name, exercises: p.exercises.map((e) => ({ ...e, exerciseId: id('exercise', e.exerciseId) })) });
+    add('preset', p.id, { name: p.name, color: p.color, exercises: p.exercises.map((e) => ({ ...e, exerciseId: id('exercise', e.exerciseId) })) });
   });
   state.sessions.forEach((s) => {
     if (skip('sessions', s)) { if (s.presetId) id('preset', s.presetId); id('session', s.id); return; }

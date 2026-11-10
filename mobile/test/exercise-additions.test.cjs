@@ -2,7 +2,24 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { seedState } = require('../src/logic.ts');
 const { startWorkout, nextId, exerciseDefaults } = require('../src/workout.ts');
-const { addWorkoutExercises, addPresetExercises } = require('../src/exercise-additions.ts');
+const { addWorkoutExercises, addPresetExercises, availableExerciseChoices } = require('../src/exercise-additions.ts');
+
+test('exercise choices collapse duplicate names and modes without changing stored exercises', () => {
+  const state = seedState();
+  state.exercises.push({ ...state.exercises[0], id: 900, name: ' ベンチプレス ', sortOrder: 100 });
+  state.exercises.push({ ...state.exercises[0], id: 901, mode: 'BILATERAL', sortOrder: 101 });
+  state.exercises.push({ ...state.exercises[0], id: 902, name: 'インクラインベンチプレス', archived: true });
+  const original = structuredClone(state.exercises);
+  const choices = availableExerciseChoices(state.exercises);
+  assert.deepEqual(choices.filter((exercise) => exercise.name.trim() === 'ベンチプレス').map((exercise) => exercise.id), [1, 901]);
+  assert.ok(!choices.some((exercise) => exercise.id === 902));
+  assert.deepEqual(state.exercises, original);
+  for (const excluded of [1, 900]) {
+    const available = availableExerciseChoices(state.exercises, [excluded]);
+    assert.ok(!available.some((exercise) => [1, 900].includes(exercise.id)));
+    assert.ok(available.some((exercise) => exercise.id === 901));
+  }
+});
 
 test('batch workout addition preserves existing sets and appends one set per selection in selection order', () => {
   const state = startWorkout(seedState());
@@ -25,6 +42,21 @@ test('batch additions ignore archived or missing exercises and removed targets',
   assert.equal(addWorkoutExercises(state, -1, [5]), state);
   assert.deepEqual(addPresetExercises(state, 'gym', [4, 9999]).presets, state.presets);
   assert.deepEqual(addPresetExercises(state, 'removed', [5]).presets, state.presets);
+});
+
+test('first-time additions initialize editable weight and repetitions for both exercise modes', () => {
+  const state = startWorkout(seedState());
+  for (const mode of ['NORMAL', 'BILATERAL']) {
+    const id = nextId(state);
+    const exercise = { id, name: '新しい種目', mode, sortOrder: 50, archived: false };
+    const next = addWorkoutExercises({ ...state, exercises: [...state.exercises, exercise] }, state.workout.sessionId, [id]);
+    const row = next.sets.find(item => item.exerciseId === id);
+    for (const side of mode === 'BILATERAL' ? ['left', 'right'] : ['normal']) {
+      assert.equal(row[`${side}WeightKg`], 0);
+      assert.equal(row[`${side}Reps`], 10);
+    }
+    assert.equal(row.isCompleted, false);
+  }
 });
 
 test('newly created exercise and previous selections are added together to both destinations', () => {

@@ -24,6 +24,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     },
     plugins: [
       ...(config.plugins ?? []),
+      'expo-image',
       './plugins/with-play-upload-signing',
       './plugins/with-async-storage-size',
       ['@appeeky/expo-healthkit', {

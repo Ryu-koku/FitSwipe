@@ -100,13 +100,18 @@ export function AppProvider({ children }: PropsWithChildren) {
   const roomSyncErrorRef = useRef(roomSyncError);
   const updateRoomSyncError = (value: string | undefined) => { roomSyncErrorRef.current = value; setRoomSyncError(value); };
   const client = useRef(createRoomsClient()).current;
-  const rawPersist = useCallback(async (updater: (s: AppState) => AppState) => {
-    const next = updater(current.current);
-    // Saving and publishing happen in the same synchronous turn; callers always
-    // await durability before acknowledging network operations or switching users.
-    current.current = next;
-    setState(next);
-    await saveState(next);
+  const writers = useRef<Promise<void>>(Promise.resolve());
+  const rawPersist = useCallback((updater: (s: AppState) => AppState) => {
+    const work = writers.current.catch(() => {}).then(async () => {
+      const next = updater(current.current);
+      // Publish only a durable state. Serialize updater evaluation as well as
+      // writes so overlapping UI edits and acknowledgements cannot lose rows.
+      await saveState(next);
+      current.current = next;
+      setState(next);
+    });
+    writers.current = work;
+    return work;
   }, []);
   const load = useCallback(() => loadState()
     .then(async (saved) => {
@@ -130,15 +135,13 @@ export function AppProvider({ children }: PropsWithChildren) {
   const getState = useCallback(() => current.current, []);
   const persist = useCallback((updater: (state: AppState) => AppState) => {
     if (transition.current) return Promise.reject(new BusyError());
-    const next = trackChanges(current.current, updater(current.current), randomUUID);
-    current.current = next;
-    setState(next);
-    return saveState(next);
-  }, []);
+    return rawPersist(s => trackChanges(s, updater(s), randomUUID));
+  }, [rawPersist]);
   const syncNow = useCallback((): Promise<void> => {
     if (syncRunning.current) return syncRunning.current;
     if (importing.current) return Promise.resolve();
     const work = async () => {
+      await writers.current.catch(() => {});
       const account = current.current.cloud?.identity;
       if (!account) return;
       if (account.expiresAt * 1000 <= Date.now() || !account.token) throw new Error('Googleで再ログインしてください。未送信の記録は端末に残っています。');
@@ -221,6 +224,7 @@ export function AppProvider({ children }: PropsWithChildren) {
     try {
       await syncRunning.current?.catch(() => {});
       await automaticRunning.current?.catch(() => {});
+      await writers.current.catch(() => {});
       const before = current.current;
       const account = before.cloud?.identity ?? before.roomIdentity;
       if (account) await ensureCommunityTerms(account);
@@ -244,6 +248,7 @@ export function AppProvider({ children }: PropsWithChildren) {
     try {
       await syncRunning.current?.catch(() => {});
       await automaticRunning.current?.catch(() => {});
+      await writers.current.catch(() => {});
       const before = current.current;
       if (before.pendingPosts.length) throw new Error('ルームへの送信待ちがあります。ルーム画面で再送してからログインしてください。');
       if (!await confirmCommunityTerms()) return false;
@@ -298,6 +303,7 @@ export function AppProvider({ children }: PropsWithChildren) {
     accountEpoch.current += 1;
     transition.current = true; setCloudBusy(true);
     try {
+      await writers.current.catch(() => {});
       const identity = current.current.cloud?.identity;
       const expired = identity && (!identity.token || identity.expiresAt * 1000 <= Date.now());
       if (expired) {
@@ -325,6 +331,7 @@ export function AppProvider({ children }: PropsWithChildren) {
     try {
       await syncRunning.current?.catch(() => {});
       await automaticRunning.current?.catch(() => {});
+      await writers.current.catch(() => {});
       const before = current.current;
       await client.deleteAccount(before.cloud!.identity);
       const guest = { ...before, loginPromptDismissed: true, cloud: undefined, roomIdentity: undefined, rooms: [], roomDetails: {}, pendingPosts: [], activeRoomId: undefined, automaticRoomReceipts: undefined };
@@ -341,6 +348,7 @@ export function AppProvider({ children }: PropsWithChildren) {
       const saved = await loadGuest();
       if (!saved) throw new Error('ログイン前の保管データはありません。');
       await automaticRunning.current?.catch(() => {});
+      await writers.current.catch(() => {});
       const next = { ...upgradeState(saved), loginPromptDismissed: true };
       await swapGuest(current.current, next);
       current.current = next; setState(next);
@@ -354,10 +362,7 @@ export function AppProvider({ children }: PropsWithChildren) {
       // to disk before publishing. Failed imports never enter the live outbox.
       await syncRunning.current?.catch(() => {});
       await automaticRunning.current?.catch(() => {});
-      const next = trackChanges(current.current, updater(current.current), randomUUID);
-      await saveState(next);
-      current.current = next;
-      setState(next);
+      await rawPersist(s => trackChanges(s, updater(s), randomUUID));
     } finally {
       importing.current = false; transition.current = false; setCloudBusy(false);
     }

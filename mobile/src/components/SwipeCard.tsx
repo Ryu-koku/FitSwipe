@@ -10,6 +10,7 @@ import React, {
 import {
   Animated,
   PanResponder,
+  Pressable,
   Text,
   View,
   useWindowDimensions,
@@ -18,7 +19,10 @@ import { feedback, useTheme } from '../ui';
 import { AppIcon } from './AppIcon';
 import { useReducedMotion } from '../use-reduced-motion';
 
-const SwipeFeedback = createContext<Animated.Value | null>(null);
+const SwipeFeedback = createContext<{
+  progress: Animated.Value;
+  runAction: (action: () => void) => void;
+} | null>(null);
 
 export function SwipeCard({
   children,
@@ -44,6 +48,13 @@ export function SwipeCard({
   useEffect(() => {
     actions.current = { onAdvance, onSkip, onSwipeStart, disabled };
   }, [onAdvance, onSkip, onSwipeStart, disabled]);
+  useEffect(() => () => {
+    position.stopAnimation();
+    actionProgress.stopAnimation();
+  }, [position, actionProgress]);
+  const runAction = (action: () => void) => {
+    if (!busy.current && !actions.current.disabled) action();
+  };
   const [hint, setHint] = useState<string>();
   const pan = useMemo(
     () =>
@@ -128,7 +139,7 @@ export function SwipeCard({
         ],
       }}
     >
-      <SwipeFeedback.Provider value={actionProgress}>{children}</SwipeFeedback.Provider>
+      <SwipeFeedback.Provider value={{ progress: actionProgress, runAction }}>{children}</SwipeFeedback.Provider>
       {hint && (
         <Text
           pointerEvents="none"
@@ -152,38 +163,47 @@ export function SwipeCard({
 }
 
 
-export function SwipeActions({ reviewing = false, onAdvance, onSkip }: {
+export function SwipeActions({ reviewing = false, onAdvance, onSkip, onBack, onEdit, canGoBack }: {
+  onBack: () => void;
+  onEdit: () => void;
+  canGoBack: boolean;
   reviewing?: boolean;
   onAdvance: () => void;
   onSkip: () => void;
 }) {
-  const progress = useContext(SwipeFeedback);
+  const swipe = useContext(SwipeFeedback);
   const { colors, styles } = useTheme();
   const reduced = useReducedMotion();
-  if (!progress) return null;
-  return <View style={{ flexDirection: 'row', borderTopWidth: 1, borderColor: colors.line,
-    marginHorizontal: 16, paddingTop: 12, paddingBottom: 12, justifyContent: 'space-around' }}>
-    {(['skip', 'complete'] as const).filter((action) => !reviewing || action === 'complete').map((action) => {
+  if (!swipe) return null;
+  const { progress, runAction } = swipe;
+  return <View style={{ flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 8, paddingBottom: 8, justifyContent: 'space-between' }}>
+    {(['back', 'skip', 'complete', 'edit'] as const).map((action) => {
       const complete = action === 'complete';
-      const color = complete ? colors.primary : colors.orange;
-      const active = progress.interpolate({ inputRange: complete ? [0, 1] : [-1, 0], outputRange: complete ? [0, 1] : [1, 0], extrapolate: 'clamp' });
-      const label = complete ? reviewing ? '次のカードへ' : 'セット完了' : 'スキップ';
-      return <View key={action} accessible accessibilityLabel={label}
-        accessibilityActions={[{ name: 'activate', label }]}
-        onAccessibilityAction={({ nativeEvent }) => { if (nativeEvent.actionName === 'activate') (complete ? onAdvance : onSkip)(); }}
-        style={{ minWidth: 96, alignItems: 'center', gap: 10 }}>
-        <Animated.View testID={`swipe-${action}`} style={{ width: 48, height: 48, borderRadius: 24,
+      const skip = action === 'skip';
+      const disabled = action === 'back' && !canGoBack;
+      const color = skip ? colors.orange : colors.primary;
+      const active = progress.interpolate({ inputRange: skip ? [-1, 0] : [0, 1], outputRange: complete ? [0, 1] : skip ? [1, 0] : [0, 0], extrapolate: 'clamp' });
+      const label = complete ? reviewing ? '次のカードへ' : 'セット完了' : skip ? 'スキップ' : action === 'back' ? '戻る' : '編集';
+      const accessibilityLabel = action === 'back' ? '前のカードへ' : action === 'edit' ? '種目を編集' : label;
+      const icon = complete ? 'check' : skip ? 'skip' : action === 'back' ? 'undo' : 'edit';
+      const onPress = complete ? onAdvance : skip ? onSkip : action === 'back' ? onBack : onEdit;
+      return <Pressable key={action} accessibilityRole="button" accessibilityLabel={accessibilityLabel}
+        disabled={disabled} accessibilityState={{ disabled }}
+        onPress={() => runAction(() => { feedback(); onPress(); })}
+        style={({ pressed }) => ({ flex: 1, minHeight: 48, alignItems: 'center', justifyContent: 'center', gap: 4, opacity: disabled ? 0.35 : pressed ? 0.6 : 1 })}>
+        <Animated.View testID={`swipe-${action}`} style={{ width: 34, height: 34, borderRadius: 17,
           borderWidth: 1.5, alignItems: 'center', justifyContent: 'center',
           borderColor: active.interpolate({ inputRange: [0, 1], outputRange: [colors.muted, color] }),
           backgroundColor: active.interpolate({ inputRange: [0, 1], outputRange: [colors.surface, color] }),
           transform: [{ scale: reduced ? 1 : active.interpolate({ inputRange: [0, 1], outputRange: [1, 1.18] }) }] }}>
-          <AppIcon name={complete ? 'check' : 'skip'} color={colors.muted} size={26} />
+          <AppIcon name={icon} color={colors.muted} size={20} />
           <Animated.View pointerEvents="none" style={{ position: 'absolute', opacity: active }}>
-            <AppIcon name={complete ? 'check' : 'skip'} color={colors.surface} size={26} />
+            <AppIcon name={icon} color={colors.surface} size={20} />
           </Animated.View>
         </Animated.View>
         <Animated.Text style={[styles.small, { fontWeight: '700', color: active.interpolate({ inputRange: [0, 1], outputRange: [colors.muted, color] }) }]}>{label}</Animated.Text>
-      </View>;
+      </Pressable>;
     })}
   </View>;
 }

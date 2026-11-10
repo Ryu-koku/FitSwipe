@@ -13,6 +13,9 @@ import {
 import type { ProgressMetric, ProgressRecord, ProgressSide } from '../home-progress';
 import { ProgressTrend } from '../components/HomeProgress';
 import { SessionDetails } from '../components/SessionDetails';
+import { RecordComparison } from '../components/RecordComparison';
+import { periodLabels, periodRecords } from '../record-comparison';
+import type { RecordPeriod } from '../record-comparison';
 import { formatWeight, localDay } from '../logic';
 
 export default function GrowthScreen() {
@@ -31,6 +34,7 @@ export default function GrowthScreen() {
   const side: ProgressSide = exercise?.mode === 'BILATERAL' ? selectedSide : 0;
   const [selectedDate, setSelectedDate] = useState<string>();
   const [history, setHistory] = useState(false);
+  const [period, setPeriod] = useState<RecordPeriod>('all');
   const today = new Date().toDateString();
   const index = useMemo(
     () =>
@@ -41,6 +45,7 @@ export default function GrowthScreen() {
     [state.exercises, state.sessions, state.sets, today],
   );
   const records = exercise ? exerciseRecords(index, exercise.id, side) : [];
+  const bestRecords = periodRecords(records, period, new Date(today));
   const dates = [...new Set(records.map((record) => record.date))].reverse();
   const daySessions = state.sessions.filter(
     (s) => s.status === 'COMPLETED' && localDay(s.startedAt) === selectedDate,
@@ -72,11 +77,16 @@ export default function GrowthScreen() {
             <ProgressTrend records={records} metric={metric} onMetric={setMetric} />
           </Card>
           <SectionTitle>
-            自己ベスト · 全期間{side ? (side === 1 ? ' · 左' : ' · 右') : ''}
+            自己ベスト · {periodLabels[period]}{side ? (side === 1 ? ' · 左' : ' · 右') : ''}
           </SectionTitle>
           <Card>
+            <View style={styles.wrap}>
+              {(['all', 'month', 'year'] as const).map((key) => <Chip key={key}
+                label={periodLabels[key]} active={period === key} onPress={() => setPeriod(key)} />)}
+            </View>
+            <Text style={[styles.small, { marginVertical: 8 }]}>対象：{period === 'all' ? 'すべての完了記録' : `${new Date(today).getFullYear()}年${period === 'month' ? `${new Date(today).getMonth() + 1}月` : ''}の初日から今日まで`}</Text>
             {(['weight', 'reps'] as const).map((key) => {
-              const best = personalBest(records, key);
+              const best = personalBest(bestRecords, key);
               return (
                 <View key={key} style={{ marginBottom: 12 }}>
                   <Text style={styles.small}>{metricLabels[key]}</Text>
@@ -95,17 +105,18 @@ export default function GrowthScreen() {
                   ) : (
                     <Text style={styles.body}>
                       {key === 'weight'
-                        ? '重量ありの記録がありません。'
-                        : 'まだ完了した記録がありません。'}
+                        ? 'この期間に重量ありの記録がありません。'
+                        : 'この期間に完了した記録がありません。'}
                     </Text>
                   )}
                 </View>
               );
             })}
             <Text style={styles.small}>
-              実際に記録した重量・回数です。記録を押すと、その日の全セットを確認できます。
+              実際に記録した重量・回数です。最多回数には異なる重量も含みます。記録を押すと、その日の全セットを確認できます。
             </Text>
           </Card>
+          <RecordComparison key={`${exercise.id}:${side}`} records={records} onOpenRecord={(record) => setSelectedDate(record.date)} />
           <Button
             label={history ? '履歴を閉じる' : '履歴を見る'}
             secondary

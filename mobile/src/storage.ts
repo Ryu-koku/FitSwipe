@@ -119,11 +119,15 @@ async function writeState(state: AppState) {
   if (writes.length) await AsyncStorage.multiSet(writes);
   const raw = JSON.stringify(next.manifest);
   await AsyncStorage.setItem(KEY, raw);
-  const keep = new Set(Object.values(next.manifest.parts).flat(2));
-  const stale = previous ? Object.values(previous.manifest.parts).flat(2) : (await AsyncStorage.getAllKeys()).filter(ownedKey);
   saved = { ...next, raw };
-  const remove = stale.filter((key) => !keep.has(key));
-  if (remove.length) await AsyncStorage.multiRemove(remove);
+  // The manifest is the commit. Cleanup is retried on load; its failure must
+  // not make the provider retain the old state after disk already advanced.
+  try {
+    const keep = new Set(Object.values(next.manifest.parts).flat(2));
+    const stale = previous ? Object.values(previous.manifest.parts).flat(2) : (await AsyncStorage.getAllKeys()).filter(ownedKey);
+    const remove = stale.filter((key) => !keep.has(key));
+    if (remove.length) await AsyncStorage.multiRemove(remove);
+  } catch { /* Committed data remains readable. */ }
 }
 
 async function readState(raw: string, manifest: StateManifest): Promise<AppState> {
@@ -142,9 +146,11 @@ async function readState(raw: string, manifest: StateManifest): Promise<AppState
   for (const name of WHOLE) if (manifest.parts[name]) state[name] = wholes[name] = read(manifest.parts[name][0]);
   saved = { raw, manifest, pages, values: wholes };
   // Remove keys of interrupted saves and of the previous storage format.
-  const referenced = new Set(keys);
-  const orphans = (await AsyncStorage.getAllKeys()).filter((key) => ownedKey(key) && !referenced.has(key));
-  if (orphans.length) await AsyncStorage.multiRemove(orphans);
+  try {
+    const referenced = new Set(keys);
+    const orphans = (await AsyncStorage.getAllKeys()).filter((key) => ownedKey(key) && !referenced.has(key));
+    if (orphans.length) await AsyncStorage.multiRemove(orphans);
+  } catch { /* Cleanup cannot invalidate a complete profile. */ }
   return state as unknown as AppState;
 }
 
