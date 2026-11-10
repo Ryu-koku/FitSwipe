@@ -1,0 +1,19 @@
+{
+  "mode": "built-in image_gen",
+  "approved": {
+    "file": "approved.png",
+    "prompt": "Create ONE premium finished mobile app icon for FitSwipe, a Japanese strength workout logging app where users swipe cards to complete exercise sets. Concept B: two thick overlapping rounded workout cards tilted slightly to imply a swipe, front card contains one bold simplified dumbbell pictogram with 2 thick bar ends. Clear white card faces, subtle mint-teal rear card, rich deep teal (#006d67) full-bleed background. The cards as a group occupy only the central 60 percent of the image for safe circular crop. A distinctive, extremely simple compact silhouette, geometric, precise, optical balance. Show strength training plus the ease of swiping. Brand palette matches a clean white and teal interface. Premium contemporary graphic identity, flat vector-like illustration with crisp contours, no complex detail, no photographic or 3D effects. The image itself is the square app icon with opaque background to all four edges; no rounded-square tile within the image. Output one single square app icon, no contact sheet, no text, letters, numerals, labels, phone mockups, external shadow, border or watermark. Readable at tiny 32-pixel size."
+  },
+  "androidForeground": {
+    "file": "android-foreground-source.png",
+    "reference": "approved.png",
+    "transparent_background": true,
+    "prompt": "Use case: background-extraction. This referenced image is the APPROVED FitSwipe icon; preserve the existing design exactly. Extract ONLY the two overlapping cards, white front card and mint-green rear card, including the dark teal dumbbell printed on the white card. Remove ONLY the full teal square background outside the cards, replacing it with true alpha transparency. Keep the exact front/rear card contours, relative size, positions, rotation, overlap and crisp edges from the original. Keep the dark teal dumbbell OPAQUE, not transparent, since it is printed on the white card. Keep the mint rear card, white front card and dark teal dumbbell unchanged in color and shape. Do not redesign, enlarge, recenter, add shadow, add text, add a tile, or change the square canvas/canvas margins. No checkerboard pixels; use true transparent alpha. One square transparent PNG."
+  },
+  "androidMonochrome": {
+    "file": "android-monochrome-mask.png",
+    "reference": "approved.png",
+    "transparent_background": false,
+    "prompt": "Create a clean technical BLACK AND WHITE stencil mask of the approved icon in the reference image. Keep EXACTLY the source icon's composition: two overlapping rounded cards, mint rear card tilted counterclockwise, white front card tilted clockwise, dumbbell on front. Convert BOTH card faces into flat pure WHITE (#FFFFFF). Convert the entire outside square background into flat pure BLACK (#000000). Convert the entire dumbbell shape, including all its plates and handle, into flat pure BLACK (#000000), so it looks like a bold clean dumbbell-shaped hole through the front white card. Make a narrow pure BLACK separating line at the overlap between front and rear cards, to distinguish two layers. Very clean smooth vector-style contours. No texture, no grey, no gradient, no shadows, no extra speckles, no artifacts, no thin outlines around the dumbbell: dumbbell must be a SOLID BLACK silhouette cut out from a SOLID WHITE card. NOT transparent: opaque BLACK background required because this image will be converted into an alpha mask by a build pipeline. Keep same square canvas and original margins; don't enlarge or recenter the symbol. One opaque black and white square PNG."
+  }
+}

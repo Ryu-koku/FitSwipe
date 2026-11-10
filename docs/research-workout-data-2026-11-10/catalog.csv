@@ -1,0 +1,419 @@
+﻿ID,分野,表示候補,役立つ判断,必要データ,入力と制約,優先度,根拠区分,観察ID,公式出典URL
+T01,セット前・次の行動,各セット行に前回の重量×回数と日付,今回の入力と比較すべき出発点,記録,同種目・同じ左右・セット位置を優先。日付も併記し、未記録の機材/ROM/休憩まで同条件とは断定しない。,P0,観察,T01,"https://www.hevyapp.com/features/track-exercises/
+https://api3.liftosaur.com/features/workout-screen"
+T02,セット前・次の行動,同種目・ルーチン・機材・期間で比較条件を絞る,種目順や疲労条件が近い比較か,追加,同プリセットID/種目/左右/期間は既存記録から絞れる。ジム/機材ID・条件タグ・過去の実施順は追加保存が必要。,P2,観察＋整理/案,T02 D81 J02,"https://www.hevyapp.com/features/track-exercises/
+https://www.reponestrength.com/metrics
+https://www.reponestrength.com/knowledge
+https://apps.apple.com/jp/app/id6792484714"
+T03,セット前・次の行動,多週プログラムの同じ日・同じセット位置の履歴,週をまたぐ同条件での進行,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察,T03,https://api3.liftosaur.com/features/workout-screen
+T04,セット前・次の行動,現在のセットに対応した過去ベスト/Best AMRAP,どこまで達成すれば記録か,記録,現在の重量・回数・左右・完了フラグ・種目/セッション日・粗い部位・身体測定から集計可能。比較条件の限界を付記。,P2,観察,T04,https://api3.liftosaur.com/features/workout-screen
+T05,セット前・次の行動,目標の重量・回数・セット・余力と実績を区別する,計画通りか、予定以上に追い込んだか,追加,処方重量/回数/セット/余力と実績を別保存。当初の計画と変更版を固定し、後から現プリセットを参照して復元しない。,P1,観察,T05 A01 A02,"https://alphaprogression.com/en/blog/alpha-progression-guide
+https://gymbookapp.com/faq
+https://help.macrofactorapp.com/en/articles/305-understanding-and-using-smart-progressions
+https://help.macrofactorapp.com/en/articles/385-what-is-rir-and-how-should-i-use-it-during-training
+https://github.com/astashov/liftosaur/blob/master/CHANGELOG.md"
+T06,セット前・次の行動,同じ重量における平均回数と回数PR,重量を上げなくても「いつもより良い」か,記録,同種目・左右・重量で回数を比較。重量刻み、無負荷、過去の条件未記録を区別。,P0,観察,T06,https://help.strengthlog.com/help-article/how-to-record-a-workout/
+T07,セット前・次の行動,セットごとのe1RM/e10RM/量を選択表示,重量と回数が異なるセットの目安比較,記録,現在の重量・回数・左右・完了フラグ・種目/セッション日・粗い部位・身体測定から集計可能。比較条件の限界を付記。,P2,観察,T07,https://alphaprogression.com/en/blog/alpha-progression-guide
+T08,セット前・次の行動,その重量が自己1RMの何%か,今日のセットの相対強度,記録,現在の重量・回数・左右・完了フラグ・種目/セッション日・粗い部位・身体測定から集計可能。比較条件の限界を付記。,P2,観察,T08,https://help.strengthlog.com/help-article/how-to-record-a-workout/
+T09,セット前・次の行動,セット重量が自分の体重の何倍か,体格に対する荷重の大きさ,記録,現在の重量・回数・左右・完了フラグ・種目/セッション日・粗い部位・身体測定から集計可能。比較条件の限界を付記。,P2,観察,T09,https://help.strengthlog.com/help-article/how-to-record-a-workout/
+T10,セット前・次の行動,自己maxを基準としたSTRAINのゾーン,次セットが軽い/重い領域か,記録,現在の重量・回数・左右・完了フラグ・種目/セッション日・粗い部位・身体測定から集計可能。比較条件の限界を付記。,P2,観察,T10,https://gravitus.com/
+T11,セット前・次の行動,PRを超えるのに必要な回数,次セットの具体的な挑戦目標,記録,実測の同重量PRがあれば「あと1回」。別重量からの必要回数は推定と明記し、対象回数上限を設ける。,P0,観察,T11,https://gravitus.com/
+T12,セット前・次の行動,直近実績から次セットの重量・回数を示す,疲労や予想外の好不調への調整,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P1,観察,T12 A04,"https://alphaprogression.com/en/blog/alpha-progression-progression-recommendations
+https://alphaprogression.com/en/glossary/progression-recommendations
+https://help.macrofactorapp.com/en/articles/305-understanding-and-using-smart-progressions
+https://help.macrofactorapp.com/en/articles/385-what-is-rir-and-how-should-i-use-it-during-training"
+T13,セット前・次の行動,重量刻みに合わせ、同重量で回数を増やす案も示す,増量が大き過ぎるなら先に回数を増やすか,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P1,観察,T13 A09,"https://alphaprogression.com/en/blog/alpha-progression-progression-recommendations
+https://alphaprogression.com/en/glossary/progression-recommendations
+https://help.macrofactorapp.com/en/articles/305-understanding-and-using-smart-progressions
+https://help.macrofactorapp.com/en/articles/385-what-is-rir-and-how-should-i-use-it-during-training"
+T14,セット前・次の行動,理論目標重量→実際に組める重量と丸め理由,なぜ計画値と表示重量が違うか,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察,T14,https://api3.liftosaur.com/features/workout-screen
+T15,セット前・次の行動,左右それぞれのプレート構成,今から何を装着するか,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察,T15,"https://liftinapp.co/
+https://api3.liftosaur.com/features/workout-screen"
+T16,セット前・次の行動,ウォームアップの段階別重量×回数,作業セットまでどう準備するか,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察,T16,"https://liftinapp.co/
+https://alphaprogression.com/en/blog/alpha-progression-guide"
+T17,セット前・次の行動,前回/固定メモ・機材設定と写真を種目に結び付ける,マシン座席やフォーム条件を再現できるか,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P1,観察＋整理/案,T17 A71 J09,"https://alphaprogression.com/en/blog/alpha-progression-guide
+https://www.repcountapp.com/features
+https://gravl.ai/help/gravl-science-understand-your-recommended-weights
+https://dr-muscle.com/new-dr-muscle-x-2026/
+https://tailrep.com/"
+T18,セット前・次の行動,種目共通、特定ルーチン内、今回セットのメモを区別,恒常条件と当日の出来事の区別,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察,T18,"https://gymbookapp.com/faq
+https://help.strengthlog.com/help-article/how-to-record-a-workout/"
+T19,セッション・休憩・時間,セット完了数/予定数と未実施箇所,残りの作業、飛ばした箇所,記録,現在のセット一覧に対する完了/残りは算出可能。当初の計画達成率には開始時の分母を別保存する。,P0,観察,T19,"https://gymbookapp.com/
+https://api3.liftosaur.com/features/workout-screen"
+T20,セッション・休憩・時間,目標未達・未実施・成功0回の試技・追加失敗を区別する,失敗とスキップを混同しない,追加,既存の完了/skipは利用できる。0成功回・失敗試技・技術的失敗を表す状態を追加し、既存の正の回数検証を見直す。,P1,観察,T20 X21,"https://support.stronglifts.com/article/212-log-sets
+https://help.strongapp.io/article/166-set-tags
+https://help.hevyapp.com/hc/en-us/articles/34896293707927-Set-Types-in-Hevy-Explained-Drop-Sets-Warm-Up-Sets-and-More"
+T21,セッション・休憩・時間,休憩残りだけでなくゼロ後の超過時間,実際に何分休んだか,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察,T21,https://alphaprogression.com/en/blog/alpha-progression-guide
+T22,セット前・次の行動,目的に合わせ、運動中に追う主指標を選ぶ,自分の目的の指標をトレ中に追える,記録,現在の重量・回数・左右・完了フラグ・種目/セッション日・粗い部位・身体測定から集計可能。比較条件の限界を付記。,P2,観察＋整理/案,T22 X29,"https://help.strongapp.io/article/226-focus-metric
+https://knowledge.tonal.com/kb/guide/en/how-to-use-personalized-weekly-targets-IcOTXeWcYl/Steps/4353081"
+T23,セット前・次の行動,ロック画面/通知に今の種目・セット・推奨・休憩,端末を開かず次の行動を理解,記録,現在の重量・回数・左右・完了フラグ・種目/セッション日・粗い部位・身体測定から集計可能。比較条件の限界を付記。,P2,観察,T23,"https://alphaprogression.com/en/blog/alpha-progression-guide
+https://liftinapp.co/"
+T24,PR・筋力・相対比較,最重量・e1RM・1セット量・1回の種目合計量を別PRに,何が改善した記録なのか,記録,現在の重量・回数・左右・完了フラグ・種目/セッション日・粗い部位・身体測定から集計可能。比較条件の限界を付記。,P2,観察,T24,https://help.hevyapp.com/hc/en-us/articles/38279531346455-Set-Records-vs-Personal-Records
+T25,PR・筋力・相対比較,規定回数ごとの実測最大重量を示す,自分が鍛えている回数帯の進歩,記録,現在の重量・回数・左右・完了フラグ・種目/セッション日・粗い部位・身体測定から集計可能。比較条件の限界を付記。,P0,観察,T25 D01,"https://help.hevyapp.com/hc/en-us/articles/38279531346455-Set-Records-vs-Personal-Records
+https://help.strongapp.io/article/237-about-exercise-detail
+https://tempo.fit/blog/a-new-era-for-tempo
+https://support.tempo.fit/support/solutions/articles/151000154714-3d-tempo-vision-form-feedback"
+T26,PR・筋力・相対比較,実測RM表と式による予測RM表を切替,実際に挙げたものと推測の分離,記録,現在の重量・回数・左右・完了フラグ・種目/セッション日・粗い部位・身体測定から集計可能。比較条件の限界を付記。,P2,観察,T26,https://www.fitnotesapp.com/progress_tracking/
+T27,PR・筋力・相対比較,高回数で達成した重量が低回数RMも満たす場合を淡く表示,実測その回数の記録か、上位記録からの包含か,記録,現在の重量・回数・左右・完了フラグ・種目/セッション日・粗い部位・身体測定から集計可能。比較条件の限界を付記。,P2,観察,T27,https://www.fitnotesapp.com/progress_tracking/
+T28,PR・筋力・相対比較,PRに元セットと達成日を付け、元ワークアウトへ移動,数値の根拠と当日の条件,記録,現在の重量・回数・左右・完了フラグ・種目/セッション日・粗い部位・身体測定から集計可能。比較条件の限界を付記。,P0,観察,T28,"https://www.hevyapp.com/features/gym-progress/
+https://www.liftosaur.com/features/graphs"
+T29,PR・筋力・相対比較,現在PRだけでなく、同回数PRの更新履歴,停滞期間や改善の階段,記録,現在の重量・回数・左右・完了フラグ・種目/セッション日・粗い部位・身体測定から集計可能。比較条件の限界を付記。,P2,観察,T29,"https://www.getfitnotes.com/docs/records.html
+https://heavyset.app/"
+T30,PR・筋力・相対比較,全期間PR、今年PR、任意期間PRを別に保持,復帰期や周期内での成功,記録,現在の重量・回数・左右・完了フラグ・種目/セッション日・粗い部位・身体測定から集計可能。比較条件の限界を付記。,P0,観察,T30,"https://support.repcountapp.com/article/50-what-is-included-in-repcount-premium
+https://www.getfitnotes.com/docs/records.html"
+T31,PR・筋力・相対比較,同じセットが期間PRかつ全期間PRであることを色で表示,小さな成功と生涯最高の関係,記録,現在の重量・回数・左右・完了フラグ・種目/セッション日・粗い部位・身体測定から集計可能。比較条件の限界を付記。,P2,観察,T31,https://www.getfitnotes.com/docs/records.html
+T32,PR・筋力・相対比較,種目全期間top5セットと最近のセット,最高一発だけに依存しない実力把握,記録,現在の重量・回数・左右・完了フラグ・種目/セッション日・粗い部位・身体測定から集計可能。比較条件の限界を付記。,P2,観察,T32,https://www.daptis.app/features/progressive-overload-tracking
+T33,PR・筋力・相対比較,今回の改善・全期間PR・目標達成を区別して振り返る,運動中の達成感と後の振り返り,追加,前回比やPRは既存ログで表示可。個人目標の達成まで一緒に扱うなら、目標値・期間・当時の定義を追加保存する。,P1,観察＋整理/案,T33 J23,"https://help.hevyapp.com/hc/en-us/articles/38279531346455-Set-Records-vs-Personal-Records
+https://www.jefit.com/support/faq
+https://apps.apple.com/jp/app/id6792484714"
+T34,PR・筋力・相対比較,初回は基準記録として扱い、更新PR扱いしない,初回祝いと本当の改善の区別,記録,現在の重量・回数・左右・完了フラグ・種目/セッション日・粗い部位・身体測定から集計可能。比較条件の限界を付記。,P0,観察,T34,https://www.daptis.app/features/progressive-overload-tracking
+T35,PR・筋力・相対比較,種目に合う回数・保持秒数・技能段階の実績を示す,運動に合った達成基準,追加,自重反復は既存記録。保持秒数・技能段階・補助量/加重の構造化は追加。0kgから身体の実効負荷は分からない。,P1,観察＋整理/案,T35 J10,"https://help.hevyapp.com/hc/en-us/articles/38279531346455-Set-Records-vs-Personal-Records
+https://help.hevyapp.com/hc/en-us/articles/44098622782487-Bodyweight-Exercises-in-Hevy-Bodyweight-vs-Assisted-vs-Weighted
+https://calistree.app/knowledge?id=skillTrees
+https://calistree.app/knowledge?id=tipMastery"
+T36,PR・筋力・相対比較,推定1RM計算の元セット・式・対象回数上限,指標の信頼できる範囲,記録,現行式は1回を実測値、2〜10回をweight×(1+reps/30)、11回以上は対象外。RIR・ROMの補正は現状なし。,P2,観察,T36,"https://www.fitnotesapp.com/progress_tracking/
+https://support.stronglifts.com/article/89-graphs"
+T37,PR・筋力・相対比較,実際の挙上重量と推定最大重量の推移を区別する,予測値上昇と本当の使用重量上昇の差,記録,現在の重量・回数・左右・完了フラグ・種目/セッション日・粗い部位・身体測定から集計可能。比較条件の限界を付記。,P2,観察,T37 D02,"https://www.liftosaur.com/features/graphs
+https://support.vitruve.fit/metrics-calculated-by-vitruve"
+T38,PR・筋力・相対比較,Training Maxの履歴を通常1RMと分ける,計画基準を保守的にした変更か、実力変化か,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察,T38,"https://liftin-workout-app.squarespace.com/
+https://www.getfitnotes.com/docs/stats-graphs-and-charts.html"
+T39,PR・筋力・相対比較,Squat+Bench+DeadliftのTotal,主要3種目を合わせた進歩,記録,既存logic.tsに名称を正規化して3種目の全期間最大e1RMを合算する実装がある。現行ホームに表示する専用UIは確認できない。競技日の実測Totalとは別。,P2,観察,T39,https://support.stronglifts.com/article/89-graphs
+T40,PR・筋力・相対比較,比較集団の条件を明示した筋力レベル・パーセンタイル,似た条件の利用者の中での位置,外部基準,同条件の比較集団と出典・期間・標本数が必要。手入力実績から相対位置を出すことは可能だが、Tonal等の独自順位をそのまま再現はできない。,P3,観察＋整理/案,T40 T41 D04 J19,"https://www.hevyapp.com/features/gym-progress/
+https://gravitus.com/
+https://gravitus.com/pro/
+https://knowledge.tonal.com/kb/guide/en/strength-score-wTNfx9Xu5q/Steps/4184309
+https://strengthlevel.com/strength-standards
+https://strengthlevel.com/faq
+https://www.gymstreak.com/research/strength-standards"
+T42,PR・筋力・相対比較,e1RM÷体重の経時推移,増量/減量中の相対筋力の変化,記録,現在の重量・回数・左右・完了フラグ・種目/セッション日・粗い部位・身体測定から集計可能。比較条件の限界を付記。,P2,観察,T42,https://support.repcountapp.com/article/35-how-do-i-make-the-most-out-of-the-charts
+T43,時系列・比較・停滞,8回など回数を固定した各回の最重量の線,同じ回数で実際に増量したか,記録,現在の重量・回数・左右・完了フラグ・種目/セッション日・粗い部位・身体測定から集計可能。比較条件の限界を付記。,P0,観察,T43,https://www.fitnotesapp.com/progress_tracking/
+T44,時系列・比較・停滞,最大重量、平均重量、総回数、1セット平均回数の推移,強度が上がったか、回数帯を変えたか,記録,現在の重量・回数・左右・完了フラグ・種目/セッション日・粗い部位・身体測定から集計可能。比較条件の限界を付記。,P2,観察,T44,https://support.repcountapp.com/article/35-how-do-i-make-the-most-out-of-the-charts
+T45,時系列・比較・停滞,日々の実績線と移動平均/傾向線,日差に埋もれた長期方向,記録,現在の重量・回数・左右・完了フラグ・種目/セッション日・粗い部位・身体測定から集計可能。比較条件の限界を付記。,P2,観察,T45,"https://www.repcountapp.com/features
+https://support.repcountapp.com/article/35-how-do-i-make-the-most-out-of-the-charts
+https://www.fitnotesapp.com/progress_tracking/"
+T46,時系列・比較・停滞,グラフに伸びているかの判定と変化量,グラフを読めない人も方向を把握,記録,現在の重量・回数・左右・完了フラグ・種目/セッション日・粗い部位・身体測定から集計可能。比較条件の限界を付記。,P2,観察,T46,https://gravitus.com/
+T47,時系列・比較・停滞,同じ長さの直前期間を重ねるグラフ,最近28日など、期間を揃えた比較,記録,現在の重量・回数・左右・完了フラグ・種目/セッション日・粗い部位・身体測定から集計可能。比較条件の限界を付記。,P0,観察,T47,"https://help.strengthlog.com/help-article/the-home-screen/
+https://help.hevyapp.com/hc/en-us/articles/35702030346903-Hevy-Statistics-Explained-Track-Your-Training-Progress-and-Muscle-Growth"
+T48,時系列・比較・停滞,月/年の回数・量・セット等の前期差分と平均,生活や計画変更後の実行量,記録,現在の重量・回数・左右・完了フラグ・種目/セッション日・粗い部位・身体測定から集計可能。比較条件の限界を付記。,P0,観察,T48,https://help.strengthlog.com/help-article/training-reports/
+T49,時系列・比較・停滞,期間内最小/最大e1RMと総量,最も良い日だけでない変動幅,記録,現在の重量・回数・左右・完了フラグ・種目/セッション日・粗い部位・身体測定から集計可能。比較条件の限界を付記。,P2,観察,T49,https://www.jefit.com/features/one-rep-max
+T50,時系列・比較・停滞,種目、部位、全体で切替え、日/週/月/年集約,詳細から全体へ同じ問いを広げる,記録,現在の重量・回数・左右・完了フラグ・種目/セッション日・粗い部位・身体測定から集計可能。比較条件の限界を付記。,P2,観察,T50,"https://www.repcountapp.com/features
+https://support.repcountapp.com/article/35-how-do-i-make-the-most-out-of-the-charts"
+T51,時系列・比較・停滞,複数種目を同一図に重ね、組合せをプリセット化,複数の主要種目が同時に伸びているか,記録,現在の重量・回数・左右・完了フラグ・種目/セッション日・粗い部位・身体測定から集計可能。比較条件の限界を付記。,P2,観察,T51,https://www.getfitnotes.com/docs/stats-graphs-and-charts.html
+T52,時系列・比較・停滞,複数グラフの横軸期間を統一,違う開始時期の線を誤比較しない,記録,現在の重量・回数・左右・完了フラグ・種目/セッション日・粗い部位・身体測定から集計可能。比較条件の限界を付記。,P2,観察,T52,https://www.liftosaur.com/features/graphs
+T53,時系列・比較・停滞,計画変更・実施量・その後の成果を同じ時間軸で見る,どの計画を行っていた時期の変化か,追加,プログラムの名称/版/変更日時が必要。既存の現在プリセットだけでは変更前後を固定できない。,P1,観察＋整理/案,T53 X27,https://www.liftosaur.com/features/graphs
+T54,時系列・比較・停滞,グラフ上の点に当日のメモ/プログラム状態を表示,好不調や設定変更の文脈,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察,T54,https://www.liftosaur.com/features/graphs
+T55,時系列・比較・停滞,グラフから実施順を含む当日の全セッションへ移動,後半に回したため落ちたのかを確認,追加,元セッションの重量/回数は既存記録。実施した種目順の再現にはイベント列を追加。setOrderは種目内の順序。,P1,観察,T55,https://www.hevyapp.com/features/gym-progress/
+T56,時系列・比較・停滞,100kg×5回以上などの条件で日付を絞るカレンダー,特定の水準を達成した日はいつか,記録,現在の重量・回数・左右・完了フラグ・種目/セッション日・粗い部位・身体測定から集計可能。比較条件の限界を付記。,P2,観察,T56,https://www.fitnotesapp.com/calendar/
+T57,時系列・比較・停滞,同じ計画の各実施回をセット単位で比較,同じメニューの再現性/改善,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察,T57,https://www.daptis.app/features/progressive-overload-tracking
+T58,時系列・比較・停滞,ゼロ起点/自動範囲の縦軸と点選択,小さな上下を誇張せず読む,記録,現在の重量・回数・左右・完了フラグ・種目/セッション日・粗い部位・身体測定から集計可能。比較条件の限界を付記。,P2,観察,T58,https://www.fitnotesapp.com/progress_tracking/
+T59,部位・量・頻度,部位別の週セット数と前期間,鍛えたい部位への量が増えたか,記録,現行の粗いmuscleGroup分類と完了セットから集計可。不明分類の件数と片側/両側の数え方を併記する。,P0,観察,T59,"https://help.hevyapp.com/hc/en-us/articles/35702030346903-Hevy-Statistics-Explained-Track-Your-Training-Progress-and-Muscle-Growth
+https://help.hevyapp.com/hc/en-us/articles/44128140257431-How-Does-Sets-per-Muscle-Group-Work"
+T60,部位・量・頻度,主働筋/副働筋・direct/indirectの寄与セットを分ける,複合種目が複数部位へどう加算されたか,追加,主働/副働の多対多辞書・寄与係数・WU種別が必要。係数付きセットは配分モデルであり筋成長量ではない。,P1,観察,T60 A48,"https://help.hevyapp.com/hc/en-us/articles/44128140257431-How-Does-Sets-per-Muscle-Group-Work
+https://www.liftosaur.com/features/week-insights
+https://gravl.ai/help/sets-per-muscle-track-your-weekly-volume"
+T61,部位・量・頻度,筋別セット数を開くと寄与種目・内訳,なぜ胸が12セットなのか,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P1,観察,T61,https://www.liftosaur.com/features/week-insights
+T62,部位・量・頻度,筋群別セットの個人目標帯と一般的な範囲を区別する,今週その部位を追加/削減するか,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P1,観察,T62 A51,"https://www.liftosaur.com/features/week-insights
+https://gravl.ai/help/sets-per-muscle-track-your-weekly-volume"
+T63,部位・量・頻度,部位ごとのトレーニング日数と頻度目標,同量を一度に集中/複数日に分散したか,追加,実施日数自体は既存記録から算出可。部位別の頻度目標は追加設定。,P1,観察,T63,https://www.liftosaur.com/features/week-insights
+T64,部位・量・頻度,週内の刺激量累計を個人目標帯に重ねる,週の途中でどこまで実行したか,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察,T64,https://www.jefit.com/features/progress-index
+T65,部位・量・頻度,部位ごとの刺激量の現在/目標値,次にどの筋へ作業を配分するか,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察,T65,https://www.jefit.com/features/progress-index
+T66,部位・量・頻度,低回数/高回数セットの数と構成比,重め・回数多めの作業配分,記録,現在の重量・回数・左右・完了フラグ・種目/セッション日・粗い部位・身体測定から集計可能。比較条件の限界を付記。,P2,観察,T66,https://www.liftosaur.com/features/week-insights
+T67,部位・量・頻度,上半身/下半身/体幹/Push/Pull/Legs別のセット,部位とは別の動作群で偏りを見る,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察,T67,https://www.liftosaur.com/features/week-insights
+T68,部位・量・頻度,垂直Push/Pull、水平Push/Pull、Squat/Hingeの比率,対向する動作パターンの不足,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察,T68,https://www.jefit.com/features/progress-index
+T69,部位・量・頻度,大きな筋群から細かな部位配分へ展開する,「背中の日」の中で何をしているか,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察,T69 A52,"https://www.jefit.com/features/bodymap
+https://gravl.ai/help/sets-per-muscle-track-your-weekly-volume"
+T70,部位・量・頻度,実施部位の前後ボディマップを週別に表示,未実施部位を直感的に見つける,記録,既存の粗い部位を実施量の地図として表示。細かな筋・回復・活性化率に置き換えない。,P1,観察,T70,https://help.hevyapp.com/hc/en-us/articles/35702030346903-Hevy-Statistics-Explained-Track-Your-Training-Progress-and-Muscle-Growth
+T71,回復・全活動負荷,筋群別の回復推定と時間経過を身体図で示す,部位選択の参考、休ませる部位,追加,表示モデルの定義、部位辞書、経過時間、必要なら主観補正。メーカー独自の回復%を再現・実測したとは扱わない。,P2,観察,T71 A37,"https://www.jefit.com/features/muscle-recovery
+https://gravl.ai/help/gravl-muscle-fatigue-and-recovery"
+T72,回復・全活動負荷,実施配分・局所回復推定・全身readinessを区別する,たくさん実施した事実と回復推定の区別,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察,T72 A36,"https://www.jefit.com/features/bodymap
+https://www.jefit.com/features/muscle-recovery
+https://gravl.ai/help/gravl-muscle-fatigue-and-recovery"
+T73,部位・量・頻度,種目/部位の使用頻度ランキング,特定種目への依存、最近使っていない種目,記録,現在の重量・回数・左右・完了フラグ・種目/セッション日・粗い部位・身体測定から集計可能。比較条件の限界を付記。,P1,観察,T73,"https://help.hevyapp.com/hc/en-us/articles/35702030346903-Hevy-Statistics-Explained-Track-Your-Training-Progress-and-Muscle-Growth
+https://support.repcountapp.com/article/35-how-do-i-make-the-most-out-of-the-charts"
+T74,計画・進行・変更理由,作る前の週プログラムの部位量・日数,実施前に偏りを修正,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察,T74,https://www.liftosaur.com/features/web-editor
+T75,計画・進行・変更理由,計画の週ごと量・強度の推移,ピークや軽い週を含めた周期構成,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察,T75,https://www.liftosaur.com/features/web-editor
+T76,セッション・休憩・時間,終了直後に時間・量・セット・PR・部位・主観RPE,今日の作業と主観をまとめて振り返る,追加,重量・回数・量・経過時間・PRは既存記録。RPEや正確な当初計画との差には追加入力/保存が必要。,P1,観察,T76,https://www.jefit.com/support/faq
+T77,セッション・休憩・時間,実動・休憩・器具準備/調整の時間内訳,長時間の理由、短縮できる箇所,追加,セット開始/終了、休憩開始/終了、中断/準備のイベントが必要。createdAt/updatedAtや終了−開始から内訳を捏造しない。,P2,観察,T77,https://www.jefit.com/support/faq
+T78,時系列・比較・停滞,未完週を同条件で比較し、比較の基準日を示す,週途中を「減った」と誤認させない,記録,現在の重量・回数・左右・完了フラグ・種目/セッション日・粗い部位・身体測定から集計可能。比較条件の限界を付記。,P0,観察＋整理/案,T78 X33,https://www.liftosaur.com/features/week-insights
+T79,習慣・継続・目標,週の実施回数・筋群・種目・セットの目標と残りを示す,生活に合った頻度を守れたか,追加,回数等の実績と現行の継続週は既存。週目標・筋群/セット目標・分母となる計画を追加する。,P1,観察,T79 A47,"https://help.strongapp.io/article/239-profile-widgets
+https://help.strengthlog.com/help-article/streaks/
+https://help.macrofactorapp.com/en/articles/275-getting-to-know-your-workouts-dashboard"
+T80,習慣・継続・目標,特定種目・部位の回数/量/セットの継続目標,自分固有の習慣が続いているか,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察,T80,https://help.strengthlog.com/help-article/streaks/
+T81,習慣・継続・目標,現在/最長継続、達成日、未達の日と不足量,長期継続と躓いた箇所,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察,T81,https://help.strengthlog.com/help-article/streaks/
+T82,習慣・継続・目標,実施部位付きカレンダーと週/月/年の集計を行き来する,休み日を含む実施配列,記録,現在の重量・回数・左右・完了フラグ・種目/セッション日・粗い部位・身体測定から集計可能。比較条件の限界を付記。,P0,観察＋整理/案,T82 J06 J07,"https://www.fitnotesapp.com/calendar/
+https://apps.apple.com/jp/app/id6799612395"
+T83,身体・写真・生活,体重の原値・トレンド・変化速度・目標を分ける,水分等の日差から長期変化を分ける,追加,体重/体脂肪/身長の既存履歴から原値/平滑化は算出可。目標と変化速度の表示ルールは追加設定。,P1,観察＋整理/案,T83 J15,"https://support.stronglifts.com/article/89-graphs
+https://help.macrofactorapp.com/dashboard/weight_trend
+https://help.macrofactorapp.com/en/articles/19-change-rate"
+T84,身体・写真・生活,挙上グラフに体重を重ねる,増減量とパフォーマンス変化が同時か,記録,現在の重量・回数・左右・完了フラグ・種目/セッション日・粗い部位・身体測定から集計可能。比較条件の限界を付記。,P2,観察,T84,https://www.liftosaur.com/features/graphs
+T85,身体・写真・生活,測定方法を揃えた体脂肪率・身体測定の推移,見た目の目標と力の進歩を併せて見る,追加,体重/体脂肪/身長は既存。周囲径、測定方法・機器ID、部位別値は追加記録。,P2,観察＋整理/案,T85 J17,"https://gymbookapp.com/
+https://alphaprogression.com/en/blog/alpha-progression-guide
+https://inbodyusa.com/inbody-app/"
+T86,身体・写真・生活,日付・撮影条件付きの進捗写真を比較する,数値に出ない見た目の変化,計測,撮影/手計時、専用センサー、またはウォッチ/ヘルス連携の実データが必要。重量×回数だけから実測値を作らない。,P3,観察＋整理/案,T86 J16,"https://www.hevyapp.com/features/gym-progress/
+https://lift1up.app/"
+T87,身体・写真・生活,種目・セット・日付へ文章/画像/フォーム動画を結び付ける,数値の条件やフォームを後で確認,計測,種目/セットに紐付くメモ・画像/動画の保存が必要。動画への計測値重畳は別の解析/計測。,P3,観察,T87 A69,"https://help.strengthlog.com/help-article/using-the-video-library/
+https://blog.everfit.io/everfit-may-2026-new-features
+https://help.everfit.io/en/articles/4346734-comments-for-completed-workouts"
+T88,データ品質・定義,初回・履歴不足では前回値や推奨を数値ゼロで埋めない,未記録をゼロ・低実力と誤認しない,記録,現在の重量・回数・左右・完了フラグ・種目/セッション日・粗い部位・身体測定から集計可能。比較条件の限界を付記。,P0,観察,T88 A11,"https://www.hevyapp.com/features/track-exercises/
+https://alphaprogression.com/en/glossary/progression-recommendations
+https://help.macrofactorapp.com/en/articles/305-understanding-and-using-smart-progressions
+https://help.macrofactorapp.com/en/articles/385-what-is-rir-and-how-should-i-use-it-during-training"
+T89,データ品質・定義,2回未満のグラフをサンプルと明示/初期案内,実データが足りない事実と次の操作,記録,現在の重量・回数・左右・完了フラグ・種目/セッション日・粗い部位・身体測定から集計可能。比較条件の限界を付記。,P0,観察,T89,"https://www.daptis.app/features/progressive-overload-tracking
+https://www.liftosaur.com/features/graphs"
+T90,データ品質・定義,自分に必要なダッシュボード項目を選び並べ替える,目的に不要な指標を毎回読まない,記録,現在の重量・回数・左右・完了フラグ・種目/セッション日・粗い部位・身体測定から集計可能。比較条件の限界を付記。,P1,観察＋整理/案,T90 J24,"https://help.strongapp.io/article/239-profile-widgets
+https://www.liftosaur.com/features/graphs
+https://tailrep.com/"
+T91,コーチ・共有,個人記録・月次レポート・継続を画像化,他人へ説明できる達成の形,記録,現在の重量・回数・左右・完了フラグ・種目/セッション日・粗い部位・身体測定から集計可能。比較条件の限界を付記。,P2,観察,T91,"https://www.hevyapp.com/features/gym-progress/
+https://help.strengthlog.com/help-article/training-reports/
+https://help.strengthlog.com/help-article/streaks/"
+T92,計画・進行・変更理由,復帰カードに推奨減量率と再開する具体重量,久しぶりの運動の再開地点,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察,T92,https://support.stronglifts.com/article/71-progression
+T93,計画・進行・変更理由,成功/失敗の仮入力後、次回重量や回数をシミュレーション,自動進行ルールを採用前に理解,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察,T93,https://www.liftosaur.com/features/playground
+T94,データ品質・定義,WU・片側・自重/補助・丸め等の集計定義を示す,数字の定義が違う比較を避ける,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P1,観察,T94 X22,"https://help.hevyapp.com/hc/en-us/articles/44098622782487-Bodyweight-Exercises-in-Hevy-Bodyweight-vs-Assisted-vs-Weighted
+https://help.hevyapp.com/hc/en-us/articles/44128140257431-How-Does-Sets-per-Muscle-Group-Work
+https://gymbookapp.com/faq
+https://help.strengthlog.com/help-article/one-sided-exercises/
+https://help.hevyapp.com/hc/en-us/articles/33882110558743-Workout-Settings-Preferences-Timer-Warm-up-calculator-Plate-Calculator-Smart-Superset-Scrolling
+https://help.strongapp.io/article/166-set-tags"
+T95,データ品質・定義,秒と反復を混ぜた表示の換算前提を明記,便宜的な共通単位と実測値の区別,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察,T95,https://gymbookapp.com/faq
+T96,PR・筋力・相対比較,範囲PRと本当に表彰対象のPRの区別,通知が出ない理由を理解,記録,現在の重量・回数・左右・完了フラグ・種目/セッション日・粗い部位・身体測定から集計可能。比較条件の限界を付記。,P2,観察,T96,https://help.hevyapp.com/hc/en-us/articles/38279531346455-Set-Records-vs-Personal-Records
+A03,セット前・次の行動,セットRIR/RPEとセッション全体の主観強度を尺度付きで示す,初めてでも入力可能,追加,セットRIR/RPE、全体RPE、質問時点と尺度を保存。目標RIRと回答値、未回答を分離する。,P1,観察,A03 A19 A26 D62,"https://help.macrofactorapp.com/en/articles/305-understanding-and-using-smart-progressions
+https://help.macrofactorapp.com/en/articles/385-what-is-rir-and-how-should-i-use-it-during-training
+https://dr-muscle.com/new-dr-muscle-x-2026/
+https://support.trainheroic.com/hc/en-us/articles/18156631592589-Logging-your-Training-Session
+https://tempo.fit/blog/a-new-era-for-tempo
+https://support.vitruve.fit/metrics-calculated-by-vitruve"
+A05,計画・進行・変更理由,次回提案に増量/同重量/減量と変更量を付ける,次に狙うこと,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察,A05,https://www.boostcamp.app/features/auto-progression
+A06,計画・進行・変更理由,「全セット上限rep達成」等の短い変更理由を表示,推奨を理解する,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察,A06,https://www.boostcamp.app/features/auto-progression
+A07,計画・進行・変更理由,提案理由を前回・余力・種目順・セット別分析へ展開する,条件が変わったか,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P1,観察,A07 A08,https://gravl.ai/help/gravl-science-understand-your-recommended-weights
+A10,計画・進行・変更理由,目標範囲内の提案不能を明示し代替組合せを表示,不可能な指示を避ける,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P1,観察,A10,"https://help.macrofactorapp.com/en/articles/305-understanding-and-using-smart-progressions
+https://help.macrofactorapp.com/en/articles/385-what-is-rir-and-how-should-i-use-it-during-training"
+A12,計画・進行・変更理由,推奨値で入力欄を埋めたか前回値かを表示,実測値と予定値を混同しない,記録,現在の重量・回数・左右・完了フラグ・種目/セッション日・粗い部位・身体測定から集計可能。比較条件の限界を付記。,P2,観察,A12,"https://help.macrofactorapp.com/en/articles/305-understanding-and-using-smart-progressions
+https://help.macrofactorapp.com/en/articles/385-what-is-rir-and-how-should-i-use-it-during-training"
+A13,計画・進行・変更理由,今日のプログラム変更が今回限りか将来にも残るか表示,一時代替を固定化しない,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P1,観察,A13,https://help.macrofactorapp.com/en/articles/395-what-does-the-update-program-toggle-do
+A14,計画・進行・変更理由,今回は進行ルールを適用しない状態を表示,不調/意図的な軽練習を扱う,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察,A14,https://github.com/astashov/liftosaur/blob/master/CHANGELOG.md
+A15,計画・進行・変更理由,プログラムの版と過去版からの復元を表示,変更を戻す,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察,A15,https://github.com/astashov/liftosaur/blob/master/CHANGELOG.md
+A16,計画・進行・変更理由,提案→手動修正→採用/拒否→理由の履歴を残す,自分に合わない提案を発見,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,設計案,A16,
+A17,計画・進行・変更理由,推定の根拠件数・条件一致・ばらつきを説明する,どれくらい信用するか,追加,根拠件数/最終日自体は履歴から取得可能。機材一致・推定手法・信頼性には条件記録と検証が必要。,P1,設計案,A17 X30,https://gravl.ai/help/gravl-science-understand-your-recommended-weights
+A18,計画・進行・変更理由,推奨にモデル更新前後や推定方法を付ける,同じ数値の意味の変化を把握,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,設計案,A18,
+A20,主観・症状・体調,パンプの自己評価を種目/筋群に結び付ける,刺激の体感を伝える,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察,A20,https://hypertrophy.zendesk.com/hc/en-us/articles/14605661323671-How-Does-the-App-Determine-When-to-Add-Weight-Reps-and-Sets
+A21,主観・症状・体調,次に鍛える時点の筋肉痛を残す,前回量を振り返る,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察,A21,https://hypertrophy.zendesk.com/hc/en-us/articles/14605661323671-How-Does-the-App-Determine-When-to-Add-Weight-Reps-and-Sets
+A22,主観・症状・体調,「セット量がきつい」という主観を余力と分ける,重量と総量の問題を分ける,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察,A22,https://hypertrophy.zendesk.com/hc/en-us/articles/14605661323671-How-Does-the-App-Determine-When-to-Add-Weight-Reps-and-Sets
+A23,主観・症状・体調,関節痛評価を再表示し前回回答を残す,変化を伝える,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P1,観察,A23,https://releases.rpstrength.com/hypertrophy
+A24,主観・症状・体調,痛み/不快感/筋肉痛の位置と発生タイミングを別欄にする,状況を説明する,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P1,設計案,A24,
+A25,主観・症状・体調,難度と別に好き嫌い・満足度・楽しさ・自信を記録する,続けられる内容を選ぶ,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,設計案,A25 A74,https://ideas.abcfitness.com/forums/940789-client-gym-members-abc-trainerize/suggestions/43800618-allow-ratings-for-specific-exercises
+A27,主観・症状・体調,睡眠・気分・活力・ストレス・筋肉痛の主観を別々に示す,何が変わったかを知る,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P1,観察,A27 D63,https://support.trainheroic.com/hc/en-us/articles/18156547276557-Athlete-Pro-Readiness
+A28,主観・症状・体調,主観readinessの長期平均と最近の平均を並べる,普段からの変化を知る,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察,A28,https://support.trainheroic.com/hc/en-us/articles/18156547276557-Athlete-Pro-Readiness
+A29,主観・症状・体調,本人の通常範囲を帯で表示,他人の平均に引かれない,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察,A29,https://support.trainheroic.com/hc/en-us/articles/18156547276557-Athlete-Pro-Readiness
+A30,主観・症状・体調,下位項目ごとの上向き/下向き矢印を表示,合計点に埋もれる問題を発見,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察,A30,https://support.trainheroic.com/hc/en-us/articles/18156547276557-Athlete-Pro-Readiness
+A31,主観・症状・体調,長めに続く偏りと短期の変動を分ける,単日の上下を過大評価しない,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察,A31,https://support.trainheroic.com/hc/en-us/articles/18156547276557-Athlete-Pro-Readiness
+A32,回復・全活動負荷,センサー由来の全身readinessと手入力を区別,数値の由来を知る,計測,撮影/手計時、専用センサー、またはウォッチ/ヘルス連携の実データが必要。重量×回数だけから実測値を作らない。,P3,観察,A32,https://gravl.ai/help/readiness-know-when-to-push-and-when-to-recover
+A33,回復・全活動負荷,回復/準備点の理由と要素別の寄与を示す,点数低下の理由を知る,計測,撮影/手計時、専用センサー、またはウォッチ/ヘルス連携の実データが必要。重量×回数だけから実測値を作らない。,P3,観察,A33 D71,"https://gravl.ai/help/readiness-know-when-to-push-and-when-to-recover
+https://ouraring.com/blog/readiness-score/"
+A34,回復・全活動負荷,欠測・未認識・校正中・データ不足をゼロと区別する,低い値と欠測を区別,記録,欠測/データ不足の表示は現状でも可能。機器別の校正中/認識不能はその連携があるときに追加する。,P0,観察＋整理/案,A34 D77 J22,"https://gravl.ai/help/readiness-know-when-to-push-and-when-to-recover
+https://support.garmin.com/en-NZ/?faq=LcYGZd4EOZ9PkTY5YRvin5
+https://support.vitruve.fit/understanding-the-vbt-training-screen
+https://playthenics.com/"
+A35,回復・全活動負荷,朝・日中・運動後で状態の更新時点を明示する,いま取れる行動を知る,計測,撮影/手計時、専用センサー、またはウォッチ/ヘルス連携の実データが必要。重量×回数だけから実測値を作らない。,P3,観察,A35 D72,"https://gravl.ai/help/readiness-know-when-to-push-and-when-to-recover
+https://athlyticapp.com/getting-started/"
+A38,回復・全活動負荷,次workoutで使う筋群だけを抽出する,今日に関係する値を見る,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察,A38,https://gravl.ai/help/gravl-muscle-fatigue-and-recovery
+A39,回復・全活動負荷,回復推定の本人による補正とreset状態を表示,体感とのずれを訂正,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察,A39,https://gravl.ai/help/gravl-muscle-fatigue-and-recovery
+A40,回復・全活動負荷,外部取込のrun等が回復推定へ影響したと表示,脚の値が変わった理由を知る,計測,撮影/手計時、専用センサー、またはウォッチ/ヘルス連携の実データが必要。重量×回数だけから実測値を作らない。,P3,観察,A40,https://help.fitbod.me/hc/en-us/articles/360006269014-Muscle-Recovery
+A41,回復・全活動負荷,回復推定の元になった運動と経過を開ける,表示を検証する,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察,A41,https://help.fitbod.me/hc/en-us/articles/360006269014-Muscle-Recovery
+A42,回復・全活動負荷,今日の負荷と短期/長期の負荷を分ける,今日と蓄積の違いを見る,計測,撮影/手計時、専用センサー、またはウォッチ/ヘルス連携の実データが必要。重量×回数だけから実測値を作らない。,P3,観察,A42 D69,"https://gravl.ai/help/readiness-know-when-to-push-and-when-to-recover
+https://support.apple.com/guide/watch/track-your-training-load-apde4c07a6cf/27/watchos/27"
+A43,主観・症状・体調,セッション前の値を実施可否の命令にせず、事後の傾向として出す選択肢,数値を気にしすぎず振り返る,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察,A43,https://support.trainheroic.com/hc/en-us/articles/18156547276557-Athlete-Pro-Readiness
+A44,計画・進行・変更理由,underperformance flagと負荷を緩める選択肢,無理に前回を超えない,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察,A44,https://hypertrophy.zendesk.com/hc/en-us/articles/13516219395735-If-I-get-a-flag-for-underperformance-what-do-I-do
+A45,計画・進行・変更理由,通常・軽め・deload・挑戦・復帰などセッションの目的を示す,今日の低負荷を後退と誤読しない,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察,A45 A46,https://dr-muscle.com/new-dr-muscle-x-2026/
+A49,部位・量・頻度,週と直近7日を切り替える,週境界の見かけのゼロを避ける,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察,A49,https://gravl.ai/help/sets-per-muscle-track-your-weekly-volume
+A50,部位・量・頻度,4週平均と今週を比べる,一時的な変動を判断,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察,A50,https://gravl.ai/help/sets-per-muscle-track-your-weekly-volume
+A53,部位・量・頻度,総挙上量を種目別・外部負荷/自重別に分けて示す,メニュー変更による数字の上下を理解,追加,外部負荷の量は既存から算出可。身体質量寄与・assisted/weighted・可変抵抗の種別を追加し合算規則を固定する。,P2,観察,A53 D08,"https://help.macrofactorapp.com/en/articles/275-getting-to-know-your-workouts-dashboard
+https://knowledge.tonal.com/kb/guide/en/how-to-use-personalized-weekly-targets-IcOTXeWcYl/Steps/4353081"
+A54,部位・量・頻度,volume変化の寄与が大きい種目を示す,何を増減したか知る,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察,A54,https://help.macrofactorapp.com/en/articles/275-getting-to-know-your-workouts-dashboard
+A55,計画・進行・変更理由,ブロックの目的・現在週・残り週・deload予定,今日の位置を理解,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察,A55,https://www.juggernautai.app/blog/juggernautai-v3-0-is-here
+A56,計画・進行・変更理由,過去と今後を一枚のブロック表で見られる,次週へ続く見通しを持つ,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察,A56,https://www.juggernautai.app/blog/juggernautai-v3-0-is-here
+A57,計画・進行・変更理由,日次/週末/ブロック末の回答を区別,判断の時間軸をそろえる,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察,A57,https://help.jtsstrength.com/en/articles/3-how-juggernautai-is-individualized-to-you
+A58,計画・進行・変更理由,大会/テスト日までの期間とpeaking/taperの計画,今追うべき目標を知る,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察,A58,https://www.evolvetrainingapp.com/
+A59,計画・進行・変更理由,大会の試技候補重量と直近実績由来の理由,次のattemptを選ぶ,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察,A59,https://www.evolvetrainingapp.com/
+A60,セッション・休憩・時間,予定/開始中/完了/skipを明確に分ける,記録の意味を理解,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P1,観察,A60,https://help.voltathletics.com/how-do-i-track-accountability-on-my-dashboard
+A61,セッション・休憩・時間,終了・skipを一緒にした指標は分子の定義を表示,成功率を誤読しない,記録,現在の重量・回数・左右・完了フラグ・種目/セッション日・粗い部位・身体測定から集計可能。比較条件の限界を付記。,P2,設計案,A61,https://help.voltathletics.com/how-do-i-track-accountability-on-my-dashboard
+A62,習慣・継続・目標,予定の遵守率を分母・期間・自主追加分と分けて示す,どこまで実施したか知る,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P1,観察＋整理/案,A62 A63 A64,"https://support.trainheroic.com/hc/en-us/articles/18156702628621-Viewing-Compliance-Analytics
+https://help.trainerize.com/hc/en-us/articles/46648417703956-Using-the-Client-Insights-Dashboard
+https://support.physitrack.com/article/46-how-is-patient-adherence-calculated"
+A65,セッション・休憩・時間,実時間と開始/終了の訂正を示す,放置時間を実運動時間と誤認しない,記録,現在の重量・回数・左右・完了フラグ・種目/セッション日・粗い部位・身体測定から集計可能。比較条件の限界を付記。,P1,観察,A65,https://support.trainheroic.com/hc/en-us/articles/18156631592589-Logging-your-Training-Session
+A66,コーチ・共有,所要時間・セット完了率をコーチが一覧で見る,状況を把握する,記録,現在の重量・回数・左右・完了フラグ・種目/セッション日・粗い部位・身体測定から集計可能。比較条件の限界を付記。,P2,観察,A66,https://help.voltathletics.com/how-do-i-track-accountability-on-my-dashboard
+A67,コーチ・共有,RX/Scaledと変更した動作・負荷の条件を示す,比較条件をそろえる,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察＋整理/案,A67 X05,https://support.trainheroic.com/hc/en-us/articles/18156631592589-Logging-your-Training-Session
+A68,コーチ・共有,種目tag付きの実施・感想・症状・質問を時系列で見る,文脈を探さず伝える,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察＋整理/案,A68 J21,"https://blog.everfit.io/everfit-may-2026-new-features
+https://help.everfit.io/en/articles/4346734-comments-for-completed-workouts
+https://help.trainerize.com/hc/en-us/articles/46648417703956-Using-the-Client-Insights-Dashboard
+https://support.physitrack.com/article/376-track-the-progress-of-your-patient"
+A70,コーチ・共有,過去のフォームcue・痛みflag・進行メモを種目横断履歴で表示,同じ問題を繰り返さない,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察,A70,"https://blog.everfit.io/everfit-may-2026-new-features
+https://help.everfit.io/en/articles/4346734-comments-for-completed-workouts"
+A72,コーチ・共有,要フォロー/未実施増加/計画終了間近をコーチに通知,支援のタイミングを知る,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察,A72,https://truecoach.co/
+A73,コーチ・共有,チーム共有かコーチのみかの範囲を表示,誰に見えるか選ぶ,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察,A73,https://support.trainheroic.com/hc/en-us/articles/18156631592589-Logging-your-Training-Session
+A75,主観・症状・体調,skip/変更理由を「痛み・機材待ち・時間・気分」から任意で記録,未達の原因を次回へつなぐ,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P1,設計案,A75,
+A76,PR・筋力・相対比較,独自スコアの新記録/新種目/失効/再採点を分解,スコア上昇を身体変化と混同しない,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察,A76,https://gravl.ai/help/gravl-strength-score-how-does-it-work
+A77,PR・筋力・相対比較,スコア/体重比の対象種目・分母体重・測定日を示す,条件の違いを理解,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察＋整理/案,A77 X32,https://gravl.ai/help/gravl-strength-score-how-does-it-work
+A78,PR・筋力・相対比較,スコア算入記録の期限と次に消えるliftを表示,点数変化を予測できる,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察,A78,https://gravl.ai/help/gravl-strength-score-how-does-it-work
+A79,PR・筋力・相対比較,次レベルまでの差分を表示,小さな目標を作る,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察,A79,https://gravl.ai/help/gravl-strength-score-how-does-it-work
+A80,PR・筋力・相対比較,数値の上下を短文で説明し元ログへ戻れる,要約を検証する,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察,A80,https://gravl.ai/help/gravl-strength-score-how-does-it-work
+D03,PR・筋力・相対比較,筋力：全身/上半身/下半身/体幹/筋群のスコア,独自尺度、対象運動の偏り,外部基準,Tonal等の独自スコアは同社定義/計測に依存。同名スコアを公開説明だけで再現できるとは限らない。,P3,観察,D03,https://knowledge.tonal.com/kb/guide/en/strength-score-wTNfx9Xu5q/Steps/4184309
+D05,PR・筋力・相対比較,筋力：%1RM、使用重量が能力に対してどの位置か,e1RMなら推定と表示,記録,現在の重量・回数・左右・完了フラグ・種目/セッション日・粗い部位・身体測定から集計可能。比較条件の限界を付記。,P2,観察,D05,https://support.vitruve.fit/metrics-calculated-by-vitruve
+D06,部位・量・頻度,筋力：強度閾値以上のセット数,閾値は製品/目的別の定義,記録,完了セットとe1RMから閾値判定できる。閾値の出典と推定値の条件を表示し、普遍的な適正量とはしない。,P2,観察,D06,https://knowledge.tonal.com/kb/guide/en/how-to-use-personalized-weekly-targets-IcOTXeWcYl/Steps/4353081
+D07,能力試験・専門計測,持久力：規定負荷/ROMでの合格レップ数,不完全レップと未記録を分ける,計測,撮影/手計時、専用センサー、またはウォッチ/ヘルス連携の実データが必要。重量×回数だけから実測値を作らない。,P3,観察,D07,"https://tempo.fit/blog/a-new-era-for-tempo
+https://support.tempo.fit/support/solutions/articles/151000154714-3d-tempo-vision-form-feedback"
+D09,部位・量・頻度,ボリューム：総慣性負荷,フライホイールをkgと混ぜない,計測,撮影/手計時、専用センサー、またはウォッチ/ヘルス連携の実データが必要。重量×回数だけから実測値を作らない。,P3,観察,D09,https://enode.ai/apps/help/articles/1777540390-available-metrics
+D10,速度・力・パワー,速度：求心の平均速度,同種目・同重量・意図をそろえる,計測,撮影/手計時、専用センサー、またはウォッチ/ヘルス連携の実データが必要。重量×回数だけから実測値を作らない。,P3,観察,D10,https://support.vitruve.fit/metrics-calculated-by-vitruve
+D11,速度・力・パワー,速度：求心の最大速度,平均とは別、サンプリングにも依存,計測,撮影/手計時、専用センサー、またはウォッチ/ヘルス連携の実データが必要。重量×回数だけから実測値を作らない。,P3,観察,D11,https://support.vitruve.fit/metrics-calculated-by-vitruve
+D12,速度・力・パワー,速度：推進局面だけの平均速度,全求心局面の平均と別,計測,撮影/手計時、専用センサー、またはウォッチ/ヘルス連携の実データが必要。重量×回数だけから実測値を作らない。,P3,観察,D12,"https://support.vitruve.fit/metrics-calculated-by-vitruve
+https://enode.ai/apps/help/articles/1777540390-available-metrics"
+D13,速度・力・パワー,速度：遠心の平均/最大/最小速度,速く下ろすことを常に高評価にしない,計測,撮影/手計時、専用センサー、またはウォッチ/ヘルス連携の実データが必要。重量×回数だけから実測値を作らない。,P3,観察,D13,https://support.vitruve.fit/metrics-calculated-by-vitruve
+D14,速度・力・パワー,速度：最大速度に達するまでの時間,爆発的運動の詳細,計測,撮影/手計時、専用センサー、またはウォッチ/ヘルス連携の実データが必要。重量×回数だけから実測値を作らない。,P3,観察,D14,https://support.vitruve.fit/metrics-calculated-by-vitruve
+D15,速度・力・パワー,速度：最初・最後・最速・最遅レップ,最初の状態とセット末を分離,計測,撮影/手計時、専用センサー、またはウォッチ/ヘルス連携の実データが必要。重量×回数だけから実測値を作らない。,P3,観察,D15,"https://www.reponestrength.com/metrics
+https://www.reponestrength.com/knowledge"
+D16,速度・力・パワー,速度：セット内速度低下の絶対差/率,「疲労%」と断定せず定義を示す,計測,撮影/手計時、専用センサー、またはウォッチ/ヘルス連携の実データが必要。重量×回数だけから実測値を作らない。,P3,観察,D16,"https://support.vitruve.fit/metrics-calculated-by-vitruve
+https://www.reponestrength.com/metrics
+https://www.reponestrength.com/knowledge"
+D17,速度・力・パワー,速度：セット間の速度低下,セット/重量/休憩条件をそろえる,計測,撮影/手計時、専用センサー、またはウォッチ/ヘルス連携の実データが必要。重量×回数だけから実測値を作らない。,P3,観察,D17,https://support.vitruve.fit/metrics-calculated-by-vitruve
+D18,速度・力・パワー,速度：同じ重量・種目での前回/基準期間との差,重量を増やさない日の成長を見る,計測,撮影/手計時、専用センサー、またはウォッチ/ヘルス連携の実データが必要。重量×回数だけから実測値を作らない。,P3,観察,D18,"https://www.reponestrength.com/metrics
+https://www.reponestrength.com/knowledge"
+D19,速度・力・パワー,速度：過去最速/最遅の条件付き記録,一律に速い方が良いとは限らない,計測,撮影/手計時、専用センサー、またはウォッチ/ヘルス連携の実データが必要。重量×回数だけから実測値を作らない。,P3,観察,D19,"https://support.vitruve.fit/metrics-calculated-by-vitruve
+https://www.reponestrength.com/metrics
+https://www.reponestrength.com/knowledge"
+D20,速度・力・パワー,速度：目標速度帯、逸脱レップの色,次の負荷調整へつなぐ,計測,撮影/手計時、専用センサー、またはウォッチ/ヘルス連携の実データが必要。重量×回数だけから実測値を作らない。,P3,観察,D20,https://support.vitruve.fit/metrics-calculated-by-vitruve
+D21,速度・力・パワー,速度：速度低下が閾値に達した通知,セット停止のコーチング支援,計測,撮影/手計時、専用センサー、またはウォッチ/ヘルス連携の実データが必要。重量×回数だけから実測値を作らない。,P3,観察,D21,https://support.vitruve.fit/metrics-calculated-by-vitruve
+D22,速度・力・パワー,プロファイル：負荷—速度の点・回帰線,前提条件/採用データを確認,計測,撮影/手計時、専用センサー、またはウォッチ/ヘルス連携の実データが必要。重量×回数だけから実測値を作らない。,P3,観察,D22,"https://www.reponestrength.com/metrics
+https://www.reponestrength.com/knowledge"
+D23,速度・力・パワー,プロファイル：各負荷の%1RMと目標速度,数式を読ませず目標へ,計測,撮影/手計時、専用センサー、またはウォッチ/ヘルス連携の実データが必要。重量×回数だけから実測値を作らない。,P3,観察,D23,https://support.vitruve.fit/metrics-calculated-by-vitruve
+D24,速度・力・パワー,パワー：求心/遠心の平均/最大パワー,装置/計算方法依存、代謝カロリーではない,計測,撮影/手計時、専用センサー、またはウォッチ/ヘルス連携の実データが必要。重量×回数だけから実測値を作らない。,P3,観察,D24,https://support.vitruve.fit/metrics-calculated-by-vitruve
+D25,速度・力・パワー,パワー：W/kg,体重更新が必要,計測,撮影/手計時、専用センサー、またはウォッチ/ヘルス連携の実データが必要。重量×回数だけから実測値を作らない。,P3,観察,D25,https://gymaware.zendesk.com/hc/en-us/articles/115000820192-What-parameters-does-GymAware-measure
+D26,速度・力・パワー,パワー：Power PR、PRの一定比以上のレップ数,「質のある反復」を製品定義,計測,撮影/手計時、専用センサー、またはウォッチ/ヘルス連携の実データが必要。重量×回数だけから実測値を作らない。,P3,観察,D26,https://knowledge.tonal.com/kb/guide/en/how-to-use-personalized-weekly-targets-IcOTXeWcYl/Steps/4353081
+D27,速度・力・パワー,力：求心/遠心の平均/最大力,直接計測か計算か明示,計測,撮影/手計時、専用センサー、またはウォッチ/ヘルス連携の実データが必要。重量×回数だけから実測値を作らない。,P3,観察,D27,"https://support.vitruve.fit/metrics-calculated-by-vitruve
+https://gymaware.zendesk.com/hc/en-us/articles/115000820192-What-parameters-does-GymAware-measure"
+D28,速度・力・パワー,力：等尺性最大力、握力,専用試験、日常セットと区別,計測,規定姿勢と力センサー/握力計。kgの入力は力Nの実測ではない。,P3,観察,D28,"https://delsys.com/emg-hand-dynamometry/
+https://tindeq.com/p/"
+D29,速度・力・パワー,力：体重あたりの力,W/kgとは別の単位,計測,撮影/手計時、専用センサー、またはウォッチ/ヘルス連携の実データが必要。重量×回数だけから実測値を作らない。,P3,観察,D29,"https://support.vald.com/hc/en-au/articles/4999754213657-Understanding-Key-Moments-and-Phases-in-ForceDecks
+https://valdhealth.com/news/smarter-defaults-for-aligned-decision-making-in-forcedecks"
+D30,速度・力・パワー,力：RFD、早期区間での力発揮,短区間/開始点の定義が重要,計測,撮影/手計時、専用センサー、またはウォッチ/ヘルス連携の実データが必要。重量×回数だけから実測値を作らない。,P3,観察,D30,"https://enode.ai/apps/help/articles/1777540390-available-metrics
+https://gymaware.zendesk.com/hc/en-us/articles/115000820192-What-parameters-does-GymAware-measure"
+D31,速度・力・パワー,力：最大力/最大パワーまでの時間,上級者向けの時系列解析,計測,撮影/手計時、専用センサー、またはウォッチ/ヘルス連携の実データが必要。重量×回数だけから実測値を作らない。,P3,観察,D31,"https://enode.ai/apps/help/articles/1777540390-available-metrics
+https://gymaware.zendesk.com/hc/en-us/articles/115000820192-What-parameters-does-GymAware-measure"
+D32,速度・力・パワー,力：力積、局面ごとの力積,力×時間、kgの総重量とは別,計測,撮影/手計時、専用センサー、またはウォッチ/ヘルス連携の実データが必要。重量×回数だけから実測値を作らない。,P3,観察,D32,https://gymaware.zendesk.com/hc/en-us/articles/115000820192-What-parameters-does-GymAware-measure
+D33,速度・力・パワー,仕事：機械的仕事量J/kJ,ROMと力が要る、消費kcalと区別,計測,撮影/手計時、専用センサー、またはウォッチ/ヘルス連携の実データが必要。重量×回数だけから実測値を作らない。,P3,観察,D33,"https://knowledge.tonal.com/kb/guide/en/how-to-use-personalized-weekly-targets-IcOTXeWcYl/Steps/4353081
+https://gymaware.zendesk.com/hc/en-us/articles/115000820192-What-parameters-does-GymAware-measure"
+D34,速度・力・パワー,加速度：平均/最大加速度,速度より誤差に敏感な派生量,計測,撮影/手計時、専用センサー、またはウォッチ/ヘルス連携の実データが必要。重量×回数だけから実測値を作らない。,P3,観察,D34,"https://support.vitruve.fit/metrics-calculated-by-vitruve
+https://enode.ai/apps/help/articles/1777540390-available-metrics"
+D35,速度・力・パワー,加速度：各社のAcceleration Index等,定義の違う独自派生値,計測,撮影/手計時、専用センサー、またはウォッチ/ヘルス連携の実データが必要。重量×回数だけから実測値を作らない。,P3,観察,D35,"https://support.vitruve.fit/metrics-calculated-by-vitruve
+https://enode.ai/apps/help/articles/1777540390-available-metrics"
+D36,可動域・テンポ・動画,ROM：レップごとの移動距離/垂直距離,バーの距離と関節ROMを区別,計測,撮影/手計時、専用センサー、またはウォッチ/ヘルス連携の実データが必要。重量×回数だけから実測値を作らない。,P3,観察,D36,https://www.outputsports.com/
+D37,可動域・テンポ・動画,ROM：関節別の角度/可動域,規定姿勢/撮影条件が必要,計測,撮影/手計時、専用センサー、またはウォッチ/ヘルス連携の実データが必要。重量×回数だけから実測値を作らない。,P3,観察,D37,https://www.outputsports.com/
+D38,可動域・テンポ・動画,ROM：最初/最後/最短/最長ROM,平均に隠れる短縮を知る,計測,撮影/手計時、専用センサー、またはウォッチ/ヘルス連携の実データが必要。重量×回数だけから実測値を作らない。,P3,観察,D38,"https://www.reponestrength.com/metrics
+https://www.reponestrength.com/knowledge"
+D39,可動域・テンポ・動画,ROM：ROMの差/低下率,意図的な部分反復もある,計測,撮影/手計時、専用センサー、またはウォッチ/ヘルス連携の実データが必要。重量×回数だけから実測値を作らない。,P3,観察,D39,"https://www.reponestrength.com/metrics
+https://www.reponestrength.com/knowledge"
+D40,可動域・テンポ・動画,ROM：目標ROM帯と達成レップ合否,目標の根拠と個別化が必要,計測,撮影/手計時、専用センサー、またはウォッチ/ヘルス連携の実データが必要。重量×回数だけから実測値を作らない。,P3,観察,D40,"https://tempo.fit/blog/a-new-era-for-tempo
+https://support.tempo.fit/support/solutions/articles/151000154714-3d-tempo-vision-form-feedback
+https://www.outputsports.com/"
+D41,可動域・テンポ・動画,テンポ：遠心—底停止—求心—上停止の時間,4局面の指示と実績,計測,撮影/手計時、専用センサー、またはウォッチ/ヘルス連携の実データが必要。重量×回数だけから実測値を作らない。,P3,観察,D41,"https://metric.coach/docs/training-metrics
+https://metric.coach/updates"
+D42,可動域・テンポ・動画,テンポ：レップ総時間・TUT,何をTUTに含めるか定義,計測,撮影/手計時、専用センサー、またはウォッチ/ヘルス連携の実データが必要。重量×回数だけから実測値を作らない。,P3,観察,D42,"https://metric.coach/docs/training-metrics
+https://metric.coach/updates"
+D43,可動域・テンポ・動画,テンポ：レップ頻度/ペース,目標テンポを選んだときに出す,計測,撮影/手計時、専用センサー、またはウォッチ/ヘルス連携の実データが必要。重量×回数だけから実測値を作らない。,P3,観察,D43,https://gymaware.zendesk.com/hc/en-us/articles/115000820192-What-parameters-does-GymAware-measure
+D44,可動域・テンポ・動画,動作軌道：矢状面/前額面の軌道,スクワット等の軌道の変化,計測,撮影/手計時、専用センサー、またはウォッチ/ヘルス連携の実データが必要。重量×回数だけから実測値を作らない。,P3,観察,D44,https://enode.ai/apps/help/articles/1777540390-available-metrics
+D45,可動域・テンポ・動画,動作軌道：同一セット内のレップ軌道比較,再現性を見る,計測,撮影/手計時、専用センサー、またはウォッチ/ヘルス連携の実データが必要。重量×回数だけから実測値を作らない。,P3,観察,D45,https://gymaware.com/product/flex-barbell-tracker/
+D46,可動域・テンポ・動画,対称性：左右の力配分/左右差,左右差の単位・計算式を示す,計測,力計/機器等の左右同時計測。手入力重量/回数の左右差は別の指標X34。,P3,観察,D46,"https://support.vald.com/hc/en-au/articles/4999754213657-Understanding-Key-Moments-and-Phases-in-ForceDecks
+https://valdhealth.com/news/smarter-defaults-for-aligned-decision-making-in-forcedecks"
+D47,可動域・テンポ・動画,対称性：減速時/蹴り出し時の力積左右差,同じ跳躍高でも戦略が違う,計測,撮影/手計時、専用センサー、またはウォッチ/ヘルス連携の実データが必要。重量×回数だけから実測値を作らない。,P3,観察,D47,"https://support.vald.com/hc/en-au/articles/4999754213657-Understanding-Key-Moments-and-Phases-in-ForceDecks
+https://valdhealth.com/news/smarter-defaults-for-aligned-decision-making-in-forcedecks"
+D48,可動域・テンポ・動画,フォーム：よくある崩れの合図と修正できた通知,常時監視・無謬を演出しない,計測,撮影/手計時、専用センサー、またはウォッチ/ヘルス連携の実データが必要。重量×回数だけから実測値を作らない。,P3,観察,D48,"https://tempo.fit/blog/a-new-era-for-tempo
+https://support.tempo.fit/support/solutions/articles/151000154714-3d-tempo-vision-form-feedback"
+D49,可動域・テンポ・動画,フォーム：滑らかさ・バランス等の検知,どこまで観測できるか明示,計測,撮影/手計時、専用センサー、またはウォッチ/ヘルス連携の実データが必要。重量×回数だけから実測値を作らない。,P3,観察,D49,https://tonal.com/blogs/all/tonal-quick-start-guide
+D50,可動域・テンポ・動画,映像：レップ動画+軌道+数値,変化の原因を振り返る,計測,撮影/手計時、専用センサー、またはウォッチ/ヘルス連携の実データが必要。重量×回数だけから実測値を作らない。,P3,観察,D50,"https://metric.coach/docs/training-metrics
+https://metric.coach/updates"
+D51,可動域・テンポ・動画,映像：前回/今回の同期並列再生,重量グラフにない成果,計測,撮影/手計時、専用センサー、またはウォッチ/ヘルス連携の実データが必要。重量×回数だけから実測値を作らない。,P3,観察,D51,"https://support.onform.com/article/153-user-guide-onform-video-analysis-app
+https://www.kinovea.org/help/en/observation/comparison.html"
+D52,可動域・テンポ・動画,映像：透過重畳、スロー、コマ送り,カメラ角度をそろえる,計測,撮影/手計時、専用センサー、またはウォッチ/ヘルス連携の実データが必要。重量×回数だけから実測値を作らない。,P3,観察,D52,"https://support.onform.com/article/153-user-guide-onform-video-analysis-app
+https://www.kinovea.org/help/en/observation/comparison.html"
+D53,可動域・テンポ・動画,映像：複数カメラの同期表示,上級コーチング用,計測,撮影/手計時、専用センサー、またはウォッチ/ヘルス連携の実データが必要。重量×回数だけから実測値を作らない。,P3,観察,D53,"https://support.onform.com/article/153-user-guide-onform-video-analysis-app
+https://www.kinovea.org/help/en/observation/comparison.html"
+D54,可動域・テンポ・動画,映像：線・角度・時点の注釈/音声説明,判断を他者と共有する,計測,撮影/手計時、専用センサー、またはウォッチ/ヘルス連携の実データが必要。重量×回数だけから実測値を作らない。,P3,観察,D54,"https://support.onform.com/article/153-user-guide-onform-video-analysis-app
+https://www.kinovea.org/help/en/observation/comparison.html"
+D55,能力試験・専門計測,跳躍：跳躍高、飛翔/接地時間,筋トレ外のテスト結果,計測,撮影/手計時、専用センサー、またはウォッチ/ヘルス連携の実データが必要。重量×回数だけから実測値を作らない。,P3,観察,D55,https://gymaware.zendesk.com/hc/en-us/articles/115000820192-What-parameters-does-GymAware-measure
+D56,能力試験・専門計測,跳躍：RSI/RSI-mod,反応性と動作時間を合わせる,計測,撮影/手計時、専用センサー、またはウォッチ/ヘルス連携の実データが必要。重量×回数だけから実測値を作らない。,P3,観察,D56,"https://support.vald.com/hc/en-au/articles/4999754213657-Understanding-Key-Moments-and-Phases-in-ForceDecks
+https://valdhealth.com/news/smarter-defaults-for-aligned-decision-making-in-forcedecks"
+D57,能力試験・専門計測,跳躍：沈み込み深さ/遠心最大速度,結果と動作戦略を分ける,計測,撮影/手計時、専用センサー、またはウォッチ/ヘルス連携の実データが必要。重量×回数だけから実測値を作らない。,P3,観察,D57,"https://support.vald.com/hc/en-au/articles/4999754213657-Understanding-Key-Moments-and-Phases-in-ForceDecks
+https://valdhealth.com/news/smarter-defaults-for-aligned-decision-making-in-forcedecks"
+D58,能力試験・専門計測,跳躍：力・速度・パワーの時系列/局面色,競技/研究向け,計測,撮影/手計時、専用センサー、またはウォッチ/ヘルス連携の実データが必要。重量×回数だけから実測値を作らない。,P3,観察,D58,"https://support.vald.com/hc/en-au/articles/4999754213657-Understanding-Key-Moments-and-Phases-in-ForceDecks
+https://valdhealth.com/news/smarter-defaults-for-aligned-decision-making-in-forcedecks"
+D59,能力試験・専門計測,能力試験：Nordic失敗角度/変位/時間,特定試験の指標,計測,撮影/手計時、専用センサー、またはウォッチ/ヘルス連携の実データが必要。重量×回数だけから実測値を作らない。,P3,観察,D59,"https://gymaware.zendesk.com/hc/en-us/articles/115000820192-What-parameters-does-GymAware-measure
+https://www.outputsports.com/"
+D60,能力試験・専門計測,能力試験：静的バランス/姿勢安定性,計測姿勢と試験時間を併記,計測,撮影/手計時、専用センサー、またはウォッチ/ヘルス連携の実データが必要。重量×回数だけから実測値を作らない。,P3,観察,D60,https://www.outputsports.com/
+D61,能力試験・専門計測,他競技：スプリント最高速度・区間タイム・力速度図,全身負荷に関係する別軸の成果,計測,撮影/手計時、専用センサー、またはウォッチ/ヘルス連携の実データが必要。重量×回数だけから実測値を作らない。,P3,観察,D61,https://kinvent.com/kinvent-product/horizontal-vertical-gait-analysis-speed-sensor-k-power/
+D64,セッション・休憩・時間,休憩：セット間の実際の休憩、目標との関係,同条件比較の文脈,追加,目標休憩は現行設定。実休憩の履歴には開始/終了/中断イベントを追加する。,P2,観察,D64,"https://support.garmin.com/en-NZ/?faq=LcYGZd4EOZ9PkTY5YRvin5
+https://support.vitruve.fit/understanding-the-vbt-training-screen"
+D65,セッション・休憩・時間,休憩：心拍を見た延長の提案/自動延長,心拍と筋回復を同一視しない,計測,撮影/手計時、専用センサー、またはウォッチ/ヘルス連携の実データが必要。重量×回数だけから実測値を作らない。,P3,観察,D65,"https://tempo.fit/blog/a-new-era-for-tempo
+https://support.tempo.fit/support/solutions/articles/151000154714-3d-tempo-vision-form-feedback"
+D66,回復・全活動負荷,心血管：種目別/活動中の心拍反応,筋力成果と別軸,計測,撮影/手計時、専用センサー、またはウォッチ/ヘルス連携の実データが必要。重量×回数だけから実測値を作らない。,P3,観察,D66,https://www.whoop.com/us/en/thelocker/introducing-strength-trainer-a-new-way-to-quantify-the-impact-of-your-strength-training/
+D67,回復・全活動負荷,負荷：心血管/筋負荷の内訳,独自モデルと表示,計測,撮影/手計時、専用センサー、またはウォッチ/ヘルス連携の実データが必要。重量×回数だけから実測値を作らない。,P3,観察,D67,https://www.whoop.com/us/en/thelocker/introducing-strength-trainer-a-new-way-to-quantify-the-impact-of-your-strength-training/
+D68,回復・全活動負荷,負荷：その日の全活動負荷,仕事/他の運動も含む文脈,計測,撮影/手計時、専用センサー、またはウォッチ/ヘルス連携の実データが必要。重量×回数だけから実測値を作らない。,P3,観察,D68,https://www.whoop.com/us/en/thelocker/introducing-strength-trainer-a-new-way-to-quantify-the-impact-of-your-strength-training/
+D70,回復・全活動負荷,回復：睡眠/HRV/安静心拍/体温等の基準からの偏り,局所筋の回復率ではない,計測,撮影/手計時、専用センサー、またはウォッチ/ヘルス連携の実データが必要。重量×回数だけから実測値を作らない。,P3,観察,D70,https://ouraring.com/blog/readiness-score/
+D73,回復・全活動負荷,回復：睡眠不足・規則性・必要睡眠の推奨,推奨・推定と表示,計測,撮影/手計時、専用センサー、またはウォッチ/ヘルス連携の実データが必要。重量×回数だけから実測値を作らない。,P3,観察,D73,https://ouraring.com/blog/readiness-score/
+D74,回復・全活動負荷,回復：生活タグと翌日状態の関連,因果と断言しない,計測,撮影/手計時、専用センサー、またはウォッチ/ヘルス連携の実データが必要。重量×回数だけから実測値を作らない。,P3,観察,D74,https://athlyticapp.com/getting-started/
+D75,能力試験・専門計測,生体：EMGの振幅/タイミング/周波数,研究/指導用、筋肥大そのものではない,計測,撮影/手計時、専用センサー、またはウォッチ/ヘルス連携の実データが必要。重量×回数だけから実測値を作らない。,P3,観察,D75,https://delsys.com/emg-hand-dynamometry/
+D76,能力試験・専門計測,生体：局所SmO2と相対THbの時系列,腕時計SpO2と違う,計測,局所NIRS。SmO2は割合、THbは相対/任意単位。腕時計SpO2、血液検査、全身回復率とは別。,P3,観察,D76,https://my.moxymonitor.com/blog/how-to-use-moxy-monitor-more-effectively-smo2-vs-thb-what-are-they-whats-the-difference
+D78,データ品質・定義,品質：レップ/種目/重量を訂正する表示,正しい履歴を作る,計測,撮影/手計時、専用センサー、またはウォッチ/ヘルス連携の実データが必要。重量×回数だけから実測値を作らない。,P3,観察,D78,"https://support.garmin.com/en-NZ/?faq=LcYGZd4EOZ9PkTY5YRvin5
+https://support.vitruve.fit/understanding-the-vbt-training-screen"
+D79,データ品質・定義,品質：撮影角度/照明/見切れ/認識の警告,測定前に品質を上げる,計測,撮影/手計時、専用センサー、またはウォッチ/ヘルス連携の実データが必要。重量×回数だけから実測値を作らない。,P3,観察,D79,"https://metric.coach/docs/training-metrics
+https://metric.coach/updates"
+D80,データ品質・定義,品質：推定に採用/除外した点の可視化,ブラックボックスを減らす,計測,撮影/手計時、専用センサー、またはウォッチ/ヘルス連携の実データが必要。重量×回数だけから実測値を作らない。,P3,観察,D80,"https://www.reponestrength.com/metrics
+https://www.reponestrength.com/knowledge"
+D82,データ品質・定義,品質：設定抵抗/適用抵抗/抵抗方式を区別,可変抵抗・片側ケーブルの誤解防止,計測,撮影/手計時、専用センサー、またはウォッチ/ヘルス連携の実データが必要。重量×回数だけから実測値を作らない。,P3,観察,D82,"https://vitruvianform.com/pages/faqs
+https://www.technogym.com/en-GB/biostrength-rev/"
+D83,データ品質・定義,品質：センサー接続/電池/計測中の状態,欠測に気づいて修正できる,計測,撮影/手計時、専用センサー、またはウォッチ/ヘルス連携の実データが必要。重量×回数だけから実測値を作らない。,P3,観察,D83,"https://www.reponestrength.com/metrics
+https://www.reponestrength.com/knowledge"
+X01,自重・技能・競技,ベンチマークの名称・定義と過去の自己記録,同じ課題を再実施した成果か,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察＋整理/案,X01,https://www.sugarwod.com/2018/05/advanced-scoring-capablities/
+X02,自重・技能・競技,AMRAPの完了rounds+端数reps,制限時間内の達成量,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察,X02,https://www.sugarwod.com/2018/05/advanced-scoring-capablities/
+X03,自重・技能・競技,For Timeの完了秒数・短縮量,同じ課題をより短く終えたか,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察＋整理/案,X03,https://www.sugarwod.com/2018/05/advanced-scoring-capablities/
+X04,自重・技能・競技,ラウンド合計・最速・最遅・平均,後半の失速とペース配分,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察,X04,https://www.sugarwod.com/2018/05/advanced-scoring-capablities/
+X06,自重・技能・競技,高い方がよい/低い方がよい/採点なしの指標方向,時間短縮を減点しない,記録,現在の重量・回数・左右・完了フラグ・種目/セッション日・粗い部位・身体測定から集計可能。比較条件の限界を付記。,P2,設計案,X06,https://www.sugarwod.com/2018/05/advanced-scoring-capablities/
+X07,自重・技能・競技,種目ごとの集団内レベルを並べた能力差,単純なkgの比では見えない得手不得手,外部基準,比較集団・競技結果・基準表などの外部データと、その出典・対象条件が必要。,P3,観察,X07,https://support.btwb.com/en/support/solutions/articles/35000172954-how-does-the-imbalances-feature-work-
+X08,自重・技能・競技,比較に不足する種目・有効な記録期間,なぜ能力差をまだ出せないか,記録,現在の重量・回数・左右・完了フラグ・種目/セッション日・粗い部位・身体測定から集計可能。比較条件の限界を付記。,P2,観察,X08,https://support.btwb.com/en/support/solutions/articles/35000172954-how-does-the-imbalances-feature-work-
+X09,自重・技能・競技,第1/2/3試技の成功率と件数・比較集団,一発の最高値以外の試技の再現性,外部基準,自身の試技成功率には成功/失敗・試技位置を追加保存。競技者集団と比べる場合は公式結果と対象条件が必要。,P3,観察＋整理/案,X09,https://www.ironwise.app/learn/performance-profile
+X10,自重・技能・競技,Snatch/Clean & Jerk/Totalの比と推移,得意な種目と練習テーマ,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察,X10,https://www.ironwise.app/learn/performance-profile
+X12,自重・技能・競技,体重階級の変更と競技記録の時間軸,階級移動の前後を理解,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察,X12,https://www.ironwise.app/learn/performance-profile
+X13,自重・技能・競技,クライミングのgrade・試行数・完登/未完登,同じ難度に対する成功と試行効率,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察,X13,https://crimpd.com/blog/summer-2026-updates/
+X14,自重・技能・競技,board/layout・壁角度・hold種類の条件,別課題の同じgradeを過度に比較しない,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察,X14,https://crimpd.com/blog/summer-2026-updates/
+X15,自重・技能・競技,最大/通常セッション/一撃flashの別々の技能履歴,過去一度の最高難度と再現できる難度,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察,X15,https://crimpd.com/blog/summer-2026-updates/
+X16,自重・技能・競技,筋力・持久力・技術等のカテゴリー別実施分数,筋群以外の練習配分,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察,X16,https://www.crimpd.com/docs/getting-started/
+X17,自重・技能・競技,自己申告の25/50/75/100%完了と実セット数を別表示,大まかな報告と詳細な実績の差,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察＋整理/案,X17,https://www.crimpd.com/docs/getting-started/
+X18,身体・写真・生活,任意の月経記録日を訓練カレンダーの文脈として表示,自分の体感と実績を振り返る,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察,X18,https://help.macrofactorapp.com/en/articles/282-track-your-period
+X19,データ品質・定義,通常・warm-up・drop・failure等のセット種別,そのセットの目的と集計対象,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P1,観察,X19,"https://help.strongapp.io/article/166-set-tags
+https://help.hevyapp.com/hc/en-us/articles/34896293707927-Set-Types-in-Hevy-Explained-Drop-Sets-Warm-Up-Sets-and-More"
+X20,セッション・休憩・時間,superset/circuitの所属とA1→B1の実施順,何を交互に行い、何が残るか,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P1,観察,X20,https://help.strongapp.io/article/98-how-do-i-create-supersets
+X23,データ品質・定義,保存前に記録を確認・修正できる結果一覧,誤記録を後の統計へ持ち込まない,記録,現在の重量・回数・左右・完了フラグ・種目/セッション日・粗い部位・身体測定から集計可能。比較条件の限界を付記。,P1,観察,X23,https://crimpd.com/blog/summer-2026-updates/
+X24,時系列・比較・停滞,同重量のセット別回数、1セット目からの保持率,後半セットの変化,記録,同重量・左右・種目内セット順の回数保持率は算出可。実休憩や順序の違いを除いた身体疲労率ではない。,P0,設計案,X24,
+X25,セッション・休憩・時間,同じ種目/課題の量÷セッション経過分,限られた時間での実施密度,記録,完了した外部重量×回数をセッション経過分で割る。同じ種目構成・中断条件で比較し、実動効率と呼ばない。,P2,設計案,X25,
+X26,時系列・比較・停滞,直近n回の変化、横ばい期間、根拠回数,一度の不調と続く横ばいを分ける,記録,直近n回の実績と経過日、本人が選ぶ期間を表示。記録のない日を0にしない。,P0,設計案,X26,
+X28,セッション・休憩・時間,残りの予定セットと、残り時間に対する所要時間の目安,時間内でどこまで行えるか,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P1,設計案,X28,
+X31,データ品質・定義,修正/取込/削除による再集計の前後と理由,実施していない日にグラフが変わった理由,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P1,設計案,X31,
+X34,時系列・比較・停滞,左右の記録重量・回数・量の差と件数,入力上の偏りを振り返る,記録,左右別重量/回数/件数の差を算出可。未実施の片側は0にせず、力の左右差や原因を診断しない。,P0,設計案,X34,
+X35,データ品質・定義,部位分類不明のセット数と集計対象外の理由,マップに現れないデータへ気づく,記録,muscleGroupが空または辞書未対応の件数。不明分類を勝手に筋群へ割り当てない。,P0,設計案,X35,
+X36,身体・写真・生活,食事の時系列・摂取kcal・たんぱく質/脂質/炭水化物,食事の記録を訓練・身体変化と併せて振り返る,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察,X36,https://burnfit.io/ja/
+X37,身体・写真・生活,歩数の原値・期間平均と筋トレ日の関係,筋トレ以外の普段の活動量,計測,撮影/手計時、専用センサー、またはウォッチ/ヘルス連携の実データが必要。重量×回数だけから実測値を作らない。,P3,観察＋整理/案,X37,https://help.macrofactorapp.com/en/articles/275-getting-to-know-your-workouts-dashboard
+X38,身体・写真・生活,ウォッチ等の推定消費kcalと取得元,心拍由来の運動量の参考,計測,撮影/手計時、専用センサー、またはウォッチ/ヘルス連携の実データが必要。重量×回数だけから実測値を作らない。,P3,観察,X38,https://apps.apple.com/jp/app/id6792484714
+X39,身体・写真・生活,入力体重/体脂肪率からの推定脂肪量・除脂肪量,体重の上下の内訳を振り返る,記録,現在の重量・回数・左右・完了フラグ・種目/セッション日・粗い部位・身体測定から集計可能。比較条件の限界を付記。,P2,観察,X39,https://dr-muscle.com/new-dr-muscle-x-2026/
+X40,自重・技能・競技,習熟に基づく累積XP・技能の達成履歴,最高重量以外の積み重ねを認める,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察,X40,https://calistree.com/features/progress-analytics/
+X41,データ品質・定義,機能的動作/動作品質を鍛える構成の週スコア,計画で選んだ練習内容を振り返る,外部基準,比較集団・競技結果・基準表などの外部データと、その出典・対象条件が必要。,P3,観察,X41,https://knowledge.tonal.com/kb/guide/en/how-to-use-personalized-weekly-targets-IcOTXeWcYl/Steps/4353081
+J01,セット前・次の行動,重量を変えたときの「PR更新に必要な回数」。実測の同重量PRと、e1RMからの推定必要回数を区別する。,条件・目標・由来を含めて記録を解釈する,記録,現在の重量・回数・左右・完了フラグ・種目/セッション日・粗い部位・身体測定から集計可能。比較条件の限界を付記。,P2,観察＋整理/案,J01,https://apps.apple.com/jp/app/id6792484714
+J03,データ品質・定義,補助あり/なし、加重/アシストの別。アシスト重量の減少が進歩になる。,条件・目標・由来を含めて記録を解釈する,追加,assisted/weighted/bodyweightと補助量を構造化。補助は小さい方が改善となる場合を区別。,P2,観察＋整理/案,J03,"https://apps.apple.com/jp/app/id1109688815
+https://calistree.app/knowledge?id=tipResistAssist"
+J04,データ品質・定義,バンドの張力基準と換算元。メーカーの色名だけを負荷に置き換えない。,条件・目標・由来を含めて記録を解釈する,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察＋整理/案,J04,https://calistree.app/knowledge?id=resistanceBandStandard
+J05,回復・全活動負荷,部位ごとの「前回から何日」。ログのない部位を回復済みとは断定しない。,条件・目標・由来を含めて記録を解釈する,記録,現在の重量・回数・左右・完了フラグ・種目/セッション日・粗い部位・身体測定から集計可能。比較条件の限界を付記。,P2,観察＋整理/案,J05,https://apps.apple.com/jp/app/id1109688815
+J08,PR・筋力・相対比較,トップセットと、全セットをまとめた結果の並置。,条件・目標・由来を含めて記録を解釈する,記録,現在の重量・回数・左右・完了フラグ・種目/セッション日・粗い部位・身体測定から集計可能。比較条件の限界を付記。,P2,観察＋整理/案,J08,https://last-rep-pro.web.app/
+J11,自重・技能・競技,スキルツリーで、到達済み・練習中・次に必要な前提動作を分ける。,条件・目標・由来を含めて記録を解釈する,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察＋整理/案,J11,https://calistree.app/knowledge?id=skillTrees
+J12,自重・技能・競技,習熟を示す回数/保持時間の要件と実績。,条件・目標・由来を含めて記録を解釈する,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察＋整理/案,J12,https://calistree.app/knowledge?id=tipMastery
+J13,回復・全活動負荷,一般的な回復と、次のスキルへの到達度を別名称で表示。,条件・目標・由来を含めて記録を解釈する,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察＋整理/案,J13,https://calistree.app/knowledge?id=tipReadiness
+J14,自重・技能・競技,強さ・柔軟・バランス・有酸素の個別プロファイル。,条件・目標・由来を含めて記録を解釈する,追加,任意入力・目標/分類の設定・計画スナップショット・計測時刻、または推定ルールの設計が必要。既存ログのみでは全機能を再現できない。,P2,観察＋整理/案,J14,https://calistree.com/features/progress-analytics/
+J18,身体・写真・生活,部位別除脂肪や水分由来の値を、負荷マップや実測筋力と別に扱う。,条件・目標・由来を含めて記録を解釈する,計測,撮影/手計時、専用センサー、またはウォッチ/ヘルス連携の実データが必要。重量×回数だけから実測値を作らない。,P3,観察＋整理/案,J18,https://qr.inbody.com/ri/770/adult/en
+J20,自重・技能・競技,競技と練習の別・試技の成功/失敗と記録条件を示す,条件・目標・由来を含めて記録を解釈する,外部基準,自身の試技には追加フィールド。公式大会結果の表示には出典/大会/日付/ルール/階級の外部データが必要。,P3,観察＋整理/案,J20 X11,"https://www.openpowerlifting.org/faq
+https://www.powerlifting.sport/rules/codes/info/ipf-formula
+https://www.ironwise.app/learn/performance-profile"

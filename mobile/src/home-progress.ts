@@ -54,6 +54,7 @@ export function progressIndex(
       )
       .map((s) => [s.id, localDay(s.startedAt)]),
   );
+  const startedAt = new Map(state.sessions.map((s) => [s.id, new Date(s.startedAt).getTime()]));
   const exercises = new Map(state.exercises.map((e) => [e.id, e]));
   const index = new Map<string, ProgressRecord[]>();
   const add = (set: WorkoutSet, side: ProgressSide, date: string) => {
@@ -80,7 +81,7 @@ export function progressIndex(
   }
   for (const records of index.values())
     records.sort(
-      (a, b) => a.date.localeCompare(b.date) || a.sessionId - b.sessionId || a.setId - b.setId,
+      (a, b) => (startedAt.get(a.sessionId)! - startedAt.get(b.sessionId)!) || a.sessionId - b.sessionId || a.setId - b.setId,
     );
   return index;
 }

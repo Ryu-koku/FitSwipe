@@ -8,10 +8,10 @@ export function WorkoutProgressBar({ segments }: {
   const { colors } = useTheme();
   return <View style={{ flexDirection: 'row', gap: 4, marginBottom: 16 }}>
     {segments.map((segment) => {
-      const value = segment.total ? Math.max(0, Math.min(1, segment.completed / segment.total)) : 0;
+      const value = segment.total > 0 && segment.completed === segment.total ? 1 : 0;
       return <View key={segment.id} accessibilityRole="progressbar"
         accessibilityLabel={`${segment.name}の進捗`}
-        accessibilityValue={{ min: 0, max: segment.total, now: segment.completed }}
+        accessibilityValue={{ min: 0, max: 1, now: value }}
         style={{ flex: 1, height: 7, borderRadius: 4, overflow: 'hidden', backgroundColor: colors.line }}>
         <View style={{ height: '100%', borderRadius: 4, backgroundColor: colors.primary, width: `${value * 100}%` }} />
       </View>;

@@ -243,15 +243,31 @@ export function enqueueWorkout(
   };
 }
 
-export async function flushPendingPosts(
+const flushing = new WeakMap<() => AppState, Promise<void>>();
+
+export function flushPendingPosts(
   getState: () => AppState,
   persist: (updater: (state: AppState) => AppState) => Promise<void>,
   post: (entry: PendingPost) => Promise<unknown>,
 ) {
-  while (getState().pendingPosts.length) {
+  const running = flushing.get(getState);
+  if (running) return running;
+  const work = drainPendingPosts(getState, persist, post).finally(() => flushing.delete(getState));
+  flushing.set(getState, work);
+  return work;
+}
+
+async function drainPendingPosts(
+  getState: () => AppState,
+  persist: (updater: (state: AppState) => AppState) => Promise<void>,
+  post: (entry: PendingPost) => Promise<unknown>,
+) {
+  const account = getState().roomIdentity;
+  const sameAccount = (s: AppState) => s.roomIdentity?.id === account?.id && s.roomIdentity?.token === account?.token;
+  while (sameAccount(getState()) && getState().pendingPosts.length) {
     const first = getState().pendingPosts[0];
     const remove = () =>
-      persist((s) => ({
+      persist((s) => sameAccount(s) ? ({
         ...s,
         pendingPosts: s.pendingPosts.filter(
           (p) =>
@@ -260,7 +276,7 @@ export async function flushPendingPosts(
               p.workout.clientId === first.workout.clientId
             ),
         ),
-      }));
+      }) : s);
     try {
       await post(first);
     } catch (error) {

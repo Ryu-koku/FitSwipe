@@ -234,6 +234,21 @@ export function updateSet(
   if (!previous) return state;
   const timestamp = now();
   const weights = ['normalWeightKg', 'leftWeightKg', 'rightWeightKg'] as const;
+  // Editing a skipped set must also update the saved input restored by Back.
+  if (previous.skippedInputs && !('skippedInputs' in changes)) {
+    const skippedInputs = { ...previous.skippedInputs };
+    for (const side of ['normal', 'left', 'right'] as const) {
+      const input = skippedInputs[side];
+      if (!input) continue;
+      const weightKey = `${side}WeightKg` as const;
+      const repsKey = `${side}Reps` as const;
+      skippedInputs[side] = {
+        weightKg: weightKey in changes ? changes[weightKey] : input.weightKg,
+        reps: repsKey in changes ? changes[repsKey] : input.reps,
+      };
+    }
+    changes = { ...changes, skippedInputs };
+  }
   const carry = Object.fromEntries(
     weights
       .filter(
@@ -361,10 +376,15 @@ export function resizeSets(
       )[0];
   let id = nextId(state);
   const timestamp = now();
+  const exercise = state.exercises.find((item) => item.id === exerciseId);
+  const defaults = exercise ? exerciseDefaults(exercise) : undefined;
   const additions = Array.from(
     { length: count - rows.length },
     (_, index): WorkoutSet => ({
-      ...previous,
+      ...(previous ?? (exercise?.mode === 'BILATERAL' ? {
+        leftWeightKg: defaults?.leftWeightKg, rightWeightKg: defaults?.rightWeightKg,
+        leftReps: defaults?.reps, rightReps: defaults?.reps,
+      } : { normalWeightKg: defaults?.weightKg, normalReps: defaults?.reps })),
       skippedInputs: undefined,
       finalSkippedSide: undefined,
       id: id++,

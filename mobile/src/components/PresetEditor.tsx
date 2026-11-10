@@ -1,16 +1,19 @@
 import React, { useState } from 'react';
-import { Alert, Switch, Text, View } from 'react-native';
+import { Alert, Pressable, Switch, Text, View } from 'react-native';
 import { useApp } from '../context';
 import type { PresetExerciseConfig } from '../types';
 import { addPresetExercises } from '../exercise-additions';
 import { ExerciseEditor } from './ExerciseEditor';
-import { Button, Field, NumberField, Sheet, useTheme } from '../ui';
+import { Button, feedback, Field, IconButton, NumberField, Sheet, useTheme } from '../ui';
 import { ExerciseOrderList } from './ExerciseOrderList';
+import { ExercisePictogram } from './ExercisePictogram';
+import { AppIcon } from './AppIcon';
 import { moveItem } from '../reorder';
+import { PRESET_COLORS } from '../logic';
 
 export function PresetEditor({ presetId, onClose: close, initialExerciseId }: { presetId: string; onClose: () => void; initialExerciseId?: number }) {
   const { state, update } = useApp();
-  const { styles } = useTheme();
+  const { colors, styles } = useTheme();
   const [editing, setEditing] = useState<number | undefined>(initialExerciseId);
   const [adding, setAdding] = useState(false);
   // Edit the name locally and save it once: a blank name keeps the old one, and
@@ -30,23 +33,50 @@ export function PresetEditor({ presetId, onClose: close, initialExerciseId }: { 
   const patch = (changes: Partial<PresetExerciseConfig>) => update((s) => ({ ...s,
     presets: s.presets.map((p) => p.id === presetId ? { ...p, exercises: p.exercises.map((c) => c.exerciseId === editing ? { ...c, ...changes } : c) } : p),
   }));
-  return <Sheet title="プリセットを編集" onClose={onClose} scroll={false}>
+  const confirmDelete = () => Alert.alert('プリセットを削除', `「${preset.name}」を削除しますか？`, [
+    { text: 'キャンセル', style: 'cancel' },
+    { text: '削除', style: 'destructive', onPress: () => {
+      update((s) => ({ ...s, presets: s.presets.filter((p) => p.id !== presetId), selectedPresetId: s.selectedPresetId === presetId ? s.presets.find((p) => p.id !== presetId)?.id : s.selectedPresetId })); onClose();
+    } },
+  ]);
+  const openActions = () => Alert.alert('プリセットの操作', preset.name, [
+    { text: 'キャンセル', style: 'cancel' },
+    { text: 'このプリセットを削除', style: 'destructive', onPress: confirmDelete },
+  ]);
+  return <Sheet title="プリセットを編集" onClose={onClose} scroll={false}
+    right={<IconButton label="プリセットの操作" symbol="⋯" onPress={openActions} />}>
     <ExerciseOrderList items={configs.map((c) => ({ id: c.exerciseId, name: state.exercises.find((e) => e.id === c.exerciseId)!.name, detail: `${c.sets}セット × ${c.reps ?? '—'}回` }))}
       onEdit={setEditing} onMove={(from, to) => update((s) => ({ ...s, presets: s.presets.map((p) => p.id === presetId ? { ...p, exercises: moveItem(configs, from, to).concat(p.exercises.filter((c) => !configs.includes(c))) } : p) }))}
-      header={<Field label="プリセット名" value={draftName ?? preset.name} maxLength={24} onChangeText={setDraftName} onBlur={commitName} />}
-      footer={<>
-        <Button label="種目を追加" secondary onPress={() => setAdding(true)} />
-        <Button label="完了" onPress={onClose} />
-        <Button label="このプリセットを削除" secondary onPress={() => Alert.alert('プリセットを削除', `「${preset.name}」を削除しますか？`, [
-          { text: 'キャンセル' }, { text: '削除', style: 'destructive', onPress: () => {
-            update((s) => ({ ...s, presets: s.presets.filter((p) => p.id !== presetId), selectedPresetId: s.selectedPresetId === presetId ? s.presets.find((p) => p.id !== presetId)?.id : s.selectedPresetId })); onClose();
-          } },
-        ])} />
-      </>} />
+      header={<>
+        <Field label="プリセット名" value={draftName ?? preset.name} maxLength={24} onChangeText={setDraftName} onBlur={commitName} />
+        <Text style={styles.small}>カラー</Text>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 6, marginBottom: 12 }}>
+          {PRESET_COLORS.map((color, index) => {
+            const chosen = (preset.color ?? colors.primary) === color;
+            return <Pressable key={color} accessibilityRole="radio" accessibilityState={{ selected: chosen }} accessibilityLabel={`カラー${index + 1}`}
+              onPress={() => update((s) => ({ ...s, presets: s.presets.map((p) => p.id === presetId ? { ...p, color } : p) }))}
+              style={{ width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: chosen ? colors.ink : 'transparent' }}>
+              <View style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: color }} />
+            </Pressable>;
+          })}
+        </View>
+      </>}
+      footer={<Pressable accessibilityRole="button" accessibilityLabel="種目を追加"
+        onPress={() => { feedback(); setAdding(true); }}
+        style={({ pressed }) => ({ minHeight: 56, marginTop: 8, borderWidth: 1, borderStyle: 'dashed',
+          borderColor: colors.primary, borderRadius: 16, flexDirection: 'row', alignItems: 'center',
+          justifyContent: 'center', gap: 8, backgroundColor: pressed ? colors.soft : 'transparent' })}>
+        <AppIcon name="plus" color={colors.primary} size={20} />
+        <Text style={[styles.body, { color: colors.primary, fontWeight: '700' }]}>種目を追加</Text>
+      </Pressable>} />
+    <View style={{ flexShrink: 0, paddingHorizontal: 20, paddingTop: 4, borderTopWidth: 1, borderTopColor: colors.line }}>
+      <Button label="完了" onPress={onClose} />
+    </View>
     {adding && <ExerciseEditor onClose={() => setAdding(false)}
       excludedIds={preset.exercises.map((item) => item.exerciseId)}
       onAdded={(ids) => update((s) => addPresetExercises(s, presetId, ids))} />}
     {config && exercise && <Sheet title={exercise.name} onClose={() => setEditing(undefined)}>
+      <View style={{ alignItems: 'center', marginBottom: 12 }}><ExercisePictogram name={exercise.name} animate={false} /></View>
       {exercise.mode === 'BILATERAL' ? <View style={styles.row}>
         <NumberField label="左kg" value={config.leftWeightKg} onChange={(leftWeightKg) => patch({ leftWeightKg })} />
         <NumberField label="右kg" value={config.rightWeightKg} onChange={(rightWeightKg) => patch({ rightWeightKg })} />

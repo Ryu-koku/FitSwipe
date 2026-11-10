@@ -7,6 +7,7 @@ import { Button, Card, IconButton, Screen, SectionTitle, useTheme } from '../ui'
 import { AppIcon } from '../components/AppIcon';
 import { PresetEditor } from '../components/PresetEditor';
 import { PresetCreator } from '../components/PresetCreator';
+import { ExercisePictogram } from '../components/ExercisePictogram';
 
 export default function PrepareScreen() {
   const { state, update } = useApp();
@@ -33,20 +34,14 @@ export default function PrepareScreen() {
             accessibilityState={{ selected }}
             onPress={() => update((s) => ({ ...s, selectedPresetId: item.id }))}
             style={{ width: '48%' }}>
-            <Card style={{ minHeight: 150, paddingBottom: 60,
+            <Card style={{ marginBottom: 0, padding: 12,
               backgroundColor: selected ? colors.soft : colors.surface,
               borderColor: selected ? colors.primary : colors.line, borderWidth: selected ? 2 : 1 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <Text style={{ color: colors.primary, fontSize: 24 }}>{selected ? '●' : '○'}</Text>
-                <Text style={[styles.body, { flex: 1, fontSize: 20, fontWeight: '800' }]}>{item.name}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={{ color: colors.primary, fontSize: 18 }}>{selected ? '●' : '○'}</Text>
+                <Text numberOfLines={1} style={[styles.body, { flex: 1, fontSize: 17, fontWeight: '800' }]}>{item.name}</Text>
               </View>
               <Text style={styles.small}>{items.length}種目 · {items.reduce((sum, c) => sum + Math.max(1, c.sets), 0)}セット</Text>
-              <View style={{ position: 'absolute', right: 8, bottom: 8 }}>
-                <IconButton label={`${item.name}を編集`} symbol="✎" onPress={() => {
-                  update((s) => ({ ...s, selectedPresetId: item.id }));
-                  setEditingExercise(undefined); setEditing(item.id);
-                }} />
-              </View>
             </Card>
           </Pressable>;
         })}
@@ -64,10 +59,11 @@ export default function PrepareScreen() {
         </View>
         {configs.map((config) => {
           const exercise = state.exercises.find((e) => e.id === config.exerciseId)!;
-          return <Pressable key={exercise.id} accessibilityRole="button" accessibilityLabel={`${exercise.name}を編集`}
-            onPress={() => edit(exercise.id)} style={({ pressed }) => pressed && styles.pressed}>
-            <Card style={{ padding: 16 }}>
-              <View style={styles.row}>
+          return <Card key={exercise.id} style={{ padding: 16 }}>
+              <View style={[styles.row, { gap: 12 }]}>
+                <ExercisePictogram name={exercise.name} preview animate={!editing && !adding} />
+                <Pressable accessibilityRole="button" accessibilityLabel={`${exercise.name}を編集`}
+                  onPress={() => edit(exercise.id)} style={({ pressed }) => [{ flex: 1, minHeight: 60, flexDirection: 'row', alignItems: 'center', gap: 8 }, pressed && styles.pressed]}>
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.body, { fontWeight: '700', fontSize: 17 }]}>{exercise.name}</Text>
                   <Text style={[styles.small, { marginTop: 4 }]}>
@@ -77,9 +73,9 @@ export default function PrepareScreen() {
                   </Text>
                 </View>
                 <AppIcon name="next" color={colors.muted} size={18} />
+                </Pressable>
               </View>
-            </Card>
-          </Pressable>;
+            </Card>;
         })}
         {!configs.length && <Card><Text style={styles.body}>種目を追加して、トレーニングの準備をしましょう。</Text></Card>}
         <Button label="メニューを編集・種目を追加" secondary onPress={() => edit()} />

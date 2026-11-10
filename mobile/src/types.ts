@@ -53,6 +53,7 @@ export type PresetExerciseConfig = {
 export type WorkoutPreset = {
   id: string;
   name: string;
+  color?: string;
   exercises: PresetExerciseConfig[];
 };
 

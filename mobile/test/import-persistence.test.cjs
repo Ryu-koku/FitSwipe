@@ -148,3 +148,61 @@ test('failed in-flight sync does not block account deletion or preserve its clou
   assert.equal(deleted, 1); assert.equal(api.getState().cloud, undefined);
   assert.equal(api.getState().roomIdentity, undefined);
 });
+
+test('ordinary save failure preserves records and outbox; concurrent edits use durable state', async () => {
+  const initial = { ...seedState(), cloud: emptyCloud({ id: 'account', token: 'synthetic', name: 'test', expiresAt: 9999999999 }) };
+  let fail = true;
+  const api = provider(initial, async () => { if (fail) throw Error('disk full'); });
+  await assert.rejects(api.persist(s => ({ ...s, themeMode: 'dark' })), /disk full/);
+  assert.equal(api.getState(), initial);
+  assert.equal(api.getState().cloud.pending.length, 0);
+  fail = false;
+  await Promise.all([
+    api.persist(s => ({ ...s, heightCm: 170 })),
+    api.persist(s => ({ ...s, heightCm: s.heightCm + 1 })),
+  ]);
+  assert.equal(api.getState().heightCm, 171);
+  assert.equal(api.getState().themeMode, initial.themeMode);
+});
+
+test('failed acknowledgement leaves mutations queued for an idempotent retry', async () => {
+  const mutation = { kind: 'setting', id: randomUUID(), mutationId: randomUUID(), deleted: false, payload: { field: 'themeMode', value: 'dark' } };
+  const initial = { ...seedState(), cloud: { ...emptyCloud({ id: 'account', token: 'synthetic', name: 'test', expiresAt: 9999999999 }), pending: [mutation] } };
+  let saves = 0;
+  const api = provider(initial, async () => { if (++saves === 2) throw Error('disk full'); }, {
+    push: async () => ({ acknowledged: [mutation.mutationId] }),
+    pull: async () => ({ changes: [], cursor: 0, hasMore: false }),
+  });
+  await assert.rejects(api.syncNow(), /disk full/);
+  assert.deepEqual(api.getState().cloud.pending, [mutation]);
+});
+
+test('import waits for an earlier ordinary edit before building its state', async () => {
+  let release, calls = 0;
+  const api = provider(seedState(), async () => {
+    if (++calls === 1) await new Promise(resolve => { release = resolve; });
+  });
+  const editing = api.persist(s => ({ ...s, heightCm: 171 }));
+  await new Promise(resolve => setImmediate(resolve));
+  const importing = api.importData(s => ({ ...importWorkoutCsv(s, csv), weekStartsMonday: true }));
+  release();
+  await Promise.all([editing, importing]);
+  assert.equal(api.getState().heightCm, 171);
+  assert.equal(api.getState().sessions.length, 1);
+});
+
+test('expired logout archives a queued ordinary edit before switching accounts', async () => {
+  const initial = { ...seedState(), cloud: emptyCloud({ id: 'account', token: 'token', name: 'A', expiresAt: 1 }) };
+  let release, archived, calls = 0;
+  const api = provider(initial, async () => { if (++calls === 1) await new Promise(resolve => { release = resolve; }); }, {}, {
+    archiveState: async state => { archived = state; },
+  });
+  const editing = api.persist(s => ({ ...s, heightCm: 171 }));
+  await new Promise(resolve => setImmediate(resolve));
+  const logout = api.logout();
+  await new Promise(resolve => setImmediate(resolve));
+  release();
+  await Promise.all([editing, logout]);
+  assert.equal(archived.heightCm, 171);
+  assert.equal(archived.cloud.pending[0].payload.field, 'heightCm');
+});

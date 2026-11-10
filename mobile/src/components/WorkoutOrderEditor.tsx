@@ -5,14 +5,15 @@ import { Button, NumberField, Sheet, useTheme } from '../ui';
 import { reorderWorkout, resizeSets, updateSet } from '../workout';
 import { ExerciseEditor } from './ExerciseEditor';
 import { ExerciseOrderList } from './ExerciseOrderList';
+import { ExercisePictogram } from './ExercisePictogram';
 import { moveItem } from '../reorder';
 import { addWorkoutExercises } from '../exercise-additions';
 
-export function WorkoutOrderEditor({ sessionId, onClose }: { sessionId: number; onClose: () => void }) {
+export function WorkoutOrderEditor({ sessionId, onClose, initialExerciseId }: { sessionId: number; onClose: () => void; initialExerciseId?: number }) {
   const { state, update } = useApp();
   const { styles } = useTheme();
   const [addNew, setAddNew] = useState(false);
-  const [editing, setEditing] = useState<number>();
+  const [editing, setEditing] = useState<number | undefined>(initialExerciseId);
   const sets = state.sets.filter((s) => s.sessionId === sessionId);
   const order = [...new Set([...(state.workout?.exerciseOrder ?? []), ...sets.map((s) => s.exerciseId)])].filter((id) => sets.some((s) => s.exerciseId === id));
   const exercise = state.exercises.find((e) => e.id === editing);
@@ -34,11 +35,12 @@ export function WorkoutOrderEditor({ sessionId, onClose }: { sessionId: number; 
         <Button label="種目を追加" secondary onPress={() => setAddNew(true)} />
       </>} />
     {exercise && <Sheet title={exercise.name} onClose={() => setEditing(undefined)} popup>
+      <View style={{ alignItems: 'center', marginBottom: 12 }}><ExercisePictogram name={exercise.name} animate={false} /></View>
       <NumberField label="セット数" value={rows.length} integer onChange={(n) => update((s) => resizeSets(s, sessionId, exercise.id, Math.min(30, n ?? 0)))} />
       {rows.map((set) => <View key={set.id} style={{ marginTop: 12 }}><Text style={styles.small}>セット {set.setOrder}{set.isCompleted ? ' · 完了' : ''}</Text>
         {(exercise.mode === 'BILATERAL' ? ['left', 'right'] as const : ['normal'] as const).map((side) => <View key={side} style={styles.row}>
-          <NumberField label={`${side === 'left' ? '左' : side === 'right' ? '右' : ''}kg`} value={set[`${side}WeightKg`]} onChange={(v) => update((s) => updateSet(s, set.id, { [`${side}WeightKg`]: v }))} />
-          <NumberField label="回数" value={set[`${side}Reps`]} integer onChange={(v) => update((s) => updateSet(s, set.id, { [`${side}Reps`]: v }))} />
+          <NumberField label={`${side === 'left' ? '左' : side === 'right' ? '右' : ''}kg`} value={set.skippedInputs?.[side] ? set.skippedInputs[side].weightKg : set[`${side}WeightKg`]} onChange={(v) => update((s) => updateSet(s, set.id, { [`${side}WeightKg`]: v }))} />
+          <NumberField label="回数" value={set.skippedInputs?.[side] ? set.skippedInputs[side].reps : set[`${side}Reps`]} integer onChange={(v) => update((s) => updateSet(s, set.id, { [`${side}Reps`]: v }))} />
         </View>)}</View>)}
       <Button label="完了" onPress={() => setEditing(undefined)} />
       <Button label="種目を削除" secondary onPress={() => {

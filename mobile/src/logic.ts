@@ -115,6 +115,9 @@ export const activeExercises = (state: AppState) =>
   state.exercises
     .filter((e) => !e.archived)
     .sort((a, b) => a.sortOrder - b.sortOrder);
+// Fixed so the white day number stays readable in both themes.
+export const PRESET_COLORS = ['#e5484d', '#ea6a1f', '#c99a06', '#16a34a', '#007f78', '#3b82f6', '#8b5cf6', '#db2777'];
+
 export const selectedPreset = (state: AppState) =>
   state.presets.find((p) => p.id === state.selectedPresetId) ??
   state.presets[0];

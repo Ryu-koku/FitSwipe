@@ -1,5 +1,5 @@
 import type { AppState, BodyMeasurement, WorkoutSet } from './types';
-import { seedState } from './logic';
+import { PRESET_COLORS, seedState } from './logic';
 import { mergeGuest } from './sync';
 import { nextId } from './workout';
 import { legacyHeight, migrateLegacyData } from './legacy-data';
@@ -54,7 +54,8 @@ export function parseBackup(raw: string): AppState {
         reps: c.reps === undefined ? undefined : integer(c.reps, 0, 10000) };
     });
     if (new Set(configs.map(c => c.exerciseId)).size !== configs.length) fail();
-    return { id: string(preset.id), name: string(preset.name), exercises: configs };
+    const color = typeof preset.color === 'string' && PRESET_COLORS.includes(preset.color) ? preset.color : undefined;
+    return { id: string(preset.id), name: string(preset.name), ...(color ? { color } : {}), exercises: configs };
   }));
   const presetIds = new Set(presets.map(p => p.id));
   const sessions = unique(array(p.sessions).map(v => {

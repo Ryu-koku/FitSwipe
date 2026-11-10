@@ -28,6 +28,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { useApp } from './context';
 import { AppIcon, symbolIcons } from './components/AppIcon';
+import { ExerciseMotionViewport, useRefreshExerciseVisibility } from './exercise-motion';
 
 const light = {
   ink: '#172e36',
@@ -177,7 +178,11 @@ export const feedback = () => {
   void Haptics.selectionAsync().catch(() => {});
 };
 
-export function Screen({
+export function Screen(props: React.ComponentProps<typeof ScreenContent>) {
+  return <ExerciseMotionViewport><ScreenContent {...props} /></ExerciseMotionViewport>;
+}
+
+function ScreenContent({
   children,
   title,
   right,
@@ -202,6 +207,7 @@ export function Screen({
   headerShown?: boolean;
 }>) {
   const { styles } = useTheme();
+  const refreshIllustrations = useRefreshExerciseVisibility();
   const [viewportHeight, setViewportHeight] = useState(0);
   const [contentHeight, setContentHeight] = useState(0);
   const header = (
@@ -220,6 +226,8 @@ export function Screen({
       {scroll ? (
         <ScrollView
           keyboardShouldPersistTaps="handled"
+          onScroll={refreshIllustrations}
+          scrollEventThrottle={100}
           onLayout={scrollOnlyWhenOverflow ? (event) => setViewportHeight(event.nativeEvent.layout.height) : undefined}
           onContentSizeChange={scrollOnlyWhenOverflow ? (_, height) => setContentHeight(height) : undefined}
           scrollEnabled={!scrollOnlyWhenOverflow || contentHeight > viewportHeight + 1}
@@ -450,6 +458,7 @@ export function SectionTitle({ children }: PropsWithChildren) {
 
 export function Sheet({
   title,
+  right,
   children,
   onClose,
   scroll = true,
@@ -457,8 +466,9 @@ export function Sheet({
   popup = false,
   fullScreen = false,
   onBack,
-}: PropsWithChildren<{ title: string; onClose: () => void; scroll?: boolean; bottomSheet?: boolean; popup?: boolean; fullScreen?: boolean; onBack?: () => void }>) {
+}: PropsWithChildren<{ title: string; right?: React.ReactNode; onClose: () => void; scroll?: boolean; bottomSheet?: boolean; popup?: boolean; fullScreen?: boolean; onBack?: () => void }>) {
   const { styles, colors } = useTheme();
+  const refreshIllustrations = useRefreshExerciseVisibility();
   const insets = useSafeAreaInsets();
   const [sheetOffset] = useState(() => new Animated.Value(0));
   const { height: windowHeight } = useWindowDimensions();
@@ -558,6 +568,7 @@ export function Sheet({
               <View collapsable={false} {...sheetPan.panHandlers} style={{ flex: 1, minHeight: 48, justifyContent: 'center' }}>
                 <Text pointerEvents="none" accessibilityRole="header" style={[styles.body, { fontSize: 22, fontWeight: '700' }]}>{title}</Text>
               </View>
+              {right}
               <IconButton label="閉じる" symbol="×" onPress={dismiss} />
             </View>
           ) : <View
@@ -565,12 +576,15 @@ export function Sheet({
           >
             {onBack && <IconButton label="種目一覧に戻る" symbol="‹" onPress={onBack} />}
             <Text style={[styles.title, { flex: 1 }]}>{title}</Text>
+            {right}
             <IconButton label="閉じる" symbol="×" onPress={onClose} />
           </View>}
           </View>
           {scroll ? <ScrollView
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="none"
+            onScroll={refreshIllustrations}
+            scrollEventThrottle={100}
             contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 12 }}
           >
             <SheetDismissContext.Provider value={{ onClose, dismiss }}>{children}</SheetDismissContext.Provider>

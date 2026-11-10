@@ -55,7 +55,29 @@ function newInviteCode() {
 async function parseBody(request) {
   const declaredLength = Number(request.headers.get("content-length") ?? 0);
   if (declaredLength > MAX_BODY_BYTES) throw new ApiError(413, "送信する記録が大きすぎます");
-  const raw = await request.arrayBuffer();
+  // Enforce the limit while reading: Content-Length is optional and untrusted.
+  const reader = request.body?.getReader();
+  const chunks = [];
+  let size = 0;
+  if (reader) {
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        size += value.byteLength;
+        if (size > MAX_BODY_BYTES) {
+          await reader.cancel().catch(() => {});
+          throw new ApiError(413, "送信する記録が大きすぎます");
+        }
+        chunks.push(value);
+      }
+    } finally {
+      reader.releaseLock();
+    }
+  }
+  const raw = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) { raw.set(chunk, offset); offset += chunk.byteLength; }
   if (raw.byteLength === 0 || raw.byteLength > MAX_BODY_BYTES) {
     throw new ApiError(raw.byteLength > MAX_BODY_BYTES ? 413 : 400,
       raw.byteLength > MAX_BODY_BYTES ? "送信する記録が大きすぎます" : "送信データを確認してください");
@@ -541,7 +563,8 @@ export default {
     } catch (error) {
       if (error instanceof ApiError || error instanceof SyncError || error instanceof ComparisonError || error instanceof SafetyError) return response({ error: error.message }, error.status);
       if (error instanceof GoogleAuthError) return response({ error: "Googleログインを確認してください" }, 401);
-      console.error("rooms request failed", error instanceof Error ? error.message : String(error));
+      // Dependency messages can contain bound SQL values or authentication data.
+      console.error("rooms request failed");
       return response({ error: "サーバーに接続できませんでした。再度お試しください" }, 500);
     }
   },

@@ -5,6 +5,9 @@ import type { Exercise, ExerciseMode } from '../types';
 import { numeric, nextId } from '../workout';
 import { Button, Chip, Field, Sheet, useTheme } from '../ui';
 import { exerciseGroup, muscleGroups } from '../exercise-groups';
+import { ExercisePictogram } from './ExercisePictogram';
+import { useRefreshExerciseVisibility } from '../exercise-motion';
+import { availableExerciseChoices } from '../exercise-additions';
 
 export function ExerciseEditor({
   exercise,
@@ -19,6 +22,7 @@ export function ExerciseEditor({
 }) {
   const { state, update, getState } = useApp();
   const { styles, colors } = useTheme();
+  const refreshIllustrations = useRefreshExerciseVisibility();
   const [name, setName] = useState(exercise?.name ?? '');
   const [mode, setMode] = useState<ExerciseMode>(exercise?.mode ?? 'NORMAL');
   const [muscleGroup, setMuscleGroup] = useState(exercise ? exerciseGroup(exercise) : '');
@@ -27,7 +31,7 @@ export function ExerciseEditor({
   const [query, setQuery] = useState('');
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const submitted = useRef(false);
-  const available = state.exercises.filter((item) => !item.archived && !excludedIds.includes(item.id));
+  const available = availableExerciseChoices(state.exercises, excludedIds);
   const selected = selectedIds.filter((id) => available.some((item) => item.id === id));
   const backToList = !exercise && onAdded && creating ? () => {
     Keyboard.dismiss();
@@ -110,6 +114,7 @@ export function ExerciseEditor({
       </View>
       <FlatList data={candidates} extraData={selectedIds} keyExtractor={(item) => String(item.id)}
         style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 12 }}
+        onScroll={refreshIllustrations} scrollEventThrottle={100}
         keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag"
         ListHeaderComponent={<View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled"
@@ -126,12 +131,14 @@ export function ExerciseEditor({
         </View>}
         renderItem={({ item }) => {
           const checked = selected.includes(item.id);
-          return <Pressable accessibilityRole="checkbox" accessibilityState={{ checked }}
-            accessibilityLabel={`${item.name}、${exerciseGroup(item)}`}
-            onPress={() => setSelectedIds((ids) => ids.includes(item.id) ? ids.filter((id) => id !== item.id) : [...ids, item.id])}
-            style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 16, minHeight: 72,
+          return <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 88,
               paddingVertical: 14, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: colors.line,
-              backgroundColor: checked ? colors.soft : colors.bg, opacity: pressed ? 0.7 : 1 })}>
+              backgroundColor: checked ? colors.soft : colors.bg }}>
+            <ExercisePictogram name={item.name} preview />
+            <Pressable accessibilityRole="checkbox" accessibilityState={{ checked }}
+              accessibilityLabel={`${item.name}、${exerciseGroup(item)}`}
+              onPress={() => setSelectedIds((ids) => ids.includes(item.id) ? ids.filter((id) => id !== item.id) : [...ids, item.id])}
+              style={({ pressed }) => ({ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 60, opacity: pressed ? 0.7 : 1 })}>
             <View style={{ flex: 1 }}>
               <Text style={[styles.body, { fontWeight: '700' }]}>{item.name}</Text>
               <Text style={styles.small}>{exerciseGroup(item)}{item.mode === 'BILATERAL' ? ' · 左右別' : ''}</Text>
@@ -140,7 +147,8 @@ export function ExerciseEditor({
               backgroundColor: checked ? colors.primary : colors.surface, alignItems: 'center', justifyContent: 'center' }}>
               {checked && <Text style={{ color: colors.surface, fontWeight: '800' }}>✓</Text>}
             </View>
-          </Pressable>;
+            </Pressable>
+          </View>;
         }} />
       <View style={{ paddingHorizontal: 20, paddingBottom: 12, borderTopWidth: 1, borderTopColor: colors.line, backgroundColor: colors.surface }}>
         <Button label="＋ 新しい種目を作成" secondary onPress={startCreating} />
@@ -157,6 +165,7 @@ export function ExerciseEditor({
   return (
     <Sheet title={exercise ? '種目を編集' : '新しい種目を作成'} onClose={onClose} onBack={backToList} fullScreen={!exercise} scroll={false}>
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 20 }}>
+      {exercise && <View style={{ alignItems: 'center', marginBottom: 12 }}><ExercisePictogram name={exercise.name} animate={false} /></View>}
       <Field
         label="種目名"
         value={name}

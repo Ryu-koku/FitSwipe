@@ -80,3 +80,30 @@ test('permanent invalid posts are removed while auth/rate-limit failures stay qu
     );
   }
 });
+
+test('a response from a previous account cannot drain the next account outbox', async () => {
+  let state = { ...shared(), roomIdentity: { id: 'account-A' } };
+  const first = state.pendingPosts[0];
+  let calls = 0;
+  await flushPendingPosts(() => state, async update => { state = update(state); }, async () => {
+    calls++;
+    state = { ...state, roomIdentity: { id: 'account-B' }, pendingPosts: [structuredClone(first)] };
+  });
+  assert.equal(calls, 1);
+  assert.equal(state.pendingPosts.length, 1);
+});
+
+test('concurrent flushes serialize transport and send each queued post once', async () => {
+  let state = shared(), calls = 0;
+  const getState = () => state;
+  const persist = async update => { state = update(state); };
+  let release;
+  const post = async () => { calls++; await new Promise(resolve => { release = resolve; }); };
+  const first = flushPendingPosts(getState, persist, post);
+  const second = flushPendingPosts(getState, persist, post);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(calls, 1);
+  release();
+  await Promise.all([first, second]);
+  assert.equal(state.pendingPosts.length, 0);
+});
