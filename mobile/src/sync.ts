@@ -241,8 +241,9 @@ export function mergeGuest(account: AppState, guest: AppState, uuid: () => strin
   let nextId = account.nextId;
   // Reuse an equal active exercise (e.g. the default catalog on a fresh
   // install) so login imports and backup restores do not duplicate every name.
-  const existing = new Map(account.exercises.filter((e) => !e.archived).map((e) => [exerciseKey(e), e.id]));
-  const exercises = new Map(guest.exercises.map((e) => [e.id, existing.get(exerciseKey(e)) ?? nextId++]));
+  const mergeKey = (e: AppState['exercises'][number]) => `${exerciseKey(e)}:${e.custom === true}`;
+  const existing = new Map(account.exercises.filter((e) => !e.archived).map((e) => [mergeKey(e), e.id]));
+  const exercises = new Map(guest.exercises.map((e) => [e.id, existing.get(mergeKey(e)) ?? nextId++]));
   const unique = <T>(values: T[]) => [...new Set(values)];
   const sessions = new Map(guest.sessions.map((s) => [s.id, nextId++]));
   const presets = new Map(guest.presets.map((p) => [p.id, uuid()]));
@@ -259,7 +260,7 @@ export function mergeGuest(account: AppState, guest: AppState, uuid: () => strin
   }
   const next = {
     ...account,
-    exercises: [...account.exercises, ...guest.exercises.filter((e) => !existing.has(exerciseKey(e))).map((e) => ({ ...e, id: exercises.get(e.id)! }))],
+    exercises: [...account.exercises, ...guest.exercises.filter((e) => !existing.has(mergeKey(e))).map((e) => ({ ...e, id: exercises.get(e.id)! }))],
     sessions: [...account.sessions, ...guest.sessions.map((s) => ({ ...s, id: sessions.get(s.id)!, presetId: s.presetId ? presets.get(s.presetId) : undefined }))],
     sets: [...account.sets, ...guest.sets.map((s) => ({ ...s, id: nextId++, sessionId: sessions.get(s.sessionId)!, exerciseId: exercises.get(s.exerciseId)! }))],
     presets: [...account.presets, ...guest.presets.map((p) => ({ ...p, id: presets.get(p.id)!, exercises: p.exercises.map((e) => ({ ...e, exerciseId: exercises.get(e.exerciseId)! }))

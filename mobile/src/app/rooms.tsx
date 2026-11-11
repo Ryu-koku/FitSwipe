@@ -1,3 +1,6 @@
+import { canCreateRoom } from '../premium';
+import { usePremium } from '../premium-context';
+import { RoomsApiError } from '../rooms';
 import { LegalLinks } from '../components/LegalLinks';
 import { reportReasons, type ReportReason } from '../legal';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -18,6 +21,7 @@ import type { Room, RoomPost } from '../types';
 export default function RoomsScreen() {
   const { state, roomSyncError } = useApp();
   const rooms = useRooms();
+  const { premium, openPaywall } = usePremium();
   const latest = useRef(rooms);
   useEffect(() => { latest.current = rooms; }, [rooms]);
   const { colors, styles } = useTheme();
@@ -73,6 +77,11 @@ export default function RoomsScreen() {
     Animated.timing(actionProgress, { toValue: next ? 1 : 0, duration: next ? 220 : 170, easing: next ? Easing.out(Easing.cubic) : Easing.in(Easing.quad), useNativeDriver: true }).start();
   };
   const openAction = (action: 'create' | 'join') => {
+    if (action === 'create' && rooms.account && !canCreateRoom(state.rooms, rooms.account.id, premium)) {
+      setActionsOpen(false);
+      openPaywall('無料プランで作成できるルームは2つまでです。');
+      return;
+    }
     setActionsOpen(false);
     Animated.timing(actionProgress, { toValue: 0, duration: 140, useNativeDriver: true }).start();
     setDraft(''); setCompetitive(false); setDialog(action);
@@ -235,7 +244,16 @@ export default function RoomsScreen() {
       </View>}
        {dialog !== 'rename' && <Text style={[styles.small, { marginTop: 16 }]}>最大100人。自動共有は参加後に範囲を確認して開始します。保存は12か月・1人1,000件までです。</Text>}
        <View style={{ marginTop: 16 }}><Button label={dialog === 'create' ? '作成して招待' : dialog === 'join' ? '参加' : '保存'} disabled={rooms.busy || (dialog !== 'create' && !draft.trim())} onPress={() => {
-        const action = dialog === 'create' ? (name: string) => rooms.create(name, competitive) : dialog === 'join' ? rooms.join : rooms.rename;
+        const action = dialog === 'create' ? async (name: string) => {
+          try { await rooms.create(name, competitive); }
+          catch (error) {
+            if (error instanceof RoomsApiError && error.code === 'premium_required') {
+              openPaywall('無料プランで作成できるルームは2つまでです。');
+              return;
+            }
+            throw error;
+          }
+        } : dialog === 'join' ? rooms.join : rooms.rename;
         const value = dialog === 'create' && !draft.trim() ? '筋トレ仲間' : draft;
         setDialog(undefined); void rooms.run(() => action(value));
        }} /></View>

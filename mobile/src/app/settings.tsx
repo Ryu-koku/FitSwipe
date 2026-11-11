@@ -1,6 +1,8 @@
+import { canAddCustomExercise } from '../premium';
+import { usePremium } from '../premium-context';
 import { LegalLinks } from '../components/LegalLinks';
 import React, { useEffect, useRef, useState } from 'react';
-import { BackHandler, Platform, Text, View } from 'react-native';
+import { BackHandler, Linking, Platform, Text, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { useApp } from '../context';
 import {
@@ -30,6 +32,7 @@ import { pickTextFile, shareTextFile } from '../data-transfer';
 export default function SettingsScreen() {
   const { state, update, importData } = useApp();
   const { styles } = useTheme();
+  const plan = usePremium();
   const [page, setPage] = useState<'menu' | 'basic' | 'exercises' | 'body'>('menu');
   const [weight, setWeight] = useState(String(state.weightStepKg));
   const [editor, setEditor] = useState<Exercise | 'new'>();
@@ -61,6 +64,13 @@ export default function SettingsScreen() {
       }
       onBack={back}
     >
+      {page === 'menu' && <Card>
+        <Text style={styles.sectionTitle}>プラン：{plan.premium ? 'プレミアム' : '無料'}</Text>
+        <Button label="プレミアムに登録" secondary onPress={() => plan.openPaywall()} />
+        <Button label="購入を復元" secondary disabled={plan.busy} onPress={() => { void plan.restore(); }} />
+        <Button label="サブスクリプションを管理" secondary onPress={() => { void transfer(() => Linking.openURL(Platform.OS === 'ios' ? 'https://apps.apple.com/account/subscriptions' : 'https://play.google.com/store/account/subscriptions')); }} />
+        {plan.error && <Text accessibilityRole="alert" style={styles.body}>{plan.error}</Text>}
+      </Card>}
       {page === 'menu' && (
         <>
           <ProfileEditor />
@@ -165,7 +175,7 @@ export default function SettingsScreen() {
       )}
       {page === 'exercises' && (
         <>
-          <Button label="＋ 種目を追加" onPress={() => setEditor('new')} />
+          <Button label="＋ 種目を追加" onPress={() => canAddCustomExercise(state, plan.premium) ? setEditor('new') : plan.openPaywall('無料プランの自作種目は3つまでです。')} />
           {state.exercises
             .filter((e) => !e.archived)
             .map((exercise) => (

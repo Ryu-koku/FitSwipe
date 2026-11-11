@@ -13,6 +13,7 @@ export class RoomsApiError extends Error {
   constructor(
     public status: number,
     message: string,
+    public code?: string,
   ) {
     super(message);
   }
@@ -54,6 +55,7 @@ export function createRoomsClient(
         throw new RoomsApiError(
           response.status,
           `${data.error ?? '操作できませんでした'}${response.status === 404 ? ` (${method} ${path.split('?')[0]})` : ''}`,
+          typeof data.code === 'string' ? data.code : undefined,
         );
       return data as T;
     } finally {

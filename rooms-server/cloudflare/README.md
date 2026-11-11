@@ -127,3 +127,5 @@ rooms, safety and deletion endpoints. Deletion removes it normally; the next
 valid demo login creates a new empty account with a different ID. Login is
 rate limited and disabled when secrets are absent. Store only synthetic records
 in this shared account. Demo login never imports the device's guest records.
+
+プレミアムのルーム作成判定には `wrangler secret put REVENUECAT_SECRET_KEY` でRevenueCat REST APIの秘密キーを設定します。未設定・照会失敗時も無料枠内は作成でき、無料枠を超える作成は402になります。

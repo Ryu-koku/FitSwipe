@@ -1,3 +1,4 @@
+import { isPremium } from './premium.mjs';
 import { TERMS_VERSION, SafetyError, requireTermsVersion, requireTerms, acceptTerms, safetyStatus, setBlock, report, deleteUser, pruneSafety, visibleUserSql } from './safety.mjs';
 import { publicRoute } from './public-pages.mjs';
 import { applyGooglePicture, googlePicture, initialGoogleName } from './google-profile.mjs';
@@ -9,9 +10,10 @@ const INVITE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const MAX_BODY_BYTES = 131_072;
 
 class ApiError extends Error {
-  constructor(status, message) {
+  constructor(status, message, code) {
     super(message);
     this.status = status;
+    this.code = code;
   }
 }
 
@@ -212,15 +214,24 @@ async function createRoom(env, userId, data) {
   let name;
   if (typeof rawName === "string" && !rawName.trim()) name = "筋トレ仲間";
   else name = text(rawName, "ルーム名", 40);
+  const owned = await env.DB.prepare('SELECT count(*) AS count FROM rooms WHERE owner_id = ?').bind(userId).first();
+  const premium = owned.count >= 2 && await isPremium(userId, env.REVENUECAT_SECRET_KEY);
+  const premiumRequired = () => new ApiError(402, '無料プランで作成できるルームは2つまでです。プレミアムに登録すると無制限に作成できます。', 'premium_required');
+  if (owned.count >= 2 && !premium) throw premiumRequired();
   const id = crypto.randomUUID();
   const invite = newInviteCode();
   const results = await env.DB.batch([
     env.DB.prepare(`INSERT INTO rooms (id, name, owner_id, invite, competitive)
-      SELECT ?, ?, ?, ?, ? WHERE (SELECT count(*) FROM members WHERE user_id = ?) < 30`)
-      .bind(id, name, userId, invite, competitive ? 1 : 0, userId),
+      SELECT ?, ?, ?, ?, ? WHERE (SELECT count(*) FROM members WHERE user_id = ?) < 30
+      AND (? = 1 OR (SELECT count(*) FROM rooms WHERE owner_id = ?) < 2)`)
+      .bind(id, name, userId, invite, competitive ? 1 : 0, userId, premium ? 1 : 0, userId),
     env.DB.prepare("INSERT INTO members (room_id, user_id) SELECT id, ? FROM rooms WHERE id = ?").bind(userId, id),
   ]);
-  if (!results[0].meta.changes) throw new ApiError(400, "参加できるルームは30個までです");
+  if (!results[0].meta.changes) {
+    const memberships = await env.DB.prepare('SELECT count(*) AS count FROM members WHERE user_id = ?').bind(userId).first();
+    if (memberships.count >= 30) throw new ApiError(400, "参加できるルームは30個までです");
+    throw premiumRequired();
+  }
   return { id };
 }
 
@@ -561,7 +572,7 @@ export default {
       const result = await route(request, env);
       return response(result.data, result.status);
     } catch (error) {
-      if (error instanceof ApiError || error instanceof SyncError || error instanceof ComparisonError || error instanceof SafetyError) return response({ error: error.message }, error.status);
+      if (error instanceof ApiError || error instanceof SyncError || error instanceof ComparisonError || error instanceof SafetyError) return response({ error: error.message, ...(error.code ? { code: error.code } : {}) }, error.status);
       if (error instanceof GoogleAuthError) return response({ error: "Googleログインを確認してください" }, 401);
       // Dependency messages can contain bound SQL values or authentication data.
       console.error("rooms request failed");

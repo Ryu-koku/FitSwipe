@@ -225,6 +225,16 @@ export function achievementSummary(state: AppState): AchievementSummary {
     d.setDate(d.getDate() - 7);
     cursor = localDay(d.toISOString());
   }
+  let longestStreak = 0;
+  let run = 0;
+  let previousWeek: string | undefined;
+  for (const week of [...weeks].sort()) {
+    const before = new Date(`${week}T12:00:00`);
+    before.setDate(before.getDate() - 7);
+    run = previousWeek === localDay(before) ? run + 1 : 1;
+    longestStreak = Math.max(longestStreak, run);
+    previousWeek = week;
+  }
   const first = recordedSessions
     .map((s) => new Date(`${localDay(s.startedAt)}T00:00:00`).getTime())
     .sort((a, b) => a - b)[0];
@@ -315,6 +325,7 @@ export function achievementSummary(state: AppState): AchievementSummary {
         ? bench + squat + deadlift
         : undefined,
     streakWeeks: streak,
+    longestStreakWeeks: longestStreak,
     trainingDays: days.size,
     completedSets: finished.length,
     recordHistoryDays: first

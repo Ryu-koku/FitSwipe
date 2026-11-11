@@ -27,6 +27,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       'expo-image',
       './plugins/with-play-upload-signing',
       './plugins/with-async-storage-size',
+      './plugins/with-purchases-launch-mode',
       ['@appeeky/expo-healthkit', {
         healthSharePermission: false,
         healthUpdatePermission: false,

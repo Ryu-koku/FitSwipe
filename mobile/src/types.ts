@@ -9,6 +9,7 @@ export type Exercise = {
   sortOrder: number;
   archived: boolean;
   muscleGroup?: string;
+  custom?: boolean;
 };
 
 export type BodyMeasurement = { id: string; measuredAt: string; weightKg?: number; bodyFatPercent?: number; heightCm?: number };
@@ -151,6 +152,7 @@ export type AppState = {
 export type AchievementSummary = {
   big3: number | undefined;
   streakWeeks: number;
+  longestStreakWeeks: number;
   trainingDays: number;
   completedSets: number;
   recordHistoryDays: number;

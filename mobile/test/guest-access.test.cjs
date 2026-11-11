@@ -13,6 +13,7 @@ function layout(state) {
   module.filename = filename; module.paths = Module._nodeModulePaths(path.dirname(filename));
   const original = module.require.bind(module);
   module.require = name => {
+    if (name === '../premium-context') return { PremiumProvider: 'PremiumProvider' };
     if (name === 'expo-router') return { Stack: 'Stack', usePathname: () => '/' };
     if (name === '../context') return { AppProvider: 'Provider', useApp: () => ({ state, ready: true }) };
     if (name === '../ui') return { ThemeProvider: 'Theme', useTheme: () => ({ colors: {}, styles: {} }) };
