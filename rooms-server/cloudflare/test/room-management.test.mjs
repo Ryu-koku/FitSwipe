@@ -94,18 +94,26 @@ test('expired automatic copies are pruned, cannot be reuploaded, and manual shar
 });
 
 
-test('concurrent room creation and joining preserve the per-user room limit', async () => {
+test('concurrent creation preserves two owned rooms and joining preserves thirty memberships', async () => {
   const owner = (await call('/v1/account', null, 'POST', { name: 'limits' })).data;
   const guest = (await call('/v1/account', null, 'POST', { name: 'join-limit' })).data;
+  const creators = [];
   try {
-    const created = await Promise.all(Array.from({ length: 32 }, () => call('/v1/rooms', owner.token, 'POST', {})));
-    assert.equal(created.filter(r => r.status === 200).length, 30);
-    assert.ok(created.filter(r => r.status !== 200).every(r => r.status === 400 && r.data.error === '参加できるルームは30個までです'));
+    const created = await Promise.all(Array.from({ length: 4 }, () => call('/v1/rooms', owner.token, 'POST', {})));
+    assert.equal(created.filter(r => r.status === 200).length, 2);
+    assert.ok(created.filter(r => r.status !== 200).every(r => r.status === 402 && r.data.code === 'premium_required'));
     const rooms = (await call('/v1/rooms', owner.token)).data.rooms;
-    assert.equal(rooms.length, 30);
+    assert.equal(rooms.length, 2);
     assert.ok(rooms.every(r => r.name === '筋トレ仲間'));
-    for (let i = 0; i < 29; i++) assert.equal((await call('/v1/rooms', guest.token, 'POST', {})).status, 200);
-    const joined = await Promise.all(rooms.slice(0, 2).map(room => call('/v1/rooms/join', guest.token, 'POST', { code: room.inviteCode })));
+    // Build membership fixtures with separate free creators; joining is still free.
+    for (let i = 0; i < 29; i++) {
+      const creator = (await call('/v1/account', null, 'POST', { name: `creator-${i}` })).data;
+      creators.push(creator);
+      assert.equal((await call('/v1/rooms', creator.token, 'POST', {})).status, 200);
+      const room = (await call('/v1/rooms', creator.token)).data.rooms[0];
+      assert.equal((await call('/v1/rooms/join', guest.token, 'POST', { code: room.inviteCode })).status, 200);
+    }
+    const joined = await Promise.all(rooms.map(room => call('/v1/rooms/join', guest.token, 'POST', { code: room.inviteCode })));
     assert.deepEqual(joined.map(r => r.status).sort(), [200, 400]);
     assert.equal((await call('/v1/rooms', guest.token)).data.rooms.length, 30);
     const accepted = rooms[joined.findIndex(r => r.status === 200)];
@@ -113,6 +121,7 @@ test('concurrent room creation and joining preserve the per-user room limit', as
   } finally {
     await call('/v1/account', guest.token, 'DELETE');
     await call('/v1/account', owner.token, 'DELETE');
+    for (const creator of creators) await call('/v1/account', creator.token, 'DELETE');
   }
 });
 

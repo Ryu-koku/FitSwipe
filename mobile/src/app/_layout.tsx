@@ -1,3 +1,4 @@
+import { PremiumProvider } from '../premium-context';
 import { Stack, usePathname } from 'expo-router';
 import React from 'react';
 import { StatusBar } from 'expo-status-bar';
@@ -15,7 +16,7 @@ export default function Layout() {
     <SafeAreaProvider>
       <AppProvider>
         <ThemeProvider>
-          <AppLayout />
+          <PremiumProvider><AppLayout /></PremiumProvider>
         </ThemeProvider>
       </AppProvider>
     </SafeAreaProvider>

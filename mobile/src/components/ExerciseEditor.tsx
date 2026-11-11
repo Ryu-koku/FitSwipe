@@ -1,3 +1,5 @@
+import { canAddCustomExercise } from '../premium';
+import { usePremium } from '../premium-context';
 import React, { useRef, useState } from 'react';
 import { FlatList, Keyboard, Pressable, ScrollView, Switch, Text, View } from 'react-native';
 import { useApp } from '../context';
@@ -20,7 +22,14 @@ export function ExerciseEditor({
   onAdded?: (ids: number[]) => void;
   excludedIds?: number[];
 }) {
-  const { state, update, getState } = useApp();
+  const { state, update, getState, persist } = useApp();
+  const { premium, openPaywall } = usePremium();
+  const [saveError, setSaveError] = useState<string>();
+  const allowCreation = () => {
+    if (canAddCustomExercise(getState(), premium)) return true;
+    openPaywall('無料プランの自作種目は3つまでです。');
+    return false;
+  };
   const { styles, colors } = useTheme();
   const refreshIllustrations = useRefreshExerciseVisibility();
   const [name, setName] = useState(exercise?.name ?? '');
@@ -57,43 +66,57 @@ export function ExerciseEditor({
     weightValue !== undefined &&
     weightValue >= 0.01 &&
     weightValue <= 1000;
-  const save = () => {
+  const save = async () => {
     if (!valid || submitted.current) return;
+    if (!exercise && !allowCreation()) return;
     submitted.current = true;
+    setSaveError(undefined);
     Keyboard.dismiss();
-    const id = exercise?.id ?? nextId(getState());
-    update((s) => ({
-      ...s,
-      nextId: Math.max(s.nextId, id + 1),
-      exercises: exercise
-        ? s.exercises.map((e) =>
-            e.id === id ? { ...e, name: name.trim(), muscleGroup: muscleGroup.trim() } : e,
-          )
-        : [
-            ...s.exercises,
-            {
-              id,
-              name: name.trim(),
-              mode,
-              sortOrder: s.exercises.length,
-              archived: false,
-              muscleGroup: muscleGroup.trim(),
-            },
+    let id = exercise?.id ?? 0;
+    try {
+      await persist((s) => {
+        id = exercise?.id ?? nextId(s);
+        if (!exercise && !canAddCustomExercise(s, premium)) {
+          openPaywall('無料プランの自作種目は3つまでです。');
+          throw new Error('自作種目数が無料プランの上限に達しました。');
+        }
+        return {
+          ...s,
+          nextId: Math.max(s.nextId, id + 1),
+          exercises: exercise
+            ? s.exercises.map((e) =>
+                e.id === id ? { ...e, name: name.trim(), muscleGroup: muscleGroup.trim() } : e,
+              )
+            : [
+                ...s.exercises,
+                {
+                  id,
+                  name: name.trim(),
+                  mode,
+                  sortOrder: s.exercises.length,
+                  archived: false,
+                  custom: true,
+                  muscleGroup: muscleGroup.trim(),
+                },
+              ],
+          exerciseWeightSteps: exercise
+            ? { ...s.exerciseWeightSteps, [id]: weightValue! }
+            : s.exerciseWeightSteps,
+          restTimerDisabledExerciseIds: [
+            ...s.restTimerDisabledExerciseIds.filter((value) => value !== id),
+            ...(!restTimerEnabled ? [id] : []),
           ],
-      exerciseWeightSteps: exercise
-        ? { ...s.exerciseWeightSteps, [id]: weightValue! }
-        : s.exerciseWeightSteps,
-      restTimerDisabledExerciseIds: [
-        ...s.restTimerDisabledExerciseIds.filter((value) => value !== id),
-        ...(!restTimerEnabled ? [id] : []),
-      ],
-      leftFirstExerciseIds: [
-        ...s.leftFirstExerciseIds.filter((value) => value !== id),
-        ...(left ? [id] : []),
-      ],
-    }));
-    onAdded?.([...selected, id]);
-    onClose();
+          leftFirstExerciseIds: [
+            ...s.leftFirstExerciseIds.filter((value) => value !== id),
+            ...(left ? [id] : []),
+          ],
+        };
+      });
+      onAdded?.([...selected, id]);
+      onClose();
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : '保存できませんでした。');
+    } finally { submitted.current = false; }
   };
   if (!exercise && !creating) {
     const groups = [...new Set([...muscleGroups, ...state.exercises.filter((item) => !item.archived).map(exerciseGroup)])];
@@ -103,6 +126,7 @@ export function ExerciseEditor({
       item.name.normalize('NFKC').toLocaleLowerCase().includes(search),
     ).sort((a, b) => a.sortOrder - b.sortOrder);
     const startCreating = () => {
+      if (!allowCreation()) return;
       Keyboard.dismiss();
       setName(query.trim());
       setMuscleGroup(selectedGroup ?? '');
@@ -165,6 +189,7 @@ export function ExerciseEditor({
   return (
     <Sheet title={exercise ? '種目を編集' : '新しい種目を作成'} onClose={onClose} onBack={backToList} fullScreen={!exercise} scroll={false}>
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 20 }}>
+      {saveError && <Text accessibilityRole="alert" style={styles.body}>{saveError}</Text>}
       {exercise && <View style={{ alignItems: 'center', marginBottom: 12 }}><ExercisePictogram name={exercise.name} animate={false} /></View>}
       <Field
         label="種目名"

@@ -1,3 +1,5 @@
+import { canAddPreset } from '../premium';
+import { usePremium } from '../premium-context';
 import React, { useRef, useState } from 'react';
 import { Alert, Keyboard, Text, View } from 'react-native';
 import { randomUUID } from 'expo-crypto';
@@ -11,6 +13,7 @@ import { ExerciseOrderList } from './ExerciseOrderList';
 
 export function PresetCreator({ onClose }: { onClose: () => void }) {
   const { state, getState, persist } = useApp();
+  const { premium, openPaywall } = usePremium();
   const { styles, colors } = useTheme();
   const [id] = useState(() => `preset-${randomUUID()}`);
   const [name, setName] = useState('');
@@ -42,6 +45,10 @@ export function PresetCreator({ onClose }: { onClose: () => void }) {
     const previousSelection = getState().selectedPresetId;
     try {
       await persist((current) => {
+        if (!current.presets.some(item => item.id === id) && !canAddPreset(current, premium)) {
+          openPaywall('無料プランのプリセットは3つまでです。');
+          throw new Error('プリセット数が無料プランの上限に達しました。');
+        }
         if (configs.some((item) => !current.exercises.some((e) => e.id === item.exerciseId && !e.archived))) {
           throw new Error('使えなくなった種目があります。一覧から削除して、選び直してください。');
         }

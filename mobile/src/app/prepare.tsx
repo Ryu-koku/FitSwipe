@@ -1,9 +1,10 @@
+import { canAddPreset } from '../premium';
+import { usePremium } from '../premium-context';
 import React, { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import { router } from 'expo-router';
 import { useApp } from '../context';
 import { selectedPreset, formatWeight } from '../logic';
-import { Button, Card, IconButton, Screen, SectionTitle, useTheme } from '../ui';
+import { Button, Card, Screen, SectionTitle, useTheme } from '../ui';
 import { AppIcon } from '../components/AppIcon';
 import { PresetEditor } from '../components/PresetEditor';
 import { PresetCreator } from '../components/PresetCreator';
@@ -11,6 +12,8 @@ import { ExercisePictogram } from '../components/ExercisePictogram';
 
 export default function PrepareScreen() {
   const { state, update } = useApp();
+  const { premium, openPaywall } = usePremium();
+  const startAdding = () => canAddPreset(state, premium) ? setAdding(true) : openPaywall('無料プランのプリセットは3つまでです。');
   const { colors, styles } = useTheme();
   const [editing, setEditing] = useState<string>();
   const [editingExercise, setEditingExercise] = useState<number>();
@@ -23,8 +26,7 @@ export default function PrepareScreen() {
     setEditing(preset.id);
   };
   return (
-    <Screen title="メニュー" onBack={() => router.replace('/')}
-      right={<IconButton label="プリセットを追加" symbol="＋" onPress={() => setAdding(true)} />}>
+    <Screen title="メニュー">
       <SectionTitle>プリセットから選ぶ</SectionTitle>
       <View style={[styles.wrap, { gap: 10 }]}>
         {state.presets.map((item) => {
@@ -45,6 +47,13 @@ export default function PrepareScreen() {
             </Card>
           </Pressable>;
         })}
+        <Pressable accessibilityRole="button" accessibilityLabel="プリセットを追加"
+          onPress={startAdding} style={({ pressed }) => [{ width: '48%' }, pressed && styles.pressed]}>
+          <Card style={{ marginBottom: 0, padding: 12, minHeight: 74,
+            justifyContent: 'center', alignItems: 'center', borderColor: colors.line, borderWidth: 1 }}>
+            <Text style={[styles.body, { color: colors.primary, fontWeight: '700' }]}>＋ プリセットを追加</Text>
+          </Card>
+        </Pressable>
       </View>
       {preset ? <>
         <View style={[styles.row, { marginTop: 16, marginBottom: 16 }]}>
@@ -81,7 +90,6 @@ export default function PrepareScreen() {
         <Button label="メニューを編集・種目を追加" secondary onPress={() => edit()} />
       </> : <Card style={{ marginTop: 16 }}>
         <Text style={styles.body}>よく使う種目をまとめて、トレーニングを始めましょう。</Text>
-        <Button label="プリセットを作成" onPress={() => setAdding(true)} />
       </Card>}
       {editing && <PresetEditor presetId={editing} initialExerciseId={editingExercise}
         onClose={() => { setEditing(undefined); setEditingExercise(undefined); }} />}

@@ -22,6 +22,8 @@ function roomScreen() {
   const mod = new Module(filename, module); mod.filename = filename; mod.paths = Module._nodeModulePaths(path.dirname(filename));
   const original = mod.require.bind(mod);
   mod.require = name => {
+    if (name === '../premium-context') return { usePremium: () => ({ premium: false, openPaywall: () => {} }) };
+
     if (name === 'react') return { useState: value => { const i = cursor++; if (!(i in slots)) slots[i] = typeof value === 'function' ? value() : value; return [slots[i], next => { slots[i] = next; }]; }, useRef: value => ({ current: value }), useEffect: () => {}, useCallback: fn => fn };
     if (name === 'react-native') return { View: 'View', Text: 'Text', Pressable: 'Pressable', Modal: 'Modal',
       Animated: { View: 'AnimatedView', Text: 'AnimatedText', Value: class { interpolate() { return 0; } } },

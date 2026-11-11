@@ -5,6 +5,7 @@ import { achievementSummary, completedSessions, completedSets, localDay } from '
 import { Card, Sheet, useTheme } from '../ui';
 import { SessionDetails } from './SessionDetails';
 import { AppIcon } from './AppIcon';
+import { StreakFlame } from './StreakFlame';
 import { useReducedMotion } from '../use-reduced-motion';
 
 function startOfWeek(date: Date, monday: boolean) {
@@ -70,9 +71,8 @@ export function WorkoutCalendar() {
   }, [width, offset, move, reduced]);
   const sessions = completedSessions(state);
 
-  const streakWeeks = achievementSummary(state).streakWeeks;
+  const { streakWeeks, longestStreakWeeks } = achievementSummary(state);
   const today = localDay(new Date());
-  const currentWeekStart = startOfWeek(new Date(), state.weekStartsMonday);
   const sessionsWithSets = new Set(completedSets(state).map((set) => set.sessionId));
   // Mark only days with a completed set, like the streak and training-day count.
   // Each day takes the color of its last workout's preset; earlier presets that
@@ -86,7 +86,6 @@ export function WorkoutCalendar() {
   const days = new Set(dayColors.keys());
   const recordedWeeks = new Set(sessions.filter((s) => sessionsWithSets.has(s.id) && localDay(s.startedAt) <= today)
     .map((s) => localDay(startOfWeek(new Date(s.startedAt), state.weekStartsMonday))));
-  if (!recordedWeeks.has(localDay(currentWeekStart))) currentWeekStart.setDate(currentWeekStart.getDate() - 7);
   const rowHeight = 36;
   const renderMonth = (delta: number) => {
     const date = new Date(month.getFullYear(), month.getMonth() + delta, 1);
@@ -95,28 +94,8 @@ export function WorkoutCalendar() {
     const weeks = Math.ceil((leading + length) / 7);
     const monthKey = `${date.getFullYear()}-${date.getMonth()}`;
     const isCurrentMonth = date.getFullYear() === new Date().getFullYear() && date.getMonth() === new Date().getMonth();
-    const isFutureMonth = date.getFullYear() > new Date().getFullYear() || (date.getFullYear() === new Date().getFullYear() && date.getMonth() > new Date().getMonth());
-    let displayedStreak = streakWeeks;
-    let showStreak = isCurrentMonth;
-    if (!isCurrentMonth && !isFutureMonth) {
-      const firstWeek = localDay(startOfWeek(date, state.weekStartsMonday));
-      const lastDay = new Date(date.getFullYear(), date.getMonth() + 1, 0);
-      const lastWeek = localDay(startOfWeek(lastDay, state.weekStartsMonday));
-      // Exclude next month's workouts even when they share the final week.
-      const monthWeeks = new Set(sessions.filter((session) => sessionsWithSets.has(session.id) && localDay(session.startedAt) <= localDay(lastDay))
-        .map((session) => localDay(startOfWeek(new Date(session.startedAt), state.weekStartsMonday))));
-      let run = 0;
-      let previous: string | undefined;
-      displayedStreak = 0;
-      for (const week of [...monthWeeks].filter((key) => key <= lastWeek).sort()) {
-        const before = new Date(`${week}T12:00:00`);
-        before.setDate(before.getDate() - 7);
-        run = previous === localDay(before) ? run + 1 : 1;
-        if (week >= firstWeek) displayedStreak = Math.max(displayedStreak, run);
-        previous = week;
-      }
-      showStreak = displayedStreak > 0;
-    }
+    const displayedStreak = streakWeeks || longestStreakWeeks;
+    const showStreak = isCurrentMonth && displayedStreak > 0;
     // Only the visible month determines the strip height; adjacent swipe pages
     // may have more weeks and must not leave empty space under this month.
     return <View key={monthKey} onLayout={(event) => {
@@ -125,7 +104,7 @@ export function WorkoutCalendar() {
       if (delta === 0) resizeCalendar(next);
     }} style={{ width: '100%', ...(delta !== 0 ? { position: 'absolute' as const, top: 0, left: delta * width } : {}) }} aria-hidden={delta !== 0} accessibilityElementsHidden={delta !== 0} importantForAccessibility={delta ? 'no-hide-descendants' : 'auto'}>
       <View style={[styles.row, { justifyContent: 'space-between' }]}>
-        <View accessibilityLabel={showStreak ? `${isCurrentMonth ? 'ストリーク' : '月内最長ストリーク'} ${displayedStreak}週` : undefined} style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>{showStreak && <><AppIcon name="flame" size={20} color={colors.primary} /><Text style={{ color: colors.primary, fontSize: 16, fontWeight: '800', marginLeft: 3 }}>{displayedStreak}週連続!</Text></>}</View>
+        <View accessibilityLabel={showStreak ? `${streakWeeks ? '現在の連続記録' : '過去最高の連続記録'} ${displayedStreak}週` : undefined} style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>{showStreak && <><StreakFlame animate={delta === 0} color={colors.primary} /><Text style={{ color: colors.primary, fontSize: 16, fontWeight: '800', marginLeft: 3 }}>{displayedStreak}週連続!</Text></>}</View>
         <View accessibilityLabel={isCurrentMonth ? '今月' : undefined} style={{ alignItems: 'center' }}>
           <Text accessibilityLiveRegion="polite" style={[styles.body, { fontWeight: '700' }]}>{date.getFullYear() !== new Date().getFullYear() ? `${date.getFullYear()}年` : ''}{date.getMonth() + 1}月</Text>
           <View style={{ height: 2, width: 18, marginTop: 2, borderRadius: 1, backgroundColor: isCurrentMonth ? colors.primary : 'transparent' }} />

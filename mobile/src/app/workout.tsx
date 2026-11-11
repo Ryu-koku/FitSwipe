@@ -50,6 +50,9 @@ export default function WorkoutScreen() {
   const [browsing, setBrowsing] = useState<WorkoutCard>();
   const [preparingNext, setPreparingNext] = useState(false);
   const session = activeSession(state);
+  const title = state.rooms.find(room => room.id === state.activeRoomId)?.name
+    ?? state.presets.find(preset => preset.id === session?.presetId)?.name
+    ?? 'トレーニング';
   const progress = state.workout;
   const current = session ? currentCard(state, session.id) : undefined;
   const validBrowsing = browsing && state.sets.some((item) => item.id === browsing.setId && item.sessionId === session?.id) ? browsing : undefined;
@@ -89,7 +92,7 @@ export default function WorkoutScreen() {
   );
   if (!session || !set || !exercise || !card)
     return (
-      <Screen title="トレーニング">
+      <Screen title={title} onBack={() => router.replace('/prepare')}>
         <Text style={styles.body}>進行中のカードはありません。</Text>
         {session && (
           <Button
@@ -198,9 +201,9 @@ export default function WorkoutScreen() {
       headerShown={false}
     >
       <View style={[styles.row, { marginBottom: 4 }]}>
-        <IconButton label="トレーニングを終了" symbol="‹" onPress={() => setExitPrompt(true)} />
-        <Text style={[styles.title, { flex: 1, textAlign: 'center' }]}>トレーニング</Text>
-        <View accessible={false} style={{ width: 48 }} />
+        <IconButton label="戻る" symbol="‹" onPress={() => router.replace('/prepare')} />
+        <Text numberOfLines={1} style={[styles.title, { flex: 1, textAlign: 'center' }]}>{title}</Text>
+        <IconButton label="トレーニングを終了" symbol="終了" onPress={() => setExitPrompt(true)} />
       </View>
       <Text accessibilityLabel={`全${segments.length}種目中${completedExercises}種目完了`} style={[styles.title, { textAlign: 'center', color: colors.primary, marginBottom: 10 }]}>
         {completedExercises} / {segments.length}

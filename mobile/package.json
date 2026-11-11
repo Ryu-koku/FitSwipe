@@ -28,6 +28,7 @@
     "react-native": "0.88.1",
     "react-native-nitro-google-signin": "^2.3.0",
     "react-native-nitro-modules": "^0.37.1",
+    "react-native-purchases": "^11.0.1",
     "react-native-qrcode-svg": "^6.3.41",
     "react-native-safe-area-context": "~5.11.1",
     "react-native-svg": "15.16.0",

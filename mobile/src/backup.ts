@@ -41,6 +41,7 @@ export function parseBackup(raw: string): AppState {
     if (e.mode !== 'NORMAL' && e.mode !== 'BILATERAL') fail();
     return { id: integer(e.id, 1), name: string(e.name), mode: e.mode as AppState['exercises'][number]['mode'],
       sortOrder: integer(e.sortOrder), archived: bool(e.archived),
+      custom: e.custom === undefined ? undefined : bool(e.custom),
       muscleGroup: e.muscleGroup === undefined ? undefined : string(e.muscleGroup) };
   }));
   const exerciseIds = new Set(exercises.map(e => e.id));

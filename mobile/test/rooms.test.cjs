@@ -121,3 +121,16 @@ test('shared snapshots stay within server limits without changing local data', (
   assert.equal(snapshot.endedAt, '2026-10-08T00:00:00.000Z');
   assert.equal(state.exercises[0].name.length, 91);
 });
+
+test('rooms client retains premium_required code from the real Worker', async t => {
+  const { serveWorker } = await import('../../rooms-server/cloudflare/test/local-worker.mjs');
+  const server = await serveWorker();
+  t.after(() => server.close());
+  const api = createRoomsClient(server.url);
+  const { TERMS_VERSION } = require('../src/legal.ts');
+  const owner = await api.register('Free', null, TERMS_VERSION);
+  await api.create(owner, 'One');
+  await api.create(owner, 'Two');
+  await assert.rejects(() => api.create(owner, 'Three'), error => error.status === 402 && error.code === 'premium_required');
+  assert.equal((await api.list(owner)).length, 2);
+});
