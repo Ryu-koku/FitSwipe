@@ -78,3 +78,16 @@ test('detail charts retain their existing dimensions when no available height is
   assert.equal(render({ points }).find(n => n.type === 'Svg').props.height, 240);
   assert.equal(render({ points, compact: true }).find(n => n.type === 'Svg').props.height, 140);
 });
+
+test('date ticks are single SVG strings with end labels anchored inside the plot', () => {
+  for (const width of [240, 280, 360]) {
+    const render = chart();
+    const props = { points: [{ date: '2026-10-29', value: 105 }, { date: '2026-11-02', value: 105 }], compact: true, availableHeight: 180 };
+    render(props)[0].props.onLayout(layout(180, width));
+    const nodes = render(props);
+    const ticks = nodes.filter(n => n.type === 'SvgText' && n.props.y === 129);
+    assert.deepEqual(ticks.map(n => n.props.children), ['10/29', '10/31', '11/2']);
+    assert.deepEqual(ticks.map(n => n.props.textAnchor), ['start', 'middle', 'end']);
+    assert.equal(ticks.at(-1).props.x, width - 26);
+  }
+});

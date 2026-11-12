@@ -1,5 +1,7 @@
 import { canCreateRoom } from '../premium';
 import { usePremium } from '../premium-context';
+import { ProfileEditor } from '../components/ProfileEditor';
+import { AppIcon } from '../components/AppIcon';
 import { RoomsApiError } from '../rooms';
 import { LegalLinks } from '../components/LegalLinks';
 import { reportReasons, type ReportReason } from '../legal';
@@ -29,7 +31,7 @@ export default function RoomsScreen() {
   const insets = useSafeAreaInsets();
   const inviteQrSize = Math.max(96, Math.min(220, windowWidth - 112, windowHeight - insets.top - insets.bottom - 500));
   const params = useLocalSearchParams<{ code?: string }>();
-  const [dialog, setDialog] = useState<'create' | 'join' | 'profile' | 'rename' | 'invite' | 'manage' | 'actions' | 'members' | 'consent' | 'rules' | 'report' | 'blocked'>();
+  const [dialog, setDialog] = useState<'create' | 'join' | 'profile' | 'rename' | 'invite' | 'manage' | 'actions' | 'members' | 'consent' | 'rules' | 'report' | 'blocked' | 'editProfile'>();
   const [reportTarget, setReportTarget] = useState<{ id: string; name: string; postId?: string }>();
   const [reportReason, setReportReason] = useState<ReportReason>('harassment');
   const [reportDetails, setReportDetails] = useState('');
@@ -107,7 +109,7 @@ export default function RoomsScreen() {
     } }]);
   };
   return <Screen title={room?.name ?? 'ルーム'} onBack={rooms.roomId ? () => { setMemberId(undefined); rooms.close(); } : undefined}
-    right={rooms.account ? <View style={styles.row}><IconButton label={room ? 'ルームの操作' : 'プロフィール'} symbol="⋯" onPress={menu} /></View> : undefined}
+    right={rooms.account ? <View style={styles.row}><IconButton label="プロフィールを編集" icon={<AppIcon name="profile" color={colors.primary} />} onPress={() => setDialog('editProfile')} /><IconButton label={room ? 'ルームの操作' : 'アカウントの操作'} symbol="⋯" onPress={menu} /></View> : undefined}
     onRefresh={rooms.account ? () => {
       setPullRefreshing(true);
       void rooms.run(rooms.refresh).finally(() => setPullRefreshing(false));
@@ -221,7 +223,7 @@ export default function RoomsScreen() {
         ])} />}
       </View>)}
     </Sheet>}
-    {(dialog === 'create' || dialog === 'join' || dialog === 'rename') && <Sheet title={dialog === 'create' ? '新しいルーム' : dialog === 'join' ? 'ルームに参加' : '表示名を変更'} onClose={() => setDialog(undefined)} popup={dialog === 'create'}>
+    {(dialog === 'create' || dialog === 'join' || dialog === 'rename') && <Sheet title={dialog === 'create' ? '新しいルーム' : dialog === 'join' ? 'ルームに参加' : '表示名を変更'} onClose={() => setDialog(undefined)} bottomSheet={dialog === 'create' || dialog === 'join'}>
       <Field autoFocus label={dialog === 'create' ? undefined : dialog === 'join' ? '招待コード・参加リンク' : '表示名'} placeholder={dialog === 'create' ? 'ルーム名（任意）' : undefined} value={draft} onChangeText={setDraft} maxLength={dialog === 'join' ? 200 : dialog === 'create' ? 40 : 32} />
       {dialog === 'create' && <View style={{ marginTop: 20 }}>
         <Text style={styles.small}>ルームの種類 · どちらも記録の詳細は共有されます</Text>
@@ -274,6 +276,7 @@ export default function RoomsScreen() {
     </View>}
     </Modal>
     {inviteRoom && <InviteSheet room={inviteRoom} onClose={() => setDialog(undefined)} />}
+    {dialog === 'editProfile' && <ProfileEditor initiallyEditing onClose={() => setDialog(undefined)} />}
     {dialog === 'profile' && <Sheet title={rooms.account?.name ?? 'プロフィール'} onClose={() => setDialog(undefined)}>
       <LegalLinks />
       <Button label="ブロックしたユーザー" secondary disabled={rooms.busy} onPress={() => { void rooms.run(async () => { await rooms.loadSafety(); setDialog('blocked'); }); }} />

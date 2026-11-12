@@ -207,38 +207,29 @@ test('bodyweight history automatically uses repetitions and keeps left and right
   assert.deepEqual(graph.props.points.map(point => point.value), [current.side === 'left' ? 12 : 16]);
 });
 
-test('exit has one save action and preserves completed values', () => {
-  const state = startWorkout(seedState());
-  state.restTimerDisabledExerciseIds = state.exercises.map(e => e.id);
-  const app = screen(state);
-  app.press('セット完了');
-  app.press('トレーニングを終了');
-  const buttons = app.render().filter(node => node.type === 'Button').map(node => node.props.label);
-  assert.deepEqual(buttons, ['終了して記録を見る']);
-  app.press('終了して記録を見る');
-  assert.equal(app.getState().sessions[0].status, 'COMPLETED');
-  assert.equal(app.getState().sets.filter(row => row.isCompleted).length, 1);
-  assert.deepEqual(app.routes, [{ pathname: '/complete', params: { sessionId: state.workout.sessionId } }]);
+test('active workout header keeps its title centered without an exit button', () => {
+  const app = screen(startWorkout(seedState()));
+  const nodes = app.render();
+  assert.ok(!nodes.some(node => node.props?.label === 'トレーニングを終了'));
+  const header = nodes.find(node => node.type === 'View' &&
+    Array.isArray(node.props.children) && node.props.children[0]?.props?.label === '戻る');
+  assert.ok(header);
+  const [back, title, spacer] = header.props.children;
+  assert.equal(back.type, 'IconButton');
+  assert.equal(back.props.symbol, '⌄');
+  back.props.onPress();
+  assert.deepEqual(app.routes, ['/prepare']);
+  assert.equal(title.props.style[1].textAlign, 'center');
+  assert.equal(title.props.style[1].flex, 1);
+  assert.equal(spacer.type, 'View');
+  assert.equal(spacer.props.style.width, 48);
 });
 
-test('dismissing the short exit confirmation leaves the workout and entered data intact', () => {
-  const state = startWorkout(seedState());
-  const app = screen(state);
-  app.press('トレーニングを終了');
-  const prompt = app.render().find(node => node.type === 'Sheet' && node.props.title === '終了しますか？');
-  prompt.props.onClose();
-  assert.equal(app.getState(), state);
-  assert.deepEqual(app.routes, []);
-  assert.ok(!app.render().some(node => node.type === 'Sheet'));
-});
-
-test('ending an empty workout uses the same save-and-view confirmation', () => {
+test('ending an empty workout also saves immediately', () => {
   const state = startWorkout(seedState());
   state.sets = [];
   const app = screen(state);
   app.press('トレーニングを終了');
-  assert.equal(app.getState().sessions[0].status, 'IN_PROGRESS');
-  app.press('終了して記録を見る');
   assert.equal(app.getState().sessions[0].status, 'COMPLETED');
   assert.deepEqual(app.routes, [{ pathname: '/complete', params: { sessionId: state.workout.sessionId } }]);
 });
@@ -261,4 +252,24 @@ test('comparison stays out of the recording card and opens its source session on
   assert.ok(app.render().some(node => node.type === 'RecordComparison'));
   app.render().find(node => node.type === 'Sheet').props.onClose();
   assert.ok(!app.render().some(node => node.type === 'RecordComparison'));
+});
+
+
+test('wheels highlight previous values for the displayed side, including zero', () => {
+  for (const mode of ['NORMAL', 'BILATERAL']) {
+    const initial = seedState();
+    if (mode === 'BILATERAL') initial.exercises[0].mode = mode;
+    const state = startWorkout(initial);
+    const card = currentCard(state, state.workout.sessionId);
+    const row = state.sets.find(item => item.id === card.setId);
+    const wheels = app => app.render().filter(node => node.type === 'WorkoutNumberWheel');
+    assert.deepEqual(wheels(screen(state)).map(node => node.props.highlightValue), [undefined, undefined]);
+    state.sessions.push({ id: -1, status: 'COMPLETED', startedAt: '2020-01-01T00:00:00Z' });
+    state.sets.push({ ...row, id: -2, sessionId: -1, isCompleted: true, leftCompleted: true, rightCompleted: true,
+      normalWeightKg: 0, normalReps: 8, leftWeightKg: 32.5, leftReps: 9, rightWeightKg: 35, rightReps: 10 });
+    const previous = state.sets.at(-1);
+    const side = card.side ?? 'normal';
+    assert.deepEqual(wheels(screen(state)).map(node => node.props.highlightValue),
+      [previous[side + 'WeightKg'], previous[side + 'Reps']]);
+  }
 });

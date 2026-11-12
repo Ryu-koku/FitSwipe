@@ -37,7 +37,7 @@ function mount(overrides = {}, platform = 'android', reduced = false) {
       PanResponder: { create: config => ({ panHandlers: config }) } };
     if (name === 'expo-router') return { useFocusEffect: callback => react.useEffect(callback, [callback]) };
     if (name === 'expo-haptics') return { ImpactFeedbackStyle: { Heavy: 'heavy' }, impactAsync: style => { haptics.push(`impact:${style}`); return Promise.resolve(); } };
-    if (name === '../ui') return { useTheme: () => ({ colors: {}, styles: {} }), Button: 'Button', Sheet: 'Sheet' };
+    if (name === '../ui') return { useTheme: () => ({ colors: { primary: 'primary', ink: 'ink' }, styles: {} }), Button: 'Button', Sheet: 'Sheet' };
     if (name === '../use-reduced-motion') return { useReducedMotion: () => reduced };
     return original(name);
   };
@@ -154,4 +154,38 @@ test('disabled overlays and accessibility adjustments obey the same boundaries',
   app.render({ disabled: true }); assert.equal(app.pan().onStartShouldSetPanResponder(), false);
   app.pan().onAccessibilityAction({ nativeEvent: { actionName: 'increment' } });
   assert.deepEqual(app.changes, [1]); app.unmount();
+});
+
+
+test('previous value alone is highlighted while idle and dragging, including zero', () => {
+  for (const props of [{ value: 60, highlightValue: 62.5 }, { value: 0, highlightValue: 0 }, { value: 8, highlightValue: 9, step: 1, unit: '回' }]) {
+    const app = mount(props);
+    const check = () => {
+      const rows = app.render().filter(node => node.props?.testID?.startsWith('workout-number-row-'));
+      assert.ok(rows.some(row => row.props.children[0].props.children === props.highlightValue));
+      for (const row of rows) {
+        const text = row.props.children[0].props;
+        assert.equal(text.style.color, text.children === props.highlightValue ? 'primary' : 'ink');
+      }
+    };
+    check();
+    const pan = app.pan();
+    pan.onPanResponderGrant(app.event(70));
+    pan.onPanResponderMove(app.event(70), { dy: -30, numberActiveTouches: 1 });
+    check();
+    pan.onPanResponderRelease(app.event(70));
+    app.unmount();
+  }
+});
+
+test('without previous value wheel retains its idle and active colors', () => {
+  const app = mount();
+  const colors = () => app.render().filter(node => node.props?.testID?.startsWith('workout-number-row-'))
+    .map(row => row.props.children[0].props.style.color);
+  assert.ok(colors().every(color => color === 'ink'));
+  const pan = app.pan();
+  pan.onPanResponderGrant(app.event(70));
+  assert.ok(colors().every(color => color === 'primary'));
+  pan.onPanResponderRelease(app.event(70));
+  app.unmount();
 });

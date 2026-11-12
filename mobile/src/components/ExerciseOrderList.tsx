@@ -3,6 +3,7 @@ import { Animated, PanResponder, Pressable, ScrollView, Text, View } from 'react
 import { Card, feedback, useTheme } from '../ui';
 import { moveItem } from '../reorder';
 import { useReducedMotion } from '../use-reduced-motion';
+import { SwipeDeleteRow } from './SwipeDeleteRow';
 import { ExercisePictogram } from './ExercisePictogram';
 
 const ROW = 72;
@@ -19,16 +20,8 @@ export function ExerciseOrderList({ items, onMove, onEdit, onDelete, header, foo
   const offset = useRef(0);
   const bounds = useRef({ top: 0, height: 0, content: 0 });
   const [dragY] = useState(() => new Animated.Value(0));
-  const [swipeX] = useState(() => new Animated.Value(0));
   const [swipedId, setSwipedId] = useState<number>();
-  const swipedIdRef = useRef<number | undefined>(undefined);
-  const swipeOpen = useRef(false);
-  const closeSwipe = () => {
-    swipeX.stopAnimation();
-    swipeOpen.current = false;
-    swipedIdRef.current = undefined;
-    setSwipedId(undefined);
-  };
+  const closeSwipe = () => setSwipedId(undefined);
   const [preview, setPreview] = useState<number>();
   const [pendingOrder, setPendingOrder] = useState<Item[]>();
   const [dragging, setDragging] = useState<number>();
@@ -106,39 +99,22 @@ export function ExerciseOrderList({ items, onMove, onEdit, onDelete, header, foo
       <View onTouchStart={closeSwipe}>{header}</View>
       <View style={{ height: items.length * ROW }}>
         {items.map((item, index) => <OrderRow key={item.id} index={order.findIndex((v) => v.id === item.id)} dragging={dragging === item.id} dragY={dragY} reduced={reduced}>
-          {onDelete && <Pressable accessibilityRole="button" accessibilityLabel={`${item.name}を削除`} disabled={swipedId !== item.id}
-            onPress={() => { swipeX.setValue(0); setSwipedId(undefined); swipedIdRef.current = undefined; swipeOpen.current = false; setPendingOrder(undefined); onDelete(item.id); }}
-            style={{ position: 'absolute', right: 0, top: 0, width: 94, height: ROW - 8, backgroundColor: colors.red, borderTopRightRadius: 18, borderBottomRightRadius: 18, alignItems: 'flex-end', justifyContent: 'center', paddingRight: 22 }}>
-            <Text style={{ color: colors.bg, fontWeight: '700' }}>削除</Text>
-          </Pressable>}
-          <SwipePosition active={swipedId === item.id} position={swipeX} reduced={reduced}>
-          <DragGrip draggable={false} label={`${item.name}、${item.detail}。タップで編集`}
-            onTouchBegin={() => { if (swipedIdRef.current !== undefined && swipedIdRef.current !== item.id) closeSwipe(); }}
-            onStart={(y) => { closeSwipe(); beginDrag(index, item.id, y); }}
-            onSwipe={onDelete ? (dx) => {
-              if (swipedIdRef.current !== item.id) {
-                swipeX.stopAnimation();
-                swipeOpen.current = false;
-                swipedIdRef.current = item.id;
-                setSwipedId(item.id);
-              }
-              swipeX.setValue(Math.max(-76, Math.min(0, (swipeOpen.current ? -76 : 0) + dx)));
-            } : undefined}
-            onSwipeEnd={(dx) => {
-              const open = (swipeOpen.current ? -76 : 0) + dx < -30;
-              swipeOpen.current = open;
-              Animated.timing(swipeX, { toValue: open ? -76 : 0, duration: reduced ? 0 : 160, useNativeDriver: false }).start();
+          <OptionalSwipe name={item.name} open={swipedId === item.id}
+            onOpenChange={(open) => setSwipedId(open ? item.id : undefined)}
+            onDelete={onDelete ? () => { closeSwipe(); setPendingOrder(undefined); onDelete(item.id); } : undefined}>
+          {(closeOnTap) => <Pressable accessibilityRole="button" accessibilityLabel={`${item.name}、${item.detail}。タップで編集`}
+            accessibilityActions={[{ name: 'activate', label: '編集' }, ...(onDelete ? [{ name: 'delete', label: '削除' }] : [])]}
+            onAccessibilityAction={(event) => {
+              if (event.nativeEvent.actionName === 'delete' && onDelete) { closeSwipe(); setPendingOrder(undefined); onDelete(item.id); }
+              else if (event.nativeEvent.actionName === 'activate') onEdit(item.id);
             }}
-            onMove={(dy) => { if (drag.current) { drag.current.pointer = drag.current.origin + dy; updatePosition(); } }}
-            onEnd={finish}
-            onTap={() => { if (swipedIdRef.current !== undefined) closeSwipe(); else onEdit(item.id); }}
-            onStep={(delta) => onMove(index, Math.max(0, Math.min(items.length - 1, index + delta)))}>
-            <Card style={{ height: ROW - 8, marginBottom: 0, paddingHorizontal: 14, paddingVertical: 8, borderColor: dragging === item.id ? colors.primary : colors.line }}>
+            onPress={() => { if (!closeOnTap()) { if (swipedId !== undefined) closeSwipe(); else onEdit(item.id); } }}>
+            <Card style={{ height: ROW - 8, marginBottom: 0, ...(onDelete ? { borderTopRightRadius: 0, borderBottomRightRadius: 0 } : {}), paddingHorizontal: 14, paddingVertical: 8, borderColor: dragging === item.id ? colors.primary : colors.line }}>
               <View style={styles.row}>
                 <ExercisePictogram name={item.name} size={48} animate={false} />
                 <View style={{ flex: 1, minWidth: 0 }}><Text numberOfLines={1} style={[styles.body, { fontWeight: '700' }]}>{item.name}</Text><Text numberOfLines={1} style={styles.small}>{item.detail}</Text></View>
                 <DragGrip label={`${item.name}を並べ替え`}
-                  onTouchBegin={() => { if (swipedIdRef.current !== undefined) closeSwipe(); }}
+                  onTouchBegin={() => { closeSwipe(); }}
                   onStart={(y) => beginDrag(index, item.id, y)}
                   onSwipeEnd={() => {}}
                   onMove={(dy) => { if (drag.current) { drag.current.pointer = drag.current.origin + dy; updatePosition(); } }}
@@ -150,8 +126,8 @@ export function ExerciseOrderList({ items, onMove, onEdit, onDelete, header, foo
                 </DragGrip>
               </View>
             </Card>
-          </DragGrip>
-          </SwipePosition>
+          </Pressable>}
+          </OptionalSwipe>
         </OrderRow>)}
       </View>
       <View onTouchStart={closeSwipe}>{footer}</View>
@@ -159,19 +135,11 @@ export function ExerciseOrderList({ items, onMove, onEdit, onDelete, header, foo
   </View>;
 }
 
-function SwipePosition({ active, position, reduced, children }: { active: boolean; position: Animated.Value; reduced: boolean; children: ReactNode }) {
-  const [x] = useState(() => new Animated.Value(0));
-  useLayoutEffect(() => {
-    x.stopAnimation();
-    if (!active) {
-      const animation = Animated.timing(x, { toValue: 0, duration: reduced ? 0 : 180, useNativeDriver: false });
-      animation.start();
-      return () => animation.stop();
-    }
-    const listener = position.addListener(({ value }) => x.setValue(value));
-    return () => position.removeListener(listener);
-  }, [active, position, x, reduced]);
-  return <Animated.View style={{ transform: [{ translateX: x }] }}>{children}</Animated.View>;
+function OptionalSwipe({ onDelete, children, ...props }: {
+  name: string; open: boolean; onOpenChange: (open: boolean) => void;
+  onDelete?: () => void; children: (closeOnTap: () => boolean) => ReactNode;
+}) {
+  return onDelete ? <SwipeDeleteRow {...props} onDelete={onDelete}>{children}</SwipeDeleteRow> : children(() => false);
 }
 
 function OrderRow({ index, dragging, dragY, reduced, children }: { index: number; dragging: boolean; dragY: Animated.Value; reduced: boolean; children: ReactNode }) {
