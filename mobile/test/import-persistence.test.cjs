@@ -9,20 +9,20 @@ const { seedState } = require('../src/logic.ts');
 const { emptyCloud } = require('../src/sync.ts');
 const { exportBackup, restoreBackup } = require('../src/backup.ts');
 const { importWorkoutCsv } = require('../src/csv.ts');
-function provider(state, saveState, client = {}, storage = {}) {
+function provider(state, saveState, client = {}, storage = {}, observed = {}) {
   const filename = path.resolve(__dirname, '../src/context.tsx');
   const mod = new Module(filename, module);
   mod.filename = filename; mod.paths = Module._nodeModulePaths(path.dirname(filename));
   const original = mod.require.bind(mod);
   let seedCalls = 0;
   mod.require = name => {
-    if (name === 'react') return { createContext: () => ({ Provider: 'Provider' }), useCallback: f => f, useEffect: () => {}, useMemo: f => f(), useRef: v => ({ current: v }), useState: v => [typeof v === 'function' ? v() : v, () => {}] };
+    if (name === 'react') return { createContext: () => ({ Provider: 'Provider' }), useCallback: f => f, useEffect: effect => { observed.effects?.push(effect); }, useMemo: f => f(), useRef: v => ({ current: v }), useState: v => [typeof v === 'function' ? v() : v, next => observed.values?.push(next)] };
     if (name === './community-consent') return { confirmCommunityTerms: async () => true, ensureCommunityTerms: async () => {} };
     if (name === './logic') return { seedState: () => seedCalls++ ? seedState() : state };
     if (name === './storage') return { saveState, forgetToken: async () => {}, ...storage };
     if (name === './rooms') return { createRoomsClient: () => client };
     if (name === 'expo-crypto') return { randomUUID };
-    if (name === 'react-native') return { AppState: { currentState: 'active' } };
+    if (name === 'react-native') return { AppState: { currentState: 'active', addEventListener: (event, listener) => { observed.listener = listener; return { remove() {} }; } } };
     return original(name);
   };
   mod._compile(ts.transpileModule(fs.readFileSync(filename, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true } }).outputText, filename);
@@ -149,23 +149,23 @@ test('failed in-flight sync does not block account deletion or preserve its clou
   assert.equal(api.getState().roomIdentity, undefined);
 });
 
-test('ordinary save failure preserves records and outbox; concurrent edits use durable state', async () => {
+test('ordinary save failure preserves optimistic records and outbox; concurrent edits use latest state', async () => {
   const initial = { ...seedState(), cloud: emptyCloud({ id: 'account', token: 'synthetic', name: 'test', expiresAt: 9999999999 }) };
   let fail = true;
   const api = provider(initial, async () => { if (fail) throw Error('disk full'); });
   await assert.rejects(api.persist(s => ({ ...s, themeMode: 'dark' })), /disk full/);
-  assert.equal(api.getState(), initial);
-  assert.equal(api.getState().cloud.pending.length, 0);
+  assert.notEqual(api.getState(), initial);
+  assert.ok(api.getState().cloud.pending.length > 0);
   fail = false;
   await Promise.all([
     api.persist(s => ({ ...s, heightCm: 170 })),
     api.persist(s => ({ ...s, heightCm: s.heightCm + 1 })),
   ]);
   assert.equal(api.getState().heightCm, 171);
-  assert.equal(api.getState().themeMode, initial.themeMode);
+  assert.equal(api.getState().themeMode, 'dark');
 });
 
-test('failed acknowledgement leaves mutations queued for an idempotent retry', async () => {
+test('failed acknowledgement rejects sync while optimistic acknowledgement remains in memory', async () => {
   const mutation = { kind: 'setting', id: randomUUID(), mutationId: randomUUID(), deleted: false, payload: { field: 'themeMode', value: 'dark' } };
   const initial = { ...seedState(), cloud: { ...emptyCloud({ id: 'account', token: 'synthetic', name: 'test', expiresAt: 9999999999 }), pending: [mutation] } };
   let saves = 0;
@@ -174,7 +174,7 @@ test('failed acknowledgement leaves mutations queued for an idempotent retry', a
     pull: async () => ({ changes: [], cursor: 0, hasMore: false }),
   });
   await assert.rejects(api.syncNow(), /disk full/);
-  assert.deepEqual(api.getState().cloud.pending, [mutation]);
+  assert.deepEqual(api.getState().cloud.pending, []);
 });
 
 test('import waits for an earlier ordinary edit before building its state', async () => {
@@ -205,4 +205,94 @@ test('expired logout archives a queued ordinary edit before switching accounts',
   await Promise.all([editing, logout]);
   assert.equal(archived.heightCm, 171);
   assert.equal(archived.cloud.pending[0].payload.field, 'heightCm');
+});
+
+test('ordinary edits publish immediately, coalesce in-flight writes and notify update errors', async () => {
+  const writes = [], observed = { values: [] };
+  const api = provider(seedState(), state => new Promise((resolve, reject) => {
+    writes.push({ state, resolve, reject });
+  }), {}, {}, observed);
+  const first = api.persist(s => ({ ...s, heightCm: 170 }));
+  assert.equal(api.getState().heightCm, 170);
+  await new Promise(resolve => setImmediate(resolve));
+  const second = api.persist(s => ({ ...s, heightCm: s.heightCm + 1 }));
+  const third = api.persist(s => ({ ...s, heightCm: s.heightCm + 1 }));
+  assert.equal(api.getState().heightCm, 172);
+  assert.equal(writes.length, 1);
+  writes[0].resolve(); await first;
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(writes.length, 2);
+  assert.equal(writes[1].state.heightCm, 172);
+  writes[1].resolve(); await Promise.all([second, third]);
+  api.update(s => ({ ...s, heightCm: 173 }));
+  await new Promise(resolve => setImmediate(resolve));
+  writes[2].reject(Error('disk full'));
+  await new Promise(resolve => setImmediate(resolve));
+  assert.ok(observed.values.some(v => typeof v === 'string' && v.includes('保存できません')));
+  assert.equal(api.getState().heightCm, 173);
+  api.update(s => ({ ...s, heightCm: 174 }));
+  await new Promise(resolve => setImmediate(resolve));
+  writes[3].resolve();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(observed.values.at(-1), undefined);
+});
+
+test('background flush retries unsaved optimistic state and drains the latest pending batch', async () => {
+  const observed = { effects: [], values: [] }, writes = [];
+  const api = provider(seedState(), state => new Promise((resolve, reject) => writes.push({ state, resolve, reject })), {}, {}, observed);
+  const cleanup = observed.effects[0]();
+  const failed = api.persist(s => ({ ...s, heightCm: 170 }));
+  const rejected = assert.rejects(failed, /disk/);
+  await new Promise(resolve => setImmediate(resolve));
+  writes[0].reject(Error('disk')); await rejected;
+  await new Promise(resolve => setImmediate(resolve));
+  observed.listener('background');
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(writes[1].state.heightCm, 170);
+  const editing = api.persist(s => ({ ...s, heightCm: 171 }));
+  observed.listener('background');
+  assert.equal(writes.length, 2);
+  writes[1].resolve();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(writes[2].state.heightCm, 171);
+  writes[2].resolve(); await editing;
+  cleanup();
+});
+
+test('throwing updater rejects without changing memory or preventing the next edit', async () => {
+  const initial = seedState();
+  const api = provider(initial, async () => {});
+  await assert.rejects(api.persist(() => { throw Error('invalid edit'); }), /invalid edit/);
+  assert.equal(api.getState(), initial);
+  await api.persist(s => ({ ...s, heightCm: 172 }));
+  assert.equal(api.getState().heightCm, 172);
+});
+
+test('sync does not push until the latest coalesced edit is durable', async () => {
+  const initial = { ...seedState(), cloud: emptyCloud({ id: 'account', token: 'token', name: 'A', expiresAt: 9999999999 }) };
+  const writes = []; let pushes = 0;
+  const api = provider(initial, state => new Promise(resolve => writes.push({ state, resolve })), {
+    push: async () => { pushes++; throw Error('stop after push'); },
+  });
+  const first = api.persist(s => ({ ...s, heightCm: 170 }));
+  await new Promise(resolve => setImmediate(resolve));
+  const second = api.persist(s => ({ ...s, heightCm: 171 }));
+  const syncing = assert.rejects(api.syncNow(), /stop after push/);
+  writes[0].resolve(); await first;
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(pushes, 0);
+  assert.equal(writes[1].state.heightCm, 171);
+  writes[1].resolve(); await second;
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(pushes, 0);
+  // sync's explicit durable outbox checkpoint uses the same writer.
+  writes[2].resolve(); await syncing;
+  assert.equal(pushes, 1);
+});
+
+test('account switch save failure keeps the current account visible', async () => {
+  const initial = seedState();
+  const api = provider(initial, async () => { throw Error('disk full'); }, {}, { archiveState: async () => {} });
+  await assert.rejects(api.logout(), /disk full/);
+  assert.equal(api.getState(), initial);
 });

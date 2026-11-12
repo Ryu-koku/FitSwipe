@@ -12,7 +12,7 @@ function mount(platform = 'ios') {
   class Value { setValue() {} stopAnimation() {} }
   const animation = () => ({ start: cb => animations.push(cb), stop() {} });
   const globals = {
-    exports: {}, require,
+    exports: {}, require, feedback: () => {},
     useState: initial => [typeof initial === 'function' ? initial() : initial, () => {}],
     useCallback: fn => fn, useMemo: fn => fn(), useEffect() {},
     useTheme: () => ({ styles: {}, colors: {} }), useRefreshExerciseVisibility: () => () => {},

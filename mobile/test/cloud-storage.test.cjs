@@ -198,3 +198,27 @@ test('garbage collection failure after commit cannot report a failed save', asyn
     assert.equal((await loadState()).heightCm, 180);
   } finally { failKey = undefined; }
 });
+
+test('weight unit survives local/guest/archive storage and missing legacy values default to kg', async () => {
+  data.clear();
+  for (const unit of ['lb', undefined]) {
+    const state = { ...seedState(), weightUnit: unit, cloud: emptyCloud({ id: 'unit-test', name: 'test', token: 'test', expiresAt: 9999999999 }) };
+    await saveState(state); await saveGuest(state); await archiveState(state);
+    assert.equal((await loadState()).weightUnit, unit ?? 'kg');
+    assert.equal((await loadGuest()).weightUnit, unit ?? 'kg');
+    assert.equal((await loadArchive('unit-test')).weightUnit, unit ?? 'kg');
+  }
+});
+
+test('stored legacy rest settings default to enabled and global settings persist', async () => {
+  const old = { ...seedState(), restTimerDisabledExerciseIds: [1] };
+  delete old.restTimerDisabled;
+  await saveState(old);
+  const loaded = await loadState();
+  assert.equal(loaded.restTimerDisabled, false);
+  assert.equal(Object.hasOwn(loaded, 'restTimerDisabledExerciseIds'), false);
+  for (const disabled of [true, false]) {
+    await saveState({ ...loaded, restTimerDisabled: disabled });
+    assert.equal((await loadState()).restTimerDisabled, disabled);
+  }
+});

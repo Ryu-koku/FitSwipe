@@ -1,3 +1,5 @@
+import { useApp } from '../context';
+import { formatWeight } from '../logic';
 import React, { useState } from 'react';
 import { Modal, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -54,6 +56,7 @@ export function BeginnerGuide() {
   const [visible, setVisible] = useState(false);
   const [page, setPage] = useState(0);
   const { colors, styles } = useTheme();
+  const { state } = useApp();
   const slide = slides[page];
   const close = () => setVisible(false);
   return <>
@@ -72,7 +75,7 @@ export function BeginnerGuide() {
           <Text accessibilityRole="header" style={[styles.title, { fontSize: 28, marginBottom: 16 }]}>{slide.title}</Text>
           <Text style={[styles.body, { fontSize: 17, lineHeight: 28 }]}>{slide.body}</Text>
           <View style={[styles.card, { marginTop: 24, backgroundColor: colors.soft, gap: 14 }]}>
-            {slide.example.map((line) => <Text key={line} style={[styles.body, { fontWeight: '700' }]}>{line}</Text>)}
+            {slide.example.map((line) => <Text key={line} style={[styles.body, { fontWeight: '700' }]}>{line.replace('20 kg', formatWeight(20, state.weightUnit))}</Text>)}
           </View>
           <Text style={[styles.body, { color: colors.muted, marginTop: 8 }]}>{slide.tip}</Text>
         </ScrollView>

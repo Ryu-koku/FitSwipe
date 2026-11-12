@@ -78,6 +78,8 @@ function split(text: string) {
 const ownedKey = (key: string) => key.startsWith(`${KEY}.s.`) || key.startsWith(`${KEY}.chunk.`);
 
 async function writeState(state: AppState) {
+  const perfWriteStarted = performance.now(); // PERF-TEMP
+  try { // PERF-TEMP
   await storeTokens(state);
   const current = await AsyncStorage.getItem(KEY);
   // Diff only against what is actually on disk (another writer, a reset or a
@@ -128,6 +130,7 @@ async function writeState(state: AppState) {
     const remove = stale.filter((key) => !keep.has(key));
     if (remove.length) await AsyncStorage.multiRemove(remove);
   } catch { /* Committed data remains readable. */ }
+  } finally { console.log('[PERF] writeState', `${(performance.now() - perfWriteStarted).toFixed(1)}ms`); } // PERF-TEMP
 }
 
 async function readState(raw: string, manifest: StateManifest): Promise<AppState> {
@@ -218,6 +221,9 @@ async function encode(state: AppState) {
 }
 
 async function hydrate(state: AppState) {
+  state.restTimerDisabled = state.restTimerDisabled === true;
+  delete (state as AppState & { restTimerDisabledExerciseIds?: unknown }).restTimerDisabledExerciseIds;
+  state.weightUnit = state.weightUnit === 'lb' ? 'lb' : 'kg';
   // Keep row objects when nothing changes: saves skip unchanged rows by identity.
   state.exercises = state.exercises.map((exercise) => {
     const muscleGroup = exerciseGroup(exercise);

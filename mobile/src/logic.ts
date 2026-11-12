@@ -88,6 +88,7 @@ export function seedState(): AppState {
     selectedPresetId: 'gym',
     themeMode: 'system',
     weekStartsMonday: false,
+    weightUnit: 'kg',
     weightStepKg: 1,
     restDurationSeconds: 90,
     visibleAchievementMetrics: [
@@ -102,7 +103,7 @@ export function seedState(): AppState {
     ],
     exerciseWeightSteps: { 1: 2.5, 2: 5, 3: 5, 4: 2.5, 5: 2.5, 7: 2.5 },
     exerciseRestDurations: {},
-    restTimerDisabledExerciseIds: [],
+    restTimerDisabled: false,
     sideSwitchRestExerciseIds: [],
     leftFirstExerciseIds: [],
     installationId: `rn-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`,
@@ -351,9 +352,37 @@ export function achievementSummary(state: AppState): AchievementSummary {
   };
 }
 
-export function formatWeight(value?: number) {
-  if (value === undefined || Number.isNaN(value)) return '—';
-  return `${Number(value.toFixed(2))} kg`;
+export type WeightUnit = AppState['weightUnit'];
+export const KG_PER_LB = 0.45359237;
+
+export function weightToDisplay(kg: number, unit: WeightUnit = 'kg'): number {
+  return unit === 'lb' ? kg / KG_PER_LB : kg;
+}
+
+export function roundWeight(value: number, unit: WeightUnit = 'kg'): number {
+  const scale = unit === 'lb' ? 10 : 100;
+  return Math.round((value + Number.EPSILON) * scale) / scale;
+}
+
+// Round in the input unit, never the stored kg value (which would drift in lb).
+export function weightToKg(value: number, unit: WeightUnit = 'kg'): number {
+  const rounded = roundWeight(value, unit);
+  return unit === 'lb' ? rounded * KG_PER_LB : rounded;
+}
+
+export function weightInputValue(kg: number | undefined, unit: WeightUnit = 'kg') {
+  return kg === undefined ? undefined : roundWeight(weightToDisplay(kg, unit), unit);
+}
+
+export function weightStep(kg: number, unit: WeightUnit = 'kg'): number {
+  // The standard 1 kg increment uses the familiar 5 lb increment.
+  return unit === 'lb' ? kg === 1 ? 5 : Math.max(0.1, roundWeight(weightToDisplay(kg, unit), unit)) : kg;
+}
+
+export function formatWeight(value?: number, unit: WeightUnit = 'kg') {
+  if (value === undefined || !Number.isFinite(value)) return '—';
+  const display = weightToDisplay(value, unit);
+  return `${unit === 'lb' ? display.toFixed(1) : Number(display.toFixed(2))} ${unit}`;
 }
 
 // Single Epley estimate (1-10 reps) for graphs, rankings, BIG3, the calculator
@@ -377,12 +406,23 @@ export function lastExerciseTrainingDays(state: AppState, exerciseId: number, to
   return Math.max(0, Math.floor((end.getTime() - start.getTime()) / 86400000));
 }
 
+export function indexSessionSets(sets: AppState['sets']) {
+  const index = new Map<number, AppState['sets']>();
+  for (const set of sets) {
+    const rows = index.get(set.sessionId);
+    if (rows) rows.push(set);
+    else index.set(set.sessionId, [set]);
+  }
+  return index;
+}
+
 export function previousSet(
-  state: AppState,
+  state: Pick<AppState, 'sessions' | 'sets'>,
   exerciseId: number,
   sessionId: number,
   setOrder?: number,
   side: 'normal' | 'left' | 'right' = 'normal',
+  setsBySession = indexSessionSets(state.sets),
 ) {
   const currentSession = state.sessions.find((s) => s.id === sessionId);
   const priorSessions = state.sessions
@@ -390,7 +430,7 @@ export function previousSet(
       (!currentSession || s.startedAt <= currentSession.startedAt))
     .sort((a, b) => b.startedAt.localeCompare(a.startedAt));
   for (const session of priorSessions) {
-    const sets = state.sets.filter((set) =>
+    const sets = (setsBySession.get(session.id) ?? []).filter((set) =>
       set.sessionId === session.id && set.exerciseId === exerciseId &&
       !set.skippedInputs?.[side] &&
       (side === 'normal' ? set.isCompleted : set[`${side}Completed`]),

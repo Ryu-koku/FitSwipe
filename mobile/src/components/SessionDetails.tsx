@@ -1,8 +1,9 @@
+import { WeightField } from './WeightField';
 import React, { useState } from 'react';
 import { Alert, Pressable, Text, View } from 'react-native';
 import { useApp } from '../context';
 import { formatWeight } from '../logic';
-import { Button, Card, NumberField, Sheet, useTheme } from '../ui';
+import { feedback, Button, Card, NumberField, Sheet, useTheme } from '../ui';
 import { deleteRecordedSession, deleteRecordedSet, editRecordedSet } from '../record-history';
 import type { WorkoutSet } from '../types';
 
@@ -38,14 +39,14 @@ export function SessionDetails({ sessionIds }: { sessionIds: number[] }) {
                 <View style={styles.row}>
                   <Text style={styles.small}>セット {set.setOrder} · {set.isCompleted ? '完了' : '未完了'}</Text>
                   {editable && <Pressable accessibilityRole="button" accessibilityLabel={`${item?.name ?? '種目'}のセット${set.setOrder}を編集`}
-                    onPress={() => setDraft({ ...set })} style={{ minHeight: 44, minWidth: 44, justifyContent: 'center', alignItems: 'center' }}>
+                    onPress={() => { feedback(); return setDraft({ ...set }); }} style={{ minHeight: 44, minWidth: 44, justifyContent: 'center', alignItems: 'center' }}>
                     <Text style={[styles.body, { color: colors.primary }]}>編集</Text>
                   </Pressable>}
                 </View>
                 {item?.mode === 'BILATERAL' ? <>
-                  <Text style={styles.body}>左　{formatWeight(set.leftWeightKg)} × {set.leftReps ?? '—'}回 {set.leftCompleted ? '✓' : ''}</Text>
-                  <Text style={styles.body}>右　{formatWeight(set.rightWeightKg)} × {set.rightReps ?? '—'}回 {set.rightCompleted ? '✓' : ''}</Text>
-                </> : <Text style={styles.body}>{formatWeight(set.normalWeightKg)} × {set.normalReps ?? '—'}回</Text>}
+                  <Text style={styles.body}>左　{formatWeight(set.leftWeightKg, state.weightUnit)} × {set.leftReps ?? '—'}回 {set.leftCompleted ? '✓' : ''}</Text>
+                  <Text style={styles.body}>右　{formatWeight(set.rightWeightKg, state.weightUnit)} × {set.rightReps ?? '—'}回 {set.rightCompleted ? '✓' : ''}</Text>
+                </> : <Text style={styles.body}>{formatWeight(set.normalWeightKg, state.weightUnit)} × {set.normalReps ?? '—'}回</Text>}
               </View>)}
           </Card>;
         })}
@@ -64,7 +65,7 @@ export function SessionDetails({ sessionIds }: { sessionIds: number[] }) {
         return <View key={side}>
           {side !== 'normal' && <Text style={styles.body}>{side === 'left' ? '左' : '右'}{!performed ? '（未実施）' : ''}</Text>}
           {(performed || side === 'normal') && <View style={styles.row}>
-            <NumberField label="重量（kg）" value={draft[`${side}WeightKg`]} onChange={(value) => setDraft({ ...draft, [`${side}WeightKg`]: value })} />
+            <WeightField label="重量（kg）" value={draft[`${side}WeightKg`]} onChange={(value) => setDraft({ ...draft, [`${side}WeightKg`]: value })} />
             <NumberField label="回数" integer value={draft[`${side}Reps`]} onChange={(value) => setDraft({ ...draft, [`${side}Reps`]: value })} />
           </View>}
         </View>;

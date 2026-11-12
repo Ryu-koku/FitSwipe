@@ -45,13 +45,20 @@ function AppLayout() {
         <>
           <RestNotifications />
           <View style={{ flex: 1 }}>
+            <React.Profiler id="Stack" onRender={(id, phase, actualDuration) => { if (actualDuration > 2) console.log('[PERF] profiler', id, phase, `${actualDuration.toFixed(1)}ms`); }}> {/* // PERF-TEMP */}
             <Stack
+              // Expo Router 58 ignores freezeOnBlur; hide the immediately covered route.
+              activityEnabled={1}
               screenOptions={{
                 headerShown: false,
+                freezeOnBlur: true,
                 contentStyle: { backgroundColor: colors.bg },
               }}
             />
+            </React.Profiler> {/* // PERF-TEMP */}
+            <React.Profiler id="TrainingDock" onRender={(id, phase, actualDuration) => { if (actualDuration > 2) console.log('[PERF] profiler', id, phase, `${actualDuration.toFixed(1)}ms`); }}> {/* // PERF-TEMP */}
             <TrainingDock />
+            </React.Profiler> {/* // PERF-TEMP */}
           </View>
         </>
       ) : loadFailed ? (

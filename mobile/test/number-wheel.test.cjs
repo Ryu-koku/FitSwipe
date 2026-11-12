@@ -135,3 +135,29 @@ test('direct input accepts decimal and integer records while rejecting incomplet
   assert.equal(parseWheelInput('12.5', true), undefined);
   assert.equal(parseWheelInput('0', true), 0);
 });
+
+test('set count wheel clamps drags and accessibility adjustments to 1–30', () => {
+  const saved = [], preview = [];
+  const control = createNumberWheel({ step: 1, min: 1, max: 30,
+    onPreview: v => preview.push(v), onChange: v => saved.push(v),
+    onTick() {}, onEdit() {}, onActive() {}, onPosition() {} });
+  control.adjust(1, -1); control.adjust(30, 1);
+  assert.deepEqual(saved, []);
+  control.begin(2, 0); control.move(500); control.end();
+  control.begin(29, 0); control.move(-500); control.end();
+  assert.deepEqual(saved, [1, 30]);
+  assert.deepEqual(preview, [1, 30]);
+});
+
+test('native wheel window bounds allocation and recenters arbitrary decimal values', () => {
+  const { numberWheelWindow } = require('../src/number-wheel.ts');
+  for (const origin of [0, 60, 10000, 123456.78]) {
+    const window = numberWheelWindow(origin, 2.5);
+    assert.ok(window.items.length <= 201);
+    assert.equal(window.items[window.center].value, origin);
+    assert.ok(window.items.every(item => item.value >= 0));
+  }
+  assert.deepEqual(numberWheelWindow(2, 1, 1, 3).items.map(item => item.value), [1, 2, 3]);
+  assert.equal(numberWheelWindow(undefined, 1).items[0].empty, true);
+  assert.equal(numberWheelWindow(0, 1).items[0].empty, false);
+});

@@ -1,4 +1,5 @@
 import { confirmCommunityTerms, ensureCommunityTerms } from './community-consent';
+import { createCoalescingWriter } from './persistence';
 import { TERMS_VERSION } from './legal';
 import React, {
   PropsWithChildren,
@@ -81,6 +82,7 @@ class BusyError extends Error {
   constructor() { super('アカウント処理中です。しばらくお待ちください。'); }
 }
 
+const perfTrackChanges = trackChanges; // PERF-TEMP
 const Context = createContext<AppContextValue | null>(null);
 
 export function AppProvider({ children }: PropsWithChildren) {
@@ -100,19 +102,36 @@ export function AppProvider({ children }: PropsWithChildren) {
   const roomSyncErrorRef = useRef(roomSyncError);
   const updateRoomSyncError = (value: string | undefined) => { roomSyncErrorRef.current = value; setRoomSyncError(value); };
   const client = useRef(createRoomsClient()).current;
-  const writers = useRef<Promise<void>>(Promise.resolve());
+  const writer = useRef<ReturnType<typeof createCoalescingWriter<AppState>> | null>(null);
+  if (writer.current === null) writer.current = createCoalescingWriter(saveState);
+  const flush = useCallback(() => writer.current!.flush(), []);
   const rawPersist = useCallback((updater: (s: AppState) => AppState) => {
-    const work = writers.current.catch(() => {}).then(async () => {
+    const perfPersistStarted = performance.now(); // PERF-TEMP
+    try {
+      // Synchronous evaluation preserves call order without waiting for disk.
+      const perfUpdaterStarted = performance.now(); // PERF-TEMP
       const next = updater(current.current);
-      // Publish only a durable state. Serialize updater evaluation as well as
-      // writes so overlapping UI edits and acknowledgements cannot lose rows.
-      await saveState(next);
+      const perfUpdaterMs = performance.now() - perfUpdaterStarted; // PERF-TEMP
       current.current = next;
+      console.log('[PERF] rawPersist updater / before setState', `${perfUpdaterMs.toFixed(1)}ms`, `${(performance.now() - perfPersistStarted).toFixed(1)}ms`); // PERF-TEMP
       setState(next);
-    });
-    writers.current = work;
-    return work;
+      return writer.current!.write(next);
+    } catch (error) { return Promise.reject(error); }
   }, []);
+  const commitPersist = useCallback(async (updater: (s: AppState) => AppState) => {
+    await flush();
+    const next = updater(current.current);
+    await saveState(next);
+    current.current = next;
+    setState(next);
+  }, [flush]);
+  useEffect(() => {
+    const subscription = NativeAppState.addEventListener('change', value => {
+      if (value === 'background') void flush().catch(() =>
+        setError('記録を保存できませんでした。端末の空き容量を確認してください。'));
+    });
+    return () => subscription.remove();
+  }, [flush]);
   const load = useCallback(() => loadState()
     .then(async (saved) => {
       const loaded = upgradeState(saved);
@@ -135,19 +154,22 @@ export function AppProvider({ children }: PropsWithChildren) {
   const getState = useCallback(() => current.current, []);
   const persist = useCallback((updater: (state: AppState) => AppState) => {
     if (transition.current) return Promise.reject(new BusyError());
+    const perfOriginalUpdater = updater; // PERF-TEMP
+    updater = (s) => { const start = performance.now(); try { return perfOriginalUpdater(s); } finally { console.log('[PERF] persist updater', `${(performance.now() - start).toFixed(1)}ms`); } }; // PERF-TEMP
+    const trackChanges: typeof perfTrackChanges = (...args) => { const start = performance.now(); try { return perfTrackChanges(...args); } finally { console.log('[PERF] persist trackChanges', `${(performance.now() - start).toFixed(1)}ms`); } }; // PERF-TEMP
     return rawPersist(s => trackChanges(s, updater(s), randomUUID));
   }, [rawPersist]);
   const syncNow = useCallback((): Promise<void> => {
     if (syncRunning.current) return syncRunning.current;
     if (importing.current) return Promise.resolve();
     const work = async () => {
-      await writers.current.catch(() => {});
+      await flush();
       const account = current.current.cloud?.identity;
       if (!account) return;
       if (account.expiresAt * 1000 <= Date.now() || !account.token) throw new Error('Googleで再ログインしてください。未送信の記録は端末に残っています。');
       // Re-save before sending: a failed prior disk write must not be treated as
       // a durable outbox. Never use a cursor from a different account.
-      await saveState(current.current);
+      await rawPersist(s => s);
       while (current.current.cloud?.pending.length) {
         const changes = [] as typeof current.current.cloud.pending;
         for (const item of current.current.cloud.pending.slice(0, 50)) {
@@ -155,6 +177,8 @@ export function AppProvider({ children }: PropsWithChildren) {
           changes.push(item);
         }
         if (!changes.length) throw new Error('送信する1件の記録が大きすぎます。内容を確認してください。');
+        // Edits can arrive while a previous network request is in flight.
+        await flush();
         const result = await client.push(account, changes);
         await rawPersist((s) => acknowledge(s, result.acknowledged));
       }
@@ -176,7 +200,7 @@ export function AppProvider({ children }: PropsWithChildren) {
       setSyncError(e instanceof Error ? e.message : '同期できませんでした'); throw e;
     }).finally(() => { syncRunning.current = undefined; });
     return syncRunning.current;
-  }, [client, rawPersist]);
+  }, [client, rawPersist, flush]);
   const cloudId = state.cloud?.identity.id;
   const syncRoomsNow = useCallback((): Promise<void> => {
     if (automaticRunning.current) return automaticRunning.current;
@@ -224,7 +248,7 @@ export function AppProvider({ children }: PropsWithChildren) {
     try {
       await syncRunning.current?.catch(() => {});
       await automaticRunning.current?.catch(() => {});
-      await writers.current.catch(() => {});
+      await flush();
       const before = current.current;
       const account = before.cloud?.identity ?? before.roomIdentity;
       if (account) await ensureCommunityTerms(account);
@@ -237,7 +261,7 @@ export function AppProvider({ children }: PropsWithChildren) {
         throw new Error('プロフィールの保存にはサーバーの更新が必要です。');
       }
       const saved = account ? { ...account, ...result } : result as import('./types').RoomIdentity;
-      await rawPersist(s => applyProfile(s, saved));
+      await commitPersist(s => applyProfile(s, saved));
     } finally { transition.current = false; setCloudBusy(false); }
   };
 
@@ -248,7 +272,7 @@ export function AppProvider({ children }: PropsWithChildren) {
     try {
       await syncRunning.current?.catch(() => {});
       await automaticRunning.current?.catch(() => {});
-      await writers.current.catch(() => {});
+      await flush();
       const before = current.current;
       if (before.pendingPosts.length) throw new Error('ルームへの送信待ちがあります。ルーム画面で再送してからログインしてください。');
       if (!await confirmCommunityTerms()) return false;
@@ -293,7 +317,7 @@ export function AppProvider({ children }: PropsWithChildren) {
           next = mergeGuest(next, before, randomUUID);
         }
       }
-      await rawPersist(() => ({ ...upgradeState(next), loginPromptDismissed: true }));
+      await commitPersist(() => ({ ...upgradeState(next), loginPromptDismissed: true }));
       setSyncError(undefined);
       return true;
     } finally { transition.current = false; setCloudBusy(false); }
@@ -303,7 +327,7 @@ export function AppProvider({ children }: PropsWithChildren) {
     accountEpoch.current += 1;
     transition.current = true; setCloudBusy(true);
     try {
-      await writers.current.catch(() => {});
+      await flush();
       const identity = current.current.cloud?.identity;
       const expired = identity && (!identity.token || identity.expiresAt * 1000 <= Date.now());
       if (expired) {
@@ -316,7 +340,7 @@ export function AppProvider({ children }: PropsWithChildren) {
         if (current.current.cloud?.pending.length || current.current.pendingPosts.length) throw new Error('未送信の記録があります。同期後に再試行してください。');
       }
       await archiveState(current.current);
-      await rawPersist(() => ({ ...seedState(), loginPromptDismissed: true }));
+      await commitPersist(() => ({ ...seedState(), loginPromptDismissed: true }));
       // Revoke the server session after the local switch is durable; an
       // offline logout still drops the token, and the session expires.
       if (identity && !expired) await client.revokeSession(identity).catch(() => {});
@@ -331,11 +355,11 @@ export function AppProvider({ children }: PropsWithChildren) {
     try {
       await syncRunning.current?.catch(() => {});
       await automaticRunning.current?.catch(() => {});
-      await writers.current.catch(() => {});
+      await flush();
       const before = current.current;
       await client.deleteAccount(before.cloud!.identity);
       const guest = { ...before, loginPromptDismissed: true, cloud: undefined, roomIdentity: undefined, rooms: [], roomDetails: {}, pendingPosts: [], activeRoomId: undefined, automaticRoomReceipts: undefined };
-      await rawPersist(() => guest);
+      await commitPersist(() => guest);
       await removeArchive(before.cloud!.identity.id);
       setSyncError(undefined);
     } finally { transition.current = false; setCloudBusy(false); }
@@ -348,7 +372,7 @@ export function AppProvider({ children }: PropsWithChildren) {
       const saved = await loadGuest();
       if (!saved) throw new Error('ログイン前の保管データはありません。');
       await automaticRunning.current?.catch(() => {});
-      await writers.current.catch(() => {});
+      await flush();
       const next = { ...upgradeState(saved), loginPromptDismissed: true };
       await swapGuest(current.current, next);
       current.current = next; setState(next);
@@ -362,7 +386,7 @@ export function AppProvider({ children }: PropsWithChildren) {
       // to disk before publishing. Failed imports never enter the live outbox.
       await syncRunning.current?.catch(() => {});
       await automaticRunning.current?.catch(() => {});
-      await rawPersist(s => trackChanges(s, updater(s), randomUUID));
+      await commitPersist(s => trackChanges(s, updater(s), randomUUID));
     } finally {
       importing.current = false; transition.current = false; setCloudBusy(false);
     }

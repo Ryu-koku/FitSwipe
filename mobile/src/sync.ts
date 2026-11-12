@@ -17,13 +17,14 @@ export type CloudState = {
   lastSynced?: string;
 };
 const kinds = ['exercise', 'session', 'set', 'preset'] as const;
+// Append fields only: positions determine IDs, skipping the retired setting 8.
 const fields = ['themeMode', 'weekStartsMonday', 'weightStepKg', 'restDurationSeconds',
   'visibleAchievementMetrics', 'exerciseWeightSteps', 'exerciseRestDurations',
-  'restTimerDisabledExerciseIds', 'sideSwitchRestExerciseIds', 'leftFirstExerciseIds', 'selectedPresetId', 'exerciseCatalogVersion', 'heightCm'] as const;
+  'sideSwitchRestExerciseIds', 'leftFirstExerciseIds', 'selectedPresetId', 'exerciseCatalogVersion', 'heightCm', 'weightUnit', 'restTimerDisabled'] as const;
 const keyOf = (r: Pick<RecordData, 'kind' | 'id'>) => `${r.kind}:${r.id}`;
 // Fixed IDs for independent preference records; no other account's identity or
 // transport state ever belongs in a synced payload.
-const settingId = (index: number) => `00000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`;
+const settingId = (index: number) => `00000000-0000-4000-8000-${String(index < 7 ? index + 1 : index + 2).padStart(12, '0')}`;
 
 export function emptyCloud(identity: CloudState['identity']): CloudState {
   return { identity, cursor: 0, mapping: {}, pending: [] };
@@ -36,7 +37,7 @@ export function emptyCloud(identity: CloudState['identity']): CloudState {
 export function freshAccount(seed: AppState, identity: CloudState['identity']): AppState {
   return { ...seed, exercises: [], presets: [], sessions: [], sets: [], bodyMeasurements: [], workout: undefined,
     selectedPresetId: undefined, homeGrowthExerciseId: undefined, exerciseCatalogVersion: 0, exerciseWeightSteps: {}, exerciseRestDurations: {},
-    restTimerDisabledExerciseIds: [], sideSwitchRestExerciseIds: [], leftFirstExerciseIds: [], cloud: emptyCloud(identity) };
+    restTimerDisabled: false, sideSwitchRestExerciseIds: [], leftFirstExerciseIds: [], cloud: emptyCloud(identity) };
 }
 
 export function project(state: AppState, mapping: Record<string, string>, uuid: () => string, selected?: Set<string>, unchanged?: Set<object>) {
@@ -76,7 +77,7 @@ export function project(state: AppState, mapping: Record<string, string>, uuid: 
     if (selected && !selected.has(field)) {
       if (field === 'selectedPresetId' && state.selectedPresetId) id('preset', state.selectedPresetId);
       if (field === 'exerciseWeightSteps' || field === 'exerciseRestDurations') Object.keys(state[field]).forEach(local => id('exercise', local));
-      if (field === 'restTimerDisabledExerciseIds' || field === 'sideSwitchRestExerciseIds' || field === 'leftFirstExerciseIds') state[field].forEach(local => id('exercise', local));
+      if (field === 'sideSwitchRestExerciseIds' || field === 'leftFirstExerciseIds') state[field].forEach(local => id('exercise', local));
       return;
     }
     let value: unknown = state[field];
@@ -85,7 +86,7 @@ export function project(state: AppState, mapping: Record<string, string>, uuid: 
     if (field === 'exerciseWeightSteps' || field === 'exerciseRestDurations') {
       value = Object.fromEntries(Object.entries(state[field]).map(([local, v]) => [id('exercise', local), v]));
     }
-    if (field === 'restTimerDisabledExerciseIds' || field === 'sideSwitchRestExerciseIds' || field === 'leftFirstExerciseIds') value = state[field].map((v) => id('exercise', v));
+    if (field === 'sideSwitchRestExerciseIds' || field === 'leftFirstExerciseIds') value = state[field].map((v) => id('exercise', v));
     const record: RecordData = { kind: 'setting', id: settingId(index), deleted: false, payload: { field, value } };
     result[keyOf(record)] = record;
   });
@@ -177,6 +178,8 @@ export function receive(state: AppState, page: SyncPage): AppState {
       }
       if (!fields.includes(field as typeof fields[number])) continue;
       let next: unknown = value;
+      if (field === 'restTimerDisabled' && typeof value !== 'boolean') continue;
+      if (field === 'weightUnit' && value !== 'kg' && value !== 'lb') continue;
       if (field === 'heightCm') next = value ?? undefined;
       if (field === 'selectedPresetId') {
         if (value != null && typeof value !== 'string') continue;
@@ -186,7 +189,7 @@ export function receive(state: AppState, page: SyncPage): AppState {
         if (!object(value)) continue;
         next = Object.fromEntries(Object.entries(value).map(([remote, v]) => [localId('exercise', remote), v]));
       }
-      if (field === 'restTimerDisabledExerciseIds' || field === 'sideSwitchRestExerciseIds' || field === 'leftFirstExerciseIds') {
+      if (field === 'sideSwitchRestExerciseIds' || field === 'leftFirstExerciseIds') {
         if (!Array.isArray(value)) continue;
         next = value.filter((v): v is string => typeof v === 'string').map((v) => localId('exercise', v));
       }
@@ -271,11 +274,12 @@ export function mergeGuest(account: AppState, guest: AppState, uuid: () => strin
     homeProgress: guest.homeProgress ?? account.homeProgress,
     selectedPresetId: guest.selectedPresetId ? presets.get(guest.selectedPresetId) : account.selectedPresetId,
     themeMode: guest.themeMode, weekStartsMonday: guest.weekStartsMonday,
+    weightUnit: guest.weightUnit ?? 'kg',
     weightStepKg: guest.weightStepKg, restDurationSeconds: guest.restDurationSeconds,
     visibleAchievementMetrics: guest.visibleAchievementMetrics,
     exerciseWeightSteps: { ...account.exerciseWeightSteps, ...byExercise(guest.exerciseWeightSteps) },
     exerciseRestDurations: { ...account.exerciseRestDurations, ...byExercise(guest.exerciseRestDurations) },
-    restTimerDisabledExerciseIds: unique([...account.restTimerDisabledExerciseIds, ...guest.restTimerDisabledExerciseIds.map((id) => exercises.get(id)!)]),
+    restTimerDisabled: guest.restTimerDisabled ?? false,
     sideSwitchRestExerciseIds: unique([...account.sideSwitchRestExerciseIds, ...guest.sideSwitchRestExerciseIds.map((id) => exercises.get(id)!)]),
     leftFirstExerciseIds: unique([...account.leftFirstExerciseIds, ...guest.leftFirstExerciseIds.map((id) => exercises.get(id)!)]),
     nextId,

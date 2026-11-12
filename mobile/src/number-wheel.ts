@@ -19,9 +19,11 @@ export function parseWheelInput(raw: string, integer: boolean): number | undefin
 // Preview during a gesture, then persist its final value once. This keeps a
 // quick turn of the wheel from queuing a disk write for every crossed value.
 export function createNumberWheel({
-  step, rowHeight = WHEEL_DRAG_STEP, onPreview, onChange, onTick, onEdit, onActive, onPosition,
+  step, min = 0, max = Infinity, rowHeight = WHEEL_DRAG_STEP, onPreview, onChange, onTick, onEdit, onActive, onPosition,
 }: {
   step: number;
+  min?: number;
+  max?: number;
   rowHeight?: number;
   onPreview: (value: number) => void;
   onChange: (value: number) => void;
@@ -44,17 +46,18 @@ export function createNumberWheel({
   let interval: ReturnType<typeof setInterval> | undefined;
   const clearTimers = () => { clearTimeout(timeout); clearInterval(interval); };
   const change = (next: number) => {
-    next = Math.max(0, Math.round(next * 100) / 100);
+    next = Math.max(min, Math.min(max, Math.round(next * 100) / 100));
     if (!Number.isFinite(next) || next === value) return;
     value = next;
     changed = true;
     onPreview(value);
     onTick();
   };
-  const minimumIndex = () => -Math.ceil((original ?? 0) / step);
+  const minimumIndex = () => Math.floor((min - (original ?? min)) / step);
+  const maximumIndex = () => Math.ceil((max - (original ?? min)) / step);
   const render = (settling = false) => onPosition({ origin: original, index, offset, settling });
   const select = (next: number) => {
-    index = Math.max(minimumIndex(), next);
+    index = Math.max(minimumIndex(), Math.min(maximumIndex(), next));
     change(wheelValue(original, index, step));
   };
   const turn = (delta: number) => {
@@ -99,7 +102,7 @@ export function createNumberWheel({
       if (Math.abs(dy) > WHEEL_DRAG_SLOP) { moved = true; clearTimers(); }
       // Track each pixel directly. Discard travel past zero so reversing at
       // the lower limit responds without dragging back through overscroll.
-      offset = Math.min(-minimumIndex() * rowHeight, offset + dy - lastDy);
+      offset = Math.max(-maximumIndex() * rowHeight, Math.min(-minimumIndex() * rowHeight, offset + dy - lastDy));
       lastDy = dy;
       if (moved) select(Math.round(-offset / rowHeight));
       render();
@@ -128,5 +131,19 @@ export function createNumberWheel({
       render();
     },
     stop,
+  };
+}
+
+// A bounded native scroll surface avoids allocating an unbounded list for kg/lb.
+// Recenter after release; only the visible rows are mounted by FlatList.
+export function numberWheelWindow(origin: number | undefined, step: number, min = 0, max = Infinity) {
+  const low = Math.max(-100, Math.floor((min - (origin ?? min)) / step));
+  const high = Math.min(100, Math.ceil((max - (origin ?? min)) / step));
+  return {
+    center: -low,
+    items: Array.from({ length: high - low + 1 }, (_, slot) => {
+      const index = low + slot;
+      return { value: Math.max(min, Math.min(max, Math.round(((origin ?? min) + index * step) * 100) / 100)), empty: origin === undefined && index === 0 };
+    }),
   };
 }

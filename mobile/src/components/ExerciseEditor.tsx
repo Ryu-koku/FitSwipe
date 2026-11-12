@@ -1,3 +1,4 @@
+import { weightStep, weightToKg } from '../logic';
 import { canAddCustomExercise } from '../premium';
 import { usePremium } from '../premium-context';
 import React, { useRef, useState } from 'react';
@@ -5,7 +6,7 @@ import { FlatList, Keyboard, Pressable, ScrollView, Switch, Text, View } from 'r
 import { useApp } from '../context';
 import type { Exercise, ExerciseMode } from '../types';
 import { numeric, nextId } from '../workout';
-import { Button, Chip, Field, Sheet, useTheme } from '../ui';
+import { feedback, Button, Chip, Field, Sheet, useTheme } from '../ui';
 import { exerciseGroup, muscleGroups } from '../exercise-groups';
 import { ExercisePictogram } from './ExercisePictogram';
 import { useRefreshExerciseVisibility } from '../exercise-motion';
@@ -47,24 +48,21 @@ export function ExerciseEditor({
     setCreating(false);
   } : undefined;
   const [weight, setWeight] = useState(
-    String(
+    String(weightStep(
       exercise
         ? (state.exerciseWeightSteps[exercise.id] ?? state.weightStepKg)
-        : state.weightStepKg,
+        : state.weightStepKg, state.weightUnit),
     ),
   );
   const [left, setLeft] = useState(
     exercise ? state.leftFirstExerciseIds.includes(exercise.id) : false,
-  );
-  const [restTimerEnabled, setRestTimerEnabled] = useState(
-    exercise ? !state.restTimerDisabledExerciseIds.includes(exercise.id) : true,
   );
   const weightValue = numeric(weight);
   const valid =
     !!name.trim() &&
     !!muscleGroup.trim() &&
     weightValue !== undefined &&
-    weightValue >= 0.01 &&
+    weightValue >= (state.weightUnit === 'lb' ? 0.1 : 0.01) &&
     weightValue <= 1000;
   const save = async () => {
     if (!valid || submitted.current) return;
@@ -99,13 +97,9 @@ export function ExerciseEditor({
                   muscleGroup: muscleGroup.trim(),
                 },
               ],
-          exerciseWeightSteps: exercise
-            ? { ...s.exerciseWeightSteps, [id]: weightValue! }
+          exerciseWeightSteps: exercise && weightValue !== weightStep(s.exerciseWeightSteps[id] ?? s.weightStepKg, s.weightUnit)
+            ? { ...s.exerciseWeightSteps, [id]: weightToKg(weightValue!, s.weightUnit) }
             : s.exerciseWeightSteps,
-          restTimerDisabledExerciseIds: [
-            ...s.restTimerDisabledExerciseIds.filter((value) => value !== id),
-            ...(!restTimerEnabled ? [id] : []),
-          ],
           leftFirstExerciseIds: [
             ...s.leftFirstExerciseIds.filter((value) => value !== id),
             ...(left ? [id] : []),
@@ -161,7 +155,7 @@ export function ExerciseEditor({
             <ExercisePictogram name={item.name} preview />
             <Pressable accessibilityRole="checkbox" accessibilityState={{ checked }}
               accessibilityLabel={`${item.name}、${exerciseGroup(item)}`}
-              onPress={() => setSelectedIds((ids) => ids.includes(item.id) ? ids.filter((id) => id !== item.id) : [...ids, item.id])}
+              onPress={() => { feedback(); return setSelectedIds((ids) => ids.includes(item.id) ? ids.filter((id) => id !== item.id) : [...ids, item.id]); }}
               style={({ pressed }) => ({ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 60, opacity: pressed ? 0.7 : 1 })}>
             <View style={{ flex: 1 }}>
               <Text style={[styles.body, { fontWeight: '700' }]}>{item.name}</Text>
@@ -218,20 +212,16 @@ export function ExerciseEditor({
       {exercise && (
         <>
           <Field
-            label="重量の刻み幅（kg）"
+            label={`重量の刻み幅（${state.weightUnit}）`}
             keyboardType="decimal-pad"
             value={weight}
             onChangeText={setWeight}
           />
-          <View style={styles.row}>
-            <Text style={styles.body}>休憩</Text>
-            <Switch value={restTimerEnabled} onValueChange={setRestTimerEnabled} />
-          </View>
           {mode === 'BILATERAL' && (
             <>
               <View style={styles.row}>
                 <Text style={styles.body}>左から開始</Text>
-                <Switch value={left} onValueChange={setLeft} />
+                <Switch value={left} onValueChange={(value) => { feedback(); setLeft(value); }} />
               </View>
             </>
           )}
@@ -239,18 +229,14 @@ export function ExerciseEditor({
             label="共通設定に戻す"
             secondary
             onPress={() => {
-              setWeight(String(state.weightStepKg));
+              setWeight(String(weightStep(state.weightStepKg, state.weightUnit)));
               setLeft(false);
-              setRestTimerEnabled(true);
               update((s) => ({
                 ...s,
                 exerciseWeightSteps: Object.fromEntries(
                   Object.entries(s.exerciseWeightSteps).filter(
                     ([key]) => key !== String(exercise.id),
                   ),
-                ),
-                restTimerDisabledExerciseIds: s.restTimerDisabledExerciseIds.filter(
-                  (id) => id !== exercise.id,
                 ),
                 leftFirstExerciseIds: s.leftFirstExerciseIds.filter(
                   (id) => id !== exercise.id,

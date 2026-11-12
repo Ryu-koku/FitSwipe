@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { Text, View, TextInput } from 'react-native';
 import { useApp } from '../context';
-import { estimatedOneRepMax, formatWeight, strengthGrowth } from '../logic';
-import { Card, Chip, SectionTitle, Sheet, Button, useTheme } from '../ui';
+import { estimatedOneRepMax, weightToKg, formatWeight, strengthGrowth } from '../logic';
+import { feedback, Card, Chip, SectionTitle, Sheet, Button, useTheme } from '../ui';
 import { router } from 'expo-router';
 
 export function StrengthGrowth({ compact = false, height = 180 }: { compact?: boolean; height?: number }) {
@@ -13,7 +13,7 @@ export function StrengthGrowth({ compact = false, height = 180 }: { compact?: bo
   const [width, setWidth] = useState(1);
   const [weight, setWeight] = useState('');
   const [reps, setReps] = useState('');
-  const estimate = estimatedOneRepMax(Number(weight), Number(reps));
+  const estimate = estimatedOneRepMax(weightToKg(Number(weight), state.weightUnit), Number(reps));
   const exercises = state.exercises.filter((e) => !e.archived);
   const exercise = exercises.find((e) => e.id === state.homeGrowthExerciseId) ?? exercises[0];
   const bilateral = exercise?.mode === 'BILATERAL';
@@ -29,22 +29,22 @@ export function StrengthGrowth({ compact = false, height = 180 }: { compact?: bo
   return (
     <>
       {!compact && <SectionTitle>筋力の成長</SectionTitle>}
-      {!compact && <Card><Text style={styles.body}>RM計算（推定1RM）</Text><View style={styles.row}><TextInput value={weight} onChangeText={setWeight} keyboardType="decimal-pad" placeholder="重量 kg" style={{ flex: 1, color: colors.ink, borderWidth: 1, borderColor: colors.line, padding: 10, borderRadius: 10 }} /><TextInput value={reps} onChangeText={setReps} keyboardType="number-pad" placeholder="回数 1〜12" style={{ flex: 1, color: colors.ink, borderWidth: 1, borderColor: colors.line, padding: 10, borderRadius: 10 }} /></View><Text style={styles.metric}>{estimate === undefined ? '—' : `${estimate} kg`}</Text><Text style={styles.small}>Epley式による推定値です。実際の最大重量ではありません。</Text></Card>}
+      {!compact && <Card><Text style={styles.body}>RM計算（推定1RM）</Text><View style={styles.row}><TextInput value={weight} onChangeText={setWeight} keyboardType="decimal-pad" placeholder={`重量 ${state.weightUnit}`} style={{ flex: 1, color: colors.ink, borderWidth: 1, borderColor: colors.line, padding: 10, borderRadius: 10 }} /><TextInput value={reps} onChangeText={setReps} keyboardType="number-pad" placeholder="回数 1〜12" style={{ flex: 1, color: colors.ink, borderWidth: 1, borderColor: colors.line, padding: 10, borderRadius: 10 }} /></View><Text style={styles.metric}>{formatWeight(estimate, state.weightUnit)}</Text><Text style={styles.small}>Epley式による推定値です。実際の最大重量ではありません。</Text></Card>}
       <Card style={compact ? { padding: 12, marginBottom: 0 } : undefined}>
-        {compact && <View style={styles.row}><Text style={[styles.body, { fontWeight: '700' }]}>筋力の成長</Text><Text accessibilityRole="button" onPress={() => router.push('/growth')} style={[styles.tab, { paddingVertical: 4 }]}>詳しく見る ›</Text></View>}
+        {compact && <View style={styles.row}><Text style={[styles.body, { fontWeight: '700' }]}>筋力の成長</Text><Text accessibilityRole="button" onPress={() => { feedback(); router.push('/growth'); }} style={[styles.tab, { paddingVertical: 4 }]}>詳しく見る ›</Text></View>}
         <View style={styles.row}>
           <Text style={[styles.body, { flex: 1 }]}>{exercise?.name ?? '種目がありません'}</Text>
           {!compact && <Button label="種目を選ぶ" secondary onPress={() => setChoosing(true)} />}
         </View>
-        <Text style={styles.small}>推定最大重量（kg）・直近90日</Text>
+        <Text style={styles.small}>推定最大重量（{state.weightUnit}）・直近90日</Text>
         {bilateral && !compact && <View style={styles.wrap}>
           <Chip label="左" active={side === 1} onPress={() => setSide(1)} />
           <Chip label="右" active={side === 2} onPress={() => setSide(2)} />
         </View>}
         {!points.length ? <Text style={[styles.small, { marginVertical: compact ? 8 : 16 }]}>重量あり・1〜10回の完了記録ができると、ここに成長を表示します。</Text> : <>
-          <Text style={[styles.metric, { color: colors.primary }]}>{formatWeight(points[points.length - 1].value)}</Text>
-          {!compact && <Text style={styles.small}>直近：{points[points.length - 1].date} ／ 縦軸 0〜{max.toFixed(1)} kg</Text>}
-          <View accessible accessibilityLabel={points.map((p) => `${p.date}、${p.value.toFixed(1)}キログラム`).join('。')}
+          <Text style={[styles.metric, { color: colors.primary }]}>{formatWeight(points[points.length - 1].value, state.weightUnit)}</Text>
+          {!compact && <Text style={styles.small}>直近：{points[points.length - 1].date} ／ 縦軸 0〜{formatWeight(max, state.weightUnit)}</Text>}
+          <View accessible accessibilityLabel={points.map((p) => `${p.date}、${formatWeight(p.value, state.weightUnit)}`).join('。')}
             onLayout={(e) => setWidth(e.nativeEvent.layout.width)} style={{ height, marginTop: compact ? 2 : 12 }}>
             {[0, 1, 2, 3].map((i) => <View key={i} style={{ position: 'absolute', left: 0, right: 0, top: 12 + i * Math.max(12, height - 24) / 3, height: 1, backgroundColor: colors.line }} />)}
             {positions.slice(1).map((p, i) => {

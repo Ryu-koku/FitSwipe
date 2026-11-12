@@ -24,7 +24,8 @@ function editor(initialExerciseId) {
     if (name === 'react-native') return { View: 'View', Text: 'Text', Pressable: 'Pressable', Switch: 'Switch' };
     if (name === '../context') return { useApp: () => ({ state, update: fn => { state = fn(state); events.push('save'); } }) };
     if (name === '../ui') return { useTheme: () => ({ colors: {}, styles: {} }),
-      Sheet: 'Sheet', Field: 'Field', Button: 'Button', IconButton: 'IconButton', NumberField: 'NumberField' };
+      Sheet: 'Sheet', Field: 'Field', Button: 'Button', IconButton: 'IconButton', WorkoutNumberWheel: 'WorkoutNumberWheel' };
+    if (name.endsWith('/WeightWheel')) return { WeightWheel: 'WorkoutNumberWheel' };
     if (name.startsWith('./')) { const component = name.slice(2); return { [component]: component }; }
     return original(name);
   };
@@ -70,6 +71,16 @@ test('exercise sub-sheet keeps its Done button and only closes that sheet', () =
   const app = editor(seedState().presets[0].exercises[0].exerciseId);
   const nodes = app.render();
   assert.equal(nodes.filter(n => n.type === 'Sheet').length, 2);
+  assert.equal(nodes.filter(n => n.type === 'Sheet')[1].props.popup, true);
+  const fields = nodes.filter(n => n.type === 'WorkoutNumberWheel');
+  assert.ok(fields.length >= 3);
+  assert.equal(nodes.filter(n => n.type === 'Switch').length, 0);
+  const reps = fields.find(n => n.props.label === '回数');
+  assert.equal(reps.props.step, 1);
+  const sets = fields.find(n => n.props.label === 'セット数');
+  assert.equal(sets.props.min, 1);
+  assert.equal(sets.props.max, 30);
+  assert.equal(fields.find(n => n.props.label.includes('kg')).props.step, seedState().exerciseWeightSteps[app.preset.exercises[0].exerciseId] ?? seedState().weightStepKg);
   const buttons = nodes.filter(n => n.type === 'Button' && n.props.label === '完了');
   assert.equal(buttons.length, 1);
   buttons[0].props.onPress();

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Pressable, Text, View } from 'react-native';
-import { Button, useTheme } from '../ui';
+import { feedback, Button, useTheme } from '../ui';
 import { openLegalUrl } from '../community-consent';
 import { legalUrls } from '../legal';
 
@@ -9,11 +9,11 @@ export function LegalLinks({ compact = false, children }: React.PropsWithChildre
   if (compact) return <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', columnGap: 6 }}>
     {children}
     {children && <Text style={styles.small}>·</Text>}
-    <Pressable accessibilityRole="link" onPress={() => void openLegalUrl(legalUrls.terms)} style={{ minHeight: 44, justifyContent: 'center' }}>
+    <Pressable accessibilityRole="link" onPress={() => { feedback(); return void openLegalUrl(legalUrls.terms); }} style={{ minHeight: 44, justifyContent: 'center' }}>
       <Text style={[styles.small, { color: colors.primary }]}>利用規約</Text>
     </Pressable>
     <Text style={styles.small}>·</Text>
-    <Pressable accessibilityRole="link" onPress={() => void openLegalUrl(legalUrls.privacy)} style={{ minHeight: 44, justifyContent: 'center' }}>
+    <Pressable accessibilityRole="link" onPress={() => { feedback(); return void openLegalUrl(legalUrls.privacy); }} style={{ minHeight: 44, justifyContent: 'center' }}>
       <Text style={[styles.small, { color: colors.primary }]}>プライバシー</Text>
     </Pressable>
   </View>;

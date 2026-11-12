@@ -143,7 +143,8 @@ test('malformed remote shapes are skipped while valid entries are applied', () =
   assert.equal(result.sessions.length, 0); assert.equal(result.sets.length, 0);
   assert.equal(result.bodyMeasurements.length, 0);
   assert.equal(result.cloud.cursor, 1);
-  assert.equal(result.restTimerDisabledExerciseIds.length, 1);
+  assert.equal(result.restTimerDisabled, false);
+  assert.equal(Object.hasOwn(result, "restTimerDisabledExerciseIds"), false);
 });
 test('selective tracking matches full projection including UUID order and mapping side effects', () => {
   const oldTrack = (previous, next, uuid) => {
@@ -226,4 +227,22 @@ test('pulls apply only their changes: other rows keep identity, deletions cascad
   assert.equal(pulled.exercises[0].name, 'local name');
   assert.deepEqual(pulled.cloud.deletedSessions, [sessionId]);
   assert.equal(pulled.cloud.records, undefined);
+});
+
+test('global rest preference syncs and merges while retired settings are ignored', () => {
+  for (const disabled of [true, false]) {
+    const before = signed();
+    before.restTimerDisabled = !disabled;
+    const next = trackChanges(before, { ...before, restTimerDisabled: disabled }, randomUUID);
+    const mutation = next.cloud.pending.find(r => r.payload?.field === 'restTimerDisabled');
+    assert.equal(mutation.id, '00000000-0000-4000-8000-000000000015');
+    const restored = receive(before, page([mutation,
+      { kind: 'setting', id: '00000000-0000-4000-8000-000000000008', payload: { field: 'restTimerDisabledExerciseIds', value: ['old-exercise'] } },
+    ]));
+    assert.equal(restored.restTimerDisabled, disabled);
+    assert.equal(Object.hasOwn(restored, 'restTimerDisabledExerciseIds'), false);
+    assert.deepEqual(restored.cloud.mapping, before.cloud.mapping);
+    assert.equal(mergeGuest(before, { ...seedState(), restTimerDisabled: disabled }, randomUUID).restTimerDisabled, disabled);
+    assert.equal(receive(restored, page([{ ...mutation, payload: { field: 'restTimerDisabled', value: 'false' } }])).restTimerDisabled, disabled);
+  }
 });

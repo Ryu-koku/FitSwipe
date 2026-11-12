@@ -5,7 +5,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { BackHandler, Linking, Platform, Pressable, Text, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { useApp } from '../context';
-import {
+import { feedback,
   Button,
   Card,
   Chip,
@@ -22,7 +22,7 @@ import type { Exercise, ThemeMode } from '../types';
 import { AccountPanel } from '../components/AccountPanel';
 import { BeginnerGuide } from '../components/BeginnerGuide';
 import { ProfileEditor } from '../components/ProfileEditor';
-import { lastExerciseTrainingDays } from '../logic';
+import { formatWeight, weightStep, weightToKg, lastExerciseTrainingDays } from '../logic';
 import * as Health from '@appeeky/expo-healthkit';
 import { randomUUID } from 'expo-crypto';
 import { exportBackup, restoreBackup } from '../backup';
@@ -35,7 +35,7 @@ export default function SettingsScreen() {
   const { styles } = useTheme();
   const plan = usePremium();
   const [page, setPage] = useState<'menu' | 'basic' | 'exercises' | 'body'>('menu');
-  const [weight, setWeight] = useState(String(state.weightStepKg));
+  const [weight, setWeight] = useState(String(weightStep(state.weightStepKg, state.weightUnit)));
   const [editor, setEditor] = useState<Exercise | 'new'>();
   const [transferBusy, setTransferBusy] = useState(false);
   const [transferError, setTransferError] = useState<string>();
@@ -143,19 +143,26 @@ export default function SettingsScreen() {
           </Card>
           <SectionTitle>トレーニング</SectionTitle>
           <Card>
+            <Text style={styles.body}>重量の単位</Text>
+            <View style={[styles.wrap, { marginTop: 10 }]}>
+              {(['kg', 'lb'] as const).map(unit => <Chip key={unit} label={unit} active={state.weightUnit === unit}
+                onPress={() => { setWeight(String(weightStep(state.weightStepKg, unit))); update(s => ({ ...s, weightUnit: unit })); }} />)}
+            </View>
+          </Card>
+          <Card>
             <Field
-              label="基本の重量増減幅（kg）"
+              label={`基本の重量増減幅（${state.weightUnit}）`}
               value={weight}
               onChangeText={setWeight}
               keyboardType="decimal-pad"
             />
             <Button
               label="重量設定を保存"
-              disabled={step === undefined || step < 0.01 || step > 1000}
+              disabled={step === undefined || step < (state.weightUnit === 'lb' ? 0.1 : 0.01) || step > 1000}
               onPress={() =>
                 update((s) => ({
                   ...s,
-                  weightStepKg: Math.round(step! * 100) / 100,
+                  weightStepKg: step === weightStep(s.weightStepKg, s.weightUnit) ? s.weightStepKg : weightToKg(step!, s.weightUnit),
                 }))
               }
             />
@@ -206,10 +213,11 @@ function BodyMeasurements() {
   const [weight, setWeight] = useState('');
   const [fat, setFat] = useState('');
   const [height, setHeight] = useState(String(state.heightCm ?? ''));
-  const w = numeric(weight), f = numeric(fat), h = numeric(height);
+  const inputWeight = numeric(weight);
+  const w = inputWeight === undefined ? undefined : weightToKg(inputWeight, state.weightUnit), f = numeric(fat), h = numeric(height);
   return <>
     <Card>
-      <Field label="体重（kg）" value={weight} onChangeText={setWeight} keyboardType="decimal-pad" />
+      <Field label={`体重（${state.weightUnit}）`} value={weight} onChangeText={setWeight} keyboardType="decimal-pad" />
       <Field label="体脂肪率（%・任意）" value={fat} onChangeText={setFat} keyboardType="decimal-pad" />
       <Field label="身長（cm）" value={height} onChangeText={setHeight} keyboardType="decimal-pad" />
       <Text style={styles.body}>{w && h && h > 0 ? `BMI ${((w / ((h / 100) ** 2))).toFixed(1)}` : '体重と身長を入力するとBMIを表示'}</Text>
@@ -220,7 +228,7 @@ function BodyMeasurements() {
     </Card>
     <SectionTitle>測定履歴</SectionTitle>
     {state.bodyMeasurements?.length ? <Card><Text style={styles.body}>体重の推移（直近12回）</Text><View style={{ height: 130, flexDirection: 'row', alignItems: 'flex-end', gap: 6, marginTop: 12 }}>{state.bodyMeasurements.slice(-12).map(item => { const values = state.bodyMeasurements!.slice(-12).map(x => x.weightKg ?? 0); const lo = Math.min(...values), hi = Math.max(...values); const barHeight = hi === lo ? 55 : 24 + ((item.weightKg! - lo) / (hi - lo)) * 85; return <View key={item.id} style={{ flex: 1, alignItems: 'center' }}><View style={{ height: barHeight, width: '80%', backgroundColor: styles.metric.color as string, borderRadius: 5 }} /><Text style={styles.small}>{new Date(item.measuredAt).toLocaleDateString().slice(5)}</Text></View>; })}</View></Card> : null}
-    {[...(state.bodyMeasurements ?? [])].reverse().map(item => <Card key={item.id}><Text style={styles.body}>{new Date(item.measuredAt).toLocaleDateString()}　{item.weightKg} kg{item.bodyFatPercent !== undefined ? `　${item.bodyFatPercent}%` : ''}</Text></Card>)}
+    {[...(state.bodyMeasurements ?? [])].reverse().map(item => <Card key={item.id}><Text style={styles.body}>{new Date(item.measuredAt).toLocaleDateString()}　{formatWeight(item.weightKg, state.weightUnit)}{item.bodyFatPercent !== undefined ? `　${item.bodyFatPercent}%` : ''}</Text></Card>)}
   </>;
 }
 
@@ -238,7 +246,7 @@ function SettingsRow({ label, description, disabled = false, onPress }: {
   label: string; description?: string; disabled?: boolean; onPress: () => void;
 }) {
   const { colors, styles } = useTheme();
-  return <Pressable accessibilityRole="button" accessibilityState={{ disabled }} disabled={disabled} onPress={onPress}
+  return <Pressable accessibilityRole="button" accessibilityState={{ disabled }} disabled={disabled} onPress={() => { feedback(); onPress(); }}
     style={({ pressed }) => ({ minHeight: 56, paddingHorizontal: 16, paddingVertical: 14,
       flexDirection: 'row', alignItems: 'center', gap: 12, opacity: disabled ? 0.4 : 1,
       backgroundColor: pressed ? colors.soft : colors.surface })}>

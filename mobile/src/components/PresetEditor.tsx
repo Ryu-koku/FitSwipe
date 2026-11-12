@@ -1,10 +1,12 @@
+import { WeightWheel } from './WeightWheel';
 import React, { useState } from 'react';
-import { Alert, Pressable, Switch, Text, View } from 'react-native';
+import { Alert, Pressable, Text, View } from 'react-native';
 import { useApp } from '../context';
 import type { PresetExerciseConfig } from '../types';
 import { addPresetExercises } from '../exercise-additions';
+import { WorkoutNumberWheel } from './WorkoutNumberWheel';
 import { ExerciseEditor } from './ExerciseEditor';
-import { Button, feedback, Field, NumberField, Sheet, useTheme } from '../ui';
+import { Button, feedback, Field, Sheet, useTheme } from '../ui';
 import { ExerciseOrderList } from './ExerciseOrderList';
 import { ExercisePictogram } from './ExercisePictogram';
 import { AppIcon } from './AppIcon';
@@ -57,7 +59,7 @@ export function PresetEditor({ presetId, onClose: close, initialExerciseId }: { 
           {PRESET_COLORS.map((color, index) => {
             const chosen = presetColor(preset, colors.primary) === color;
             return <Pressable key={color} accessibilityRole="radio" accessibilityState={{ selected: chosen }} accessibilityLabel={`カラー${index + 1}`}
-              onPress={() => update((s) => ({ ...s, presets: s.presets.map((p) => p.id === presetId ? { ...p, color } : p) }))}
+              onPress={() => { feedback(); return update((s) => ({ ...s, presets: s.presets.map((p) => p.id === presetId ? { ...p, color } : p) })); }}
               style={{ width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: chosen ? colors.ink : 'transparent' }}>
               <View style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: color }} />
             </Pressable>;
@@ -75,31 +77,18 @@ export function PresetEditor({ presetId, onClose: close, initialExerciseId }: { 
     {adding && <ExerciseEditor onClose={() => setAdding(false)}
       excludedIds={preset.exercises.map((item) => item.exerciseId)}
       onAdded={(ids) => update((s) => addPresetExercises(s, presetId, ids))} />}
-    {config && exercise && <Sheet title={exercise.name} onClose={() => setEditing(undefined)}>
+    {config && exercise && <Sheet title={exercise.name} onClose={() => setEditing(undefined)} popup>
       <View style={{ alignItems: 'center', marginBottom: 12 }}><ExercisePictogram name={exercise.name} animate={false} /></View>
-      {exercise.mode === 'BILATERAL' ? <View style={styles.row}>
-        <NumberField label="左kg" value={config.leftWeightKg} onChange={(leftWeightKg) => patch({ leftWeightKg })} />
-        <NumberField label="右kg" value={config.rightWeightKg} onChange={(rightWeightKg) => patch({ rightWeightKg })} />
-      </View> : <NumberField label="重量（kg）" value={config.weightKg} onChange={(weightKg) => patch({ weightKg })} />}
-      <View style={styles.row}>
-        <NumberField label="回数" value={config.reps} integer onChange={(reps) => patch({ reps })} />
-        <NumberField label="セット数" value={config.sets} integer onChange={(sets) => patch({ sets: Math.min(30, sets ?? 0) })} />
+      <View style={{ flexDirection: 'row', gap: 4 }}>
+        {exercise.mode === 'BILATERAL' ? <>
+          <WeightWheel step={state.exerciseWeightSteps[exercise.id] ?? state.weightStepKg} label="左kg" unit="kg" value={config.leftWeightKg} onChange={(leftWeightKg) => patch({ leftWeightKg })} />
+          <WeightWheel step={state.exerciseWeightSteps[exercise.id] ?? state.weightStepKg} label="右kg" unit="kg" value={config.rightWeightKg} onChange={(rightWeightKg) => patch({ rightWeightKg })} />
+        </> : <WeightWheel step={state.exerciseWeightSteps[exercise.id] ?? state.weightStepKg} label="重量（kg）" unit="kg" value={config.weightKg} onChange={(weightKg) => patch({ weightKg })} />}
+        <WorkoutNumberWheel label="回数" unit="回" step={1} value={config.reps} onChange={(reps) => patch({ reps })} />
+        <WorkoutNumberWheel min={1} max={30} label="セット数" unit="セット" step={1} value={config.sets} onChange={(sets) => patch({ sets })} />
       </View>
-      <RestField exerciseId={exercise.id} />
       <Button label="完了" onPress={() => setEditing(undefined)} />
       <Button label="種目を削除" secondary onPress={() => removeExercise(exercise.id)} />
     </Sheet>}
   </Sheet>;
-}
-
-export function RestField({ exerciseId }: { exerciseId: number }) {
-  const { state, update } = useApp();
-  const { styles } = useTheme();
-  return <View style={[styles.row, { justifyContent: 'space-between', marginVertical: 12 }]}>
-    <Text style={styles.body}>休憩</Text>
-    <Switch accessibilityLabel="休憩" value={!state.restTimerDisabledExerciseIds.includes(exerciseId)}
-      onValueChange={(enabled) => update((s) => ({ ...s,
-        restTimerDisabledExerciseIds: [...s.restTimerDisabledExerciseIds.filter((id) => id !== exerciseId), ...(!enabled ? [exerciseId] : [])],
-      }))} />
-  </View>;
 }

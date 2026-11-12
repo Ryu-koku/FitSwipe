@@ -130,12 +130,14 @@ export type AppState = {
   homeProgress?: import('./home-progress').ProgressPreferences;
   themeMode: ThemeMode;
   weekStartsMonday: boolean;
+  weightUnit: "kg" | "lb";
   weightStepKg: number;
   restDurationSeconds: number;
   visibleAchievementMetrics: string[];
   exerciseWeightSteps: Record<number, number>;
   exerciseRestDurations: Record<number, number>;
-  restTimerDisabledExerciseIds: number[];
+  /** Disable rest timers for every exercise; defaults to false. */
+  restTimerDisabled: boolean;
   sideSwitchRestExerciseIds: number[];
   leftFirstExerciseIds: number[];
   workout?: WorkoutProgress;

@@ -12,7 +12,7 @@ export function ExerciseManagementItem({ name, onEdit, onDelete }: {
     <SwipeDeleteRow name={name} open={open} onOpenChange={setOpen} onDelete={onDelete}>
       {(closeOnTap) => <Pressable accessibilityRole="button" accessibilityLabel={`${name}を編集`}
         accessibilityActions={[{ name: 'activate', label: '編集' }, { name: 'delete', label: '削除' }]}
-        onAccessibilityAction={(event) => {
+        onAccessibilityAction={(event) => { feedback();
           if (event.nativeEvent.actionName === 'delete') onDelete();
           else if (event.nativeEvent.actionName === 'activate') onEdit();
         }}
