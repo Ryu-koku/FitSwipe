@@ -97,7 +97,7 @@ export function ProgressChart({
                   fill={colors.muted}
                   fontSize={11}
                 >
-                  {date.getMonth() + 1}/{date.getDate()}
+                  {`${date.getMonth() + 1}/${date.getDate()}`}
                 </SvgText>
               </React.Fragment>
             );

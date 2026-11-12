@@ -13,7 +13,7 @@ function purchases({ platform = 'android', key = 'public-key', development = fal
     logIn: async id => calls.push(['login', id]),
     logOut: async () => calls.push(['logout']),
     getCustomerInfo: async () => info,
-    getOfferings: async () => ({ current: { monthly: { identifier: 'monthly' } } }),
+    getOfferings: async () => ({ current: { monthly: { identifier: 'monthly' }, lifetime: { identifier: 'lifetime' } } }),
     purchasePackage: async item => { calls.push(['purchase', item.identifier]); return { customerInfo: info }; },
     restorePurchases: async () => info,
     addCustomerInfoUpdateListener: callback => calls.push(['subscribe', callback]),
@@ -26,6 +26,7 @@ function purchases({ platform = 'android', key = 'public-key', development = fal
     if (name === 'react-native') return { Platform: { OS: platform } };
     if (name === 'expo-constants') return { expoConfig: { android: { package: development ? 'dev.local.fitlogsolo.expodev' : 'dev.local.fitlogsolo' } } };
     if (name === 'react-native-purchases') { calls.push(['load']); return sdk; }
+    if (name === './premium') return require('../src/premium.ts');
     throw Error(name);
   };
   let source = fs.readFileSync(filename, 'utf8');
@@ -46,7 +47,9 @@ test('store wrapper configures, switches room identities, subscribes, purchases 
   const listener = () => {};
   api.subscribePurchases(listener)();
   assert.ok(calls.some(call => call[0] === 'unsubscribe' && call[1] === listener));
-  assert.equal(await api.purchasePremium(await api.monthlyPackage()), info);
+  assert.equal(await api.purchasePremium((await api.premiumPackages()).monthly), info);
+  assert.equal(await api.purchasePremium((await api.premiumPackages()).lifetime), info);
+  assert.deepEqual(calls.filter(call => call[0] === 'purchase'), [['purchase', 'monthly'], ['purchase', 'lifetime']]);
   assert.equal(await api.restorePurchases(), info);
   assert.equal(api.hasPremium(info), true);
   assert.equal(api.hasPremium({ entitlements: { active: {} } }), false);

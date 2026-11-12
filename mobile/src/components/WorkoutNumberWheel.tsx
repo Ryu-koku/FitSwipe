@@ -17,10 +17,11 @@ function tick() {
   void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => {});
 }
 
-export function WorkoutNumberWheel({ label, unit, value, step, onChange, disabled = false }: {
+export function WorkoutNumberWheel({ label, unit, value, highlightValue, step, onChange, disabled = false }: {
   label: string;
   unit: string;
   value?: number;
+  highlightValue?: number;
   step: number;
   onChange: (value: number) => void;
   disabled?: boolean;
@@ -156,7 +157,7 @@ export function WorkoutNumberWheel({ label, unit, value, step, onChange, disable
             style={{ position: 'absolute', top: neighborHeight + index * rowHeight, left: 0, right: 0, height: centerHeight,
               flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 6, gap: 3,
               opacity, transform: [{ translateY: offset }, { scale }] }}>
-            <Text accessible={false} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.5} style={{ color: active ? colors.primary : colors.ink, fontSize: 40, fontWeight: '700', fontVariant: ['tabular-nums'], letterSpacing: -1.5, flexShrink: 1 }}>{rowValue}</Text>
+            <Text accessible={false} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.5} style={{ color: rowValue === highlightValue || (highlightValue === undefined && active) ? colors.primary : colors.ink, fontSize: 40, fontWeight: '700', fontVariant: ['tabular-nums'], letterSpacing: -1.5, flexShrink: 1 }}>{rowValue}</Text>
             <Animated.Text accessible={false} style={[styles.small, { marginTop: 18, opacity: offset.interpolate({ inputRange: [center - rowHeight, center, center + rowHeight], outputRange: [0, 1, 0], extrapolate: 'clamp' }) }]}>{unit}</Animated.Text>
           </Animated.View>;
         })}

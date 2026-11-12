@@ -7,7 +7,7 @@ import {
 import { router, useFocusEffect } from 'expo-router';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import { useApp } from '../context';
-import { formatWeight } from '../logic';
+import { formatWeight, previousSet } from '../logic';
 import {
   Button,
   Card,
@@ -46,7 +46,6 @@ export default function WorkoutScreen() {
   const [history, setHistory] = useState(false);
   const [historySessionId, setHistorySessionId] = useState<number>();
   const [historyMetric, setHistoryMetric] = useState<'weight' | 'reps'>('weight');
-  const [exitPrompt, setExitPrompt] = useState(false);
   const [browsing, setBrowsing] = useState<WorkoutCard>();
   const [preparingNext, setPreparingNext] = useState(false);
   const session = activeSession(state);
@@ -80,16 +79,11 @@ export default function WorkoutScreen() {
       };
     }, []),
   );
-  const exitConfirmation = session && exitPrompt && (
-    <Sheet title="終了しますか？" popup onClose={() => setExitPrompt(false)}>
-      <Text style={styles.body}>ここまでの記録を保存します。</Text>
-      <Button label="終了して記録を見る" onPress={() => {
-        setExitPrompt(false);
-        update((s) => finishWorkout(s, session.id));
-        router.replace({ pathname: '/complete', params: { sessionId: session.id } });
-      }} />
-    </Sheet>
-  );
+  const finish = () => {
+    if (!session) return;
+    update((s) => finishWorkout(s, session.id));
+    router.replace({ pathname: '/complete', params: { sessionId: session.id } });
+  };
   if (!session || !set || !exercise || !card)
     return (
       <Screen title={title} onBack={() => router.replace('/prepare')}>
@@ -97,7 +91,7 @@ export default function WorkoutScreen() {
         {session && (
           <Button
             label="トレーニングを終了"
-            onPress={() => setExitPrompt(true)}
+            onPress={finish}
           />
         )}
         <Button
@@ -105,7 +99,6 @@ export default function WorkoutScreen() {
           secondary
           onPress={() => router.replace('/prepare')}
         />
-        {exitConfirmation}
       </Screen>
     );
   const rows = state.sets.filter((s) => s.sessionId === session.id);
@@ -133,6 +126,7 @@ export default function WorkoutScreen() {
     ),
   );
   const side = card.side ?? 'normal';
+  const previous = previousSet(state, exercise.id, set.sessionId, set.setOrder, side);
   const historyRecords = history
     ? exerciseRecords(progressIndex(state), exercise.id, side === 'left' ? 1 : side === 'right' ? 2 : 0)
     : [];
@@ -201,9 +195,9 @@ export default function WorkoutScreen() {
       headerShown={false}
     >
       <View style={[styles.row, { marginBottom: 4 }]}>
-        <IconButton label="戻る" symbol="‹" onPress={() => router.replace('/prepare')} />
+        <IconButton label="戻る" symbol="⌄" onPress={() => router.replace('/prepare')} />
         <Text numberOfLines={1} style={[styles.title, { flex: 1, textAlign: 'center' }]}>{title}</Text>
-        <IconButton label="トレーニングを終了" symbol="終了" onPress={() => setExitPrompt(true)} />
+        <View style={{ width: 48 }} />
       </View>
       <Text accessibilityLabel={`全${segments.length}種目中${completedExercises}種目完了`} style={[styles.title, { textAlign: 'center', color: colors.primary, marginBottom: 10 }]}>
         {completedExercises} / {segments.length}
@@ -241,7 +235,7 @@ export default function WorkoutScreen() {
               <SetProgressBar sets={exerciseSets} currentSet={set} side={card.side} />
               <Pressable accessibilityRole="button" accessibilityLabel={`${exercise.name}の過去の記録を見る`} onPress={() => setHistory(true)} style={{ flex: 1.25, minHeight: 80 }}>
                 <View style={{ flex: 1, padding: 8 }}>
-                  <ExercisePictogram name={exercise.name} large animate={!orderEditor && !history && !exitPrompt} />
+                  <ExercisePictogram name={exercise.name} large animate={!orderEditor && !history} />
                 </View>
                 <Text style={[styles.title, { textAlign: 'center', paddingHorizontal: 16, marginBottom: 4 }]}>{exercise.name}</Text>
               </Pressable>
@@ -254,6 +248,11 @@ export default function WorkoutScreen() {
                     ]}
                   >
                     {card.side === 'left' ? '左' : '右'}
+                  </Text>
+                )}
+                {previous && (
+                  <Text style={[styles.small, { textAlign: 'center', color: colors.muted }]}>
+                    前回 {previous[weightKey] ? `${formatWeight(previous[weightKey])} × ` : ''}{previous[repsKey] ?? '—'}回
                   </Text>
                 )}
                 <View
@@ -271,8 +270,9 @@ export default function WorkoutScreen() {
                     label="重量"
                     unit="kg"
                     value={set[weightKey]}
+                    highlightValue={previous?.[weightKey]}
                     step={step}
-                    disabled={orderEditor || history || exitPrompt}
+                    disabled={orderEditor || history}
                     onChange={(value) => change(weightKey, value)}
                   />
                   <View accessible={false} style={{ width: 1, alignSelf: 'stretch', marginVertical: 26, backgroundColor: colors.line }} />
@@ -281,8 +281,9 @@ export default function WorkoutScreen() {
                     label="回数"
                     unit="回"
                     value={set[repsKey]}
+                    highlightValue={previous?.[repsKey]}
                     step={1}
-                    disabled={orderEditor || history || exitPrompt}
+                    disabled={orderEditor || history}
                     onChange={(value) => change(repsKey, value)}
                   />
                 </View>
@@ -301,7 +302,6 @@ export default function WorkoutScreen() {
         )}
         {preparingNext && !rest && nextCard && <View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 16, opacity: 0 }}><PreloadedCard card={nextCard} state={state} /></View>}
       </View>
-      {exitConfirmation}
       {orderEditor && (
         <WorkoutOrderEditor
           sessionId={session.id}

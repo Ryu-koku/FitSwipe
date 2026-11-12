@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Animated, PanResponder, Pressable, Text, View } from 'react-native';
 import { useApp } from '../context';
-import { achievementSummary, completedSessions, completedSets, localDay } from '../logic';
+import { achievementSummary, completedSessions, completedSets, localDay, presetColor } from '../logic';
 import { Card, Sheet, useTheme } from '../ui';
 import { SessionDetails } from './SessionDetails';
 import { AppIcon } from './AppIcon';
@@ -75,10 +75,10 @@ export function WorkoutCalendar() {
   const today = localDay(new Date());
   const sessionsWithSets = new Set(completedSets(state).map((set) => set.sessionId));
   // Mark only days with a completed set, like the streak and training-day count.
-  // Each day takes the color of its last workout's preset; earlier presets that
-  // day show as small dots. Sessions without a preset use the theme color.
+  // Each day takes the color of its last workout's preset.
+  // Sessions without a preset use the theme color.
   const dayColors = new Map<string, string[]>();
-  const colorOf = (presetId?: string) => state.presets.find((p) => p.id === presetId)?.color ?? colors.primary;
+  const colorOf = (presetId?: string) => presetColor(state.presets.find((p) => p.id === presetId), colors.primary);
   for (const s of sessions.filter((s) => sessionsWithSets.has(s.id)).sort((a, b) => a.startedAt.localeCompare(b.startedAt))) {
     const key = localDay(s.startedAt), color = colorOf(s.presetId);
     dayColors.set(key, [...(dayColors.get(key) ?? []).filter((c) => c !== color), color]);
@@ -127,17 +127,13 @@ export function WorkoutCalendar() {
             const key = localDay(new Date(date.getFullYear(), date.getMonth(), day));
             const done = days.has(key);
             const dayColor = dayColors.get(key)?.at(-1) ?? colors.primary;
-            const others = dayColors.get(key)?.slice(0, -1) ?? [];
             return <View key={col} style={{ flex: 1, height: rowHeight, alignItems: 'center', justifyContent: 'center' }}>
               {day > 0 && day <= length && <Pressable accessibilityRole="button" accessibilityLabel={`${date.getMonth() + 1}月${day}日${key === today ? '、今日' : ''}${done ? '、トレーニング記録あり' : ''}`}
                 disabled={!done || delta !== 0} onPress={() => setSelected(key)}
                 style={{ width: '100%', height: rowHeight, alignItems: 'center', justifyContent: 'center' }}>
                 <View pointerEvents="none" style={{ width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: key === today ? colors.soft : done ? dayColor : 'transparent', borderWidth: key === today || key === selected ? 1 : 0, borderColor: done ? dayColor : colors.primary }}>
                 <Text style={{ color: done && key !== today ? colors.bg : colors.ink, lineHeight: 17 }}>{day}</Text>
-                {done && <View style={{ position: 'absolute', bottom: 2, flexDirection: 'row', gap: 2 }}>
-                  {(others.length ? others : [key === today || key === selected ? dayColor : colors.bg]).slice(0, 3).map((c, i) =>
-                    <View key={i} style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: c, borderWidth: others.length ? 0.5 : 0, borderColor: colors.bg }} />)}
-                </View>}
+
                 </View>
               </Pressable>}
             </View>;

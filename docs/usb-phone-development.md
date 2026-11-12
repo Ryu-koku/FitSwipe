@@ -12,6 +12,7 @@ bash scripts/dev-phone.sh --build
 
 次回からは `bash scripts/dev-phone.sh` だけで接続します。Metro を動かしている間、
 この作業ツリーの JS/TS・画面変更が Fast Refresh で実機に反映されます。
+自動起動に失敗しても Metro は動き続けるため、警告が出たら実機で FitSwipe Dev を手動で開いてください。
 リモート develop の自動 pull はしません。ネイティブ依存や設定変更時は `--build` で再生成してください。
 終了は Ctrl+C。laptop の ADB とサーバーの Metro はループバック限定の SSH と USB で接続します。
 既存の FitSwipe Dev を更新しますが、Play 版のデータは変更しません。

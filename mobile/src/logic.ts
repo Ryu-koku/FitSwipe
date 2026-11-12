@@ -4,6 +4,7 @@ import {
   Exercise,
   ExerciseMode,
   WorkoutSet,
+  WorkoutPreset,
 } from './types';
 import { exerciseGroup } from './exercise-groups';
 import { ensureExerciseCatalog } from './exercise-catalog';
@@ -118,6 +119,9 @@ export const activeExercises = (state: AppState) =>
 // Fixed so the white day number stays readable in both themes.
 export const PRESET_COLORS = ['#e5484d', '#ea6a1f', '#c99a06', '#16a34a', '#007f78', '#3b82f6', '#8b5cf6', '#db2777'];
 
+export const presetColor = (preset: Pick<WorkoutPreset, 'color'> | undefined, fallback: string) =>
+  preset?.color ?? fallback;
+
 export const selectedPreset = (state: AppState) =>
   state.presets.find((p) => p.id === state.selectedPresetId) ??
   state.presets[0];
@@ -125,6 +129,13 @@ export const completedSessions = (state: AppState) =>
   state.sessions.filter((s) => s.status === 'COMPLETED');
 export const completedSets = (state: AppState) =>
   state.sets.filter((set) => set.isCompleted);
+
+// Shared volume definition: bilateral work counts both sides.
+export function setVolume(set: WorkoutSet, mode?: ExerciseMode): number {
+  if (mode === 'BILATERAL') return (set.leftWeightKg ?? 0) * (set.leftReps ?? 0)
+    + (set.rightWeightKg ?? 0) * (set.rightReps ?? 0);
+  return (set.normalWeightKg ?? 0) * (set.normalReps ?? 0);
+}
 
 export function localDay(value: string | Date) {
   const date = new Date(value);
@@ -243,15 +254,8 @@ export function achievementSummary(state: AppState): AchievementSummary {
       return sum + (set.leftReps ?? 0) + (set.rightReps ?? 0);
     return sum + (set.normalReps ?? 0);
   }, 0);
-  const volume = finished.reduce((sum, set) => {
-    if (modes.get(set.exerciseId) === 'BILATERAL')
-      return (
-        sum +
-        (set.leftWeightKg ?? 0) * (set.leftReps ?? 0) +
-        (set.rightWeightKg ?? 0) * (set.rightReps ?? 0)
-      );
-    return sum + (set.normalWeightKg ?? 0) * (set.normalReps ?? 0);
-  }, 0);
+  const volume = finished.reduce((sum, set) =>
+    sum + setVolume(set, modes.get(set.exerciseId)), 0);
   const bestByKey = new Map<string, [number, number]>();
   let bestUpdates = 0;
   const better = (a: [number, number], b?: [number, number]) =>
@@ -377,19 +381,24 @@ export function previousSet(
   state: AppState,
   exerciseId: number,
   sessionId: number,
+  setOrder?: number,
+  side: 'normal' | 'left' | 'right' = 'normal',
 ) {
-  const priorSessionIds = state.sessions
-    .filter((s) => s.status === 'COMPLETED' && s.id !== sessionId)
-    .sort((a, b) => b.startedAt.localeCompare(a.startedAt))
-    .map((s) => s.id);
-  for (const id of priorSessionIds) {
-    const found = state.sets.find(
-      (set) =>
-        set.sessionId === id &&
-        set.exerciseId === exerciseId &&
-        set.isCompleted,
+  const currentSession = state.sessions.find((s) => s.id === sessionId);
+  const priorSessions = state.sessions
+    .filter((s) => s.status === 'COMPLETED' && s.id !== sessionId &&
+      (!currentSession || s.startedAt <= currentSession.startedAt))
+    .sort((a, b) => b.startedAt.localeCompare(a.startedAt));
+  for (const session of priorSessions) {
+    const sets = state.sets.filter((set) =>
+      set.sessionId === session.id && set.exerciseId === exerciseId &&
+      !set.skippedInputs?.[side] &&
+      (side === 'normal' ? set.isCompleted : set[`${side}Completed`]),
     );
-    if (found) return found;
+    if (sets.length) {
+      return sets.find((set) => set.setOrder === setOrder) ??
+        sets.reduce((last, set) => set.setOrder > last.setOrder ? set : last);
+    }
   }
   return undefined;
 }

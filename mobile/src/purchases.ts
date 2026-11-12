@@ -2,6 +2,8 @@ import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 import type { CustomerInfo, PurchasesPackage } from 'react-native-purchases';
 
+import { packagesForOffering } from './premium';
+
 export const premiumOverride = __DEV__ && process.env.EXPO_PUBLIC_PREMIUM_OVERRIDE === '1';
 const apiKey = Platform.OS === 'android' ? process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_KEY : process.env.EXPO_PUBLIC_REVENUECAT_IOS_KEY;
 export const purchaseUnavailableReason = Platform.OS === 'web' ? 'Webでの購入は準備中です。'
@@ -29,8 +31,8 @@ export function subscribePurchases(listener: (info: CustomerInfo) => void) {
   sdk?.addCustomerInfoUpdateListener(listener);
   return () => { sdk?.removeCustomerInfoUpdateListener(listener); };
 }
-export async function monthlyPackage(): Promise<PurchasesPackage | undefined> {
-  return (await sdk?.getOfferings())?.current?.monthly ?? undefined;
+export async function premiumPackages() {
+  return packagesForOffering((await sdk?.getOfferings())?.current);
 }
 export async function purchasePremium(item: PurchasesPackage) {
   if (!sdk || purchaseUnavailableReason) throw new Error(purchaseUnavailableReason ?? '購入は準備中です。');

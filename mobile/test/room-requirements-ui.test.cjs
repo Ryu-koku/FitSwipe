@@ -26,7 +26,8 @@ function roomScreen() {
 
     if (name === 'react') return { useState: value => { const i = cursor++; if (!(i in slots)) slots[i] = typeof value === 'function' ? value() : value; return [slots[i], next => { slots[i] = next; }]; }, useRef: value => ({ current: value }), useEffect: () => {}, useCallback: fn => fn };
     if (name === 'react-native') return { View: 'View', Text: 'Text', Pressable: 'Pressable', Modal: 'Modal',
-      Animated: { View: 'AnimatedView', Text: 'AnimatedText', Value: class { interpolate() { return 0; } } },
+      Easing: { out: fn => fn, in: fn => fn, cubic: x => x, quad: x => x },
+      Animated: { timing: () => ({ start() {} }), View: 'AnimatedView', Text: 'AnimatedText', Value: class { interpolate() { return 0; } } },
       useWindowDimensions: () => ({ width: 390, height: 800 }) };
     if (name === 'react-native-safe-area-context') return { useSafeAreaInsets: () => ({ top: 0, bottom: 0 }) };
     if (name === 'expo-router') return { useFocusEffect: () => {}, useLocalSearchParams: () => ({}) };
@@ -34,6 +35,7 @@ function roomScreen() {
     if (name === '../context') return { useApp: () => ({ state }) };
     if (name === '../use-rooms') return { useRooms: () => rooms };
     if (name === '../ui') return { useTheme: () => ({ styles: {}, colors: {} }), Screen: 'Screen', Sheet: 'Sheet', Button: 'Button', IconButton: 'IconButton', Card: 'Card', Field: 'Field' };
+    if (name === '../components/ProfileEditor') return { ProfileEditor: 'ProfileEditor' };
     if (name === '../components/LegalLinks') return { LegalLinks: 'LegalLinks' };
     if (name === '../components/AppIcon') return { AppIcon: 'AppIcon' };
     if (name === '../components/RoomComparisonChart') return { MemberAvatar: 'MemberAvatar', RoomComparisonChart: 'RoomComparisonChart' };
@@ -44,7 +46,7 @@ function roomScreen() {
   mod._compile(ts.transpileModule(fs.readFileSync(filename, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true } }).outputText, filename);
   function render() {
     cursor = 0; const nodes = [];
-    const visit = node => { if (!node || typeof node !== 'object') return; if (Array.isArray(node)) return node.forEach(visit); nodes.push(node); visit(node.props?.children); };
+    const visit = node => { if (!node || typeof node !== 'object') return; if (Array.isArray(node)) return node.forEach(visit); nodes.push(node); visit(node.props?.children); visit(node.props?.right); visit(node.props?.overlay); };
     visit(mod.exports.default()); return nodes;
   }
   return { calls, rooms, render, press: async label => {
@@ -73,3 +75,31 @@ test('month navigation and member taps issue targeted requests', async () => {
   app.render().find(node => node.type === 'RoomComparisonChart').props.onMember('owner');
   assert.deepEqual(app.calls[1], ['member', 'owner']);
 });
+
+
+test('room profile button opens the profile editor directly and returns on close', async () => {
+  const app = roomScreen();
+  await app.press('プロフィールを編集');
+  const editor = app.render().find(node => node.type === 'ProfileEditor');
+  assert.equal(editor.props.initiallyEditing, true);
+  editor.props.onClose();
+  assert.ok(!app.render().some(node => node.type === 'ProfileEditor'));
+  await app.press('ルームの操作');
+  assert.ok(app.render().some(node => node.type === 'Sheet' && node.props.title === 'ルームの操作'));
+});
+
+for (const [label, title] of [['ルームを作成', '新しいルーム'], ['ルームに参加', 'ルームに参加']]) {
+  test(`${label} uses the shared dismissible bottom sheet`, async () => {
+    const app = roomScreen();
+    app.rooms.roomId = undefined;
+    await app.press(label);
+    const sheet = app.render().find(node => node.type === 'Sheet' && node.props.title === title);
+    assert.ok(sheet);
+    assert.equal(sheet.props.bottomSheet, true);
+    assert.notEqual(sheet.props.scroll, false);
+    assert.equal(sheet.props.popup, undefined);
+    sheet.props.onClose();
+    assert.ok(!app.render().some(node => node.type === 'Sheet'));
+    assert.deepEqual(app.calls, []);
+  });
+}

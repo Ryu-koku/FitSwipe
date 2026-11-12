@@ -2,7 +2,7 @@ import { canAddCustomExercise } from '../premium';
 import { usePremium } from '../premium-context';
 import { LegalLinks } from '../components/LegalLinks';
 import React, { useEffect, useRef, useState } from 'react';
-import { BackHandler, Linking, Platform, Text, View } from 'react-native';
+import { BackHandler, Linking, Platform, Pressable, Text, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { useApp } from '../context';
 import {
@@ -14,6 +14,7 @@ import {
   SectionTitle,
   useTheme,
 } from '../ui';
+import { AppIcon } from '../components/AppIcon';
 import { ExerciseEditor } from '../components/ExerciseEditor';
 import { ExerciseManagementItem } from '../components/ExerciseManagementItem';
 import { numeric } from '../workout';
@@ -64,49 +65,40 @@ export default function SettingsScreen() {
       }
       onBack={back}
     >
-      {page === 'menu' && <Card>
-        <Text style={styles.sectionTitle}>プラン：{plan.premium ? 'プレミアム' : '無料'}</Text>
-        <Button label="プレミアムに登録" secondary onPress={() => plan.openPaywall()} />
-        <Button label="購入を復元" secondary disabled={plan.busy} onPress={() => { void plan.restore(); }} />
-        <Button label="サブスクリプションを管理" secondary onPress={() => { void transfer(() => Linking.openURL(Platform.OS === 'ios' ? 'https://apps.apple.com/account/subscriptions' : 'https://play.google.com/store/account/subscriptions')); }} />
-        {plan.error && <Text accessibilityRole="alert" style={styles.body}>{plan.error}</Text>}
-      </Card>}
-      {page === 'menu' && (
-        <>
+      {page === 'menu' && <>
+        <SettingsSection title="プロフィール・アカウント" plain>
           <ProfileEditor />
-          <BeginnerGuide />
           <AccountPanel />
-          <Button
-            label="基本設定　›"
-            secondary
-            onPress={() => setPage('basic')}
-          />
-          <Button
-            label="種目管理　›"
-            secondary
-            onPress={() => setPage('exercises')}
-          />
-          <Button label="体重・体脂肪率　›" secondary onPress={() => setPage('body')} />
-          <Button label="データを書き出す（JSON）" secondary disabled={transferBusy} onPress={() => void transfer(() => shareTextFile('fitswipe-backup', 'json', exportBackup(state)))} />
-          <Text style={styles.small}>記録・種目・プリセット・体組成・設定をファイルに書き出します。ログイン情報とルーム情報は含めません。</Text>
-          <Button label="トレーニングCSVを書き出す" secondary disabled={transferBusy} onPress={() => void transfer(() => shareTextFile('fitswipe-workouts', 'csv', exportWorkoutCsv(state)))} />
-          <Text style={styles.small}>完了したトレーニングの実施セットを出力します。左右別の重量・回数も含みます。</Text>
-          <Button label="JSONバックアップから追加復元" secondary disabled={transferBusy} onPress={() => void transfer(async () => {
+        </SettingsSection>
+        <SettingsSection title="トレーニング・表示">
+          <SettingsRow label="基本設定" onPress={() => setPage('basic')} />
+          <SettingsRow label="種目管理" onPress={() => setPage('exercises')} />
+          <SettingsRow label="体重・体脂肪率" onPress={() => setPage('body')} />
+        </SettingsSection>
+        <SettingsSection title={`プラン：${plan.premium ? 'プレミアム' : '無料'}`}>
+          <SettingsRow label="プレミアムに登録" onPress={() => plan.openPaywall()} />
+          <SettingsRow label="購入を復元" disabled={plan.busy} onPress={() => { void plan.restore(); }} />
+          <SettingsRow label="サブスクリプションを管理" disabled={transferBusy} onPress={() => { void transfer(() => Linking.openURL(Platform.OS === 'ios' ? 'https://apps.apple.com/account/subscriptions' : 'https://play.google.com/store/account/subscriptions')); }} />
+        </SettingsSection>
+        {plan.error && <Text accessibilityRole="alert" style={styles.body}>{plan.error}</Text>}
+        <SettingsSection title="データの書き出し・取り込み">
+          <SettingsRow label="データを書き出す（JSON）" description="記録・種目・プリセット・体組成・設定を書き出します。ログイン情報とルーム情報は含めません。" disabled={transferBusy} onPress={() => void transfer(() => shareTextFile('fitswipe-backup', 'json', exportBackup(state)))} />
+          <SettingsRow label="トレーニングCSVを書き出す" description="完了したトレーニングの実施セットを出力します。左右別の重量・回数も含みます。" disabled={transferBusy} onPress={() => void transfer(() => shareTextFile('fitswipe-workouts', 'csv', exportWorkoutCsv(state)))} />
+          <SettingsRow label="JSONバックアップから追加復元" description="現在の記録を残して追加します。設定はバックアップ側を採用します。ログイン中は現在のアカウントに同期されます。同じバックアップを繰り返し復元すると記録が重複します。" disabled={transferBusy} onPress={() => void transfer(async () => {
             const text = await pickTextFile();
             if (text !== undefined) await importData(s => restoreBackup(s, text, randomUUID));
           })} />
-          <Text style={styles.small}>現在の記録を残して追加します。設定はバックアップ側を採用します。ログイン中は現在のアカウントに同期されます。同じバックアップを繰り返し復元すると記録が重複します。</Text>
-          <Button label="CSVファイルから記録を取り込む" secondary disabled={transferBusy} onPress={() => void transfer(async () => {
+          <SettingsRow label="CSVファイルから記録を取り込む" description="列は date,exercise,weightKg,reps が必須です。" disabled={transferBusy} onPress={() => void transfer(async () => {
             const text = await pickTextFile();
             if (text !== undefined) await importData(s => importWorkoutCsv(s, text));
           })} />
-          <Text style={styles.small}>列は date,exercise,weightKg,reps が必須です。</Text>
-          {transferError && <Text accessibilityRole="alert" style={styles.small}>{transferError}</Text>}
-          <Text style={[styles.small, { marginTop: 20 }]}>
-            ログインすると個人記録もアカウントに保存します。ルームごとに同意すると、完了記録の種目・重量・回数・日時がメンバーへ自動共有されます。共有停止はルームのメニューから行えます。
-          </Text>
-        </>
-      )}
+        </SettingsSection>
+        {transferError && <Text accessibilityRole="alert" style={styles.small}>{transferError}</Text>}
+        <SettingsSection title="使い方・共有について" plain>
+          <BeginnerGuide />
+          <Text style={styles.small}>ログインすると個人記録もアカウントに保存します。ルームごとに同意すると、完了記録の種目・重量・回数・日時がメンバーへ自動共有されます。共有停止はルームのメニューから行えます。</Text>
+        </SettingsSection>
+      </>}
       {page === 'basic' && (
         <>
           <SectionTitle>外観</SectionTitle>
@@ -224,10 +216,36 @@ function BodyMeasurements() {
       <Button label="今日の測定を保存" disabled={!w || w <= 0 || (f !== undefined && (f < 0 || f > 100)) || (h !== undefined && (h < 50 || h > 260))} onPress={() => { update(s => ({ ...s, heightCm: h ?? s.heightCm, bodyMeasurements: [...(s.bodyMeasurements ?? []), { id: randomUUID(), measuredAt: new Date().toISOString(), weightKg: w, bodyFatPercent: f, heightCm: h ?? s.heightCm }].slice(-1000) })); setWeight(''); setFat(''); }} />
       <Text style={styles.small}>ヘルスケアから体重・体脂肪率・身長を読み取り、測定履歴と推移の表示に使います。書き込みは行いません。読み込んだ測定値と取得元IDは端末に保存され、Googleログイン中はFitSwipeのサーバーへ個人同期されます。ルームへは共有しません。許可しなくても手入力できます。OSの設定から許可を取り消せます。</Text>
       <LegalLinks />
-      <Button label="Appleヘルス／Health Connectから読み込む" secondary onPress={() => void (async () => { try { const commit = captureImport(); if (!Health.isAvailable()) throw new Error('この端末ではヘルスケア連携を利用できません'); const types = [Health.QuantityType.bodyMass, Health.QuantityType.bodyFatPercentage, Health.QuantityType.height]; const authorized = await Health.requestAuthorization({ toRead: types }); if (!authorized) throw new Error('読み取りが許可されていません。体重・体脂肪率・身長の読み取りを許可するか、手入力で利用してください。'); const from = Platform.OS === 'android' ? new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) : new Date(0); const [weights, fats, heights] = await Promise.all([Health.queryQuantitySamples({ type: Health.QuantityType.bodyMass, unit: Health.Unit.kilogram, from, limit: 500 }), Health.queryQuantitySamples({ type: Health.QuantityType.bodyFatPercentage, unit: Health.Unit.percent, from, limit: 500 }), Health.queryQuantitySamples({ type: Health.QuantityType.height, unit: Health.Unit.centimeter, from, limit: 1 })]); if (!mounted.current) return; await commit(s => importBodyMeasurements(s, weights, fats, heights)); alert(`${weights.length}件の体重データを確認しました`); } catch (e) { if (!mounted.current) return; alert('ヘルスケアデータを読み込めませんでした。体重・体脂肪率・身長の読み取り許可を確認してください。許可しなくても手入力できます。'); } })()} />
+      <Button label="Appleヘルス／Health Connectから読み込む" secondary onPress={() => void (async () => { try { const commit = captureImport(); if (!Health.isAvailable()) throw new Error('この端末ではヘルスケア連携を利用できません'); const types = [Health.QuantityType.bodyMass, Health.QuantityType.bodyFatPercentage, Health.QuantityType.height]; const authorized = await Health.requestAuthorization({ toRead: types }); if (!authorized) throw new Error('読み取りが許可されていません。体重・体脂肪率・身長の読み取りを許可するか、手入力で利用してください。'); const from = Platform.OS === 'android' ? new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) : new Date(0); const [weights, fats, heights] = await Promise.all([Health.queryQuantitySamples({ type: Health.QuantityType.bodyMass, unit: Health.Unit.kilogram, from, limit: 500 }), Health.queryQuantitySamples({ type: Health.QuantityType.bodyFatPercentage, unit: Health.Unit.percent, from, limit: 500 }), Health.queryQuantitySamples({ type: Health.QuantityType.height, unit: Health.Unit.centimeter, from, limit: 1 })]); if (!mounted.current) return; await commit(s => importBodyMeasurements(s, weights, fats, heights)); alert(`${weights.length}件の体重データを確認しました`); } catch { if (!mounted.current) return; alert('ヘルスケアデータを読み込めませんでした。体重・体脂肪率・身長の読み取り許可を確認してください。許可しなくても手入力できます。'); } })()} />
     </Card>
     <SectionTitle>測定履歴</SectionTitle>
     {state.bodyMeasurements?.length ? <Card><Text style={styles.body}>体重の推移（直近12回）</Text><View style={{ height: 130, flexDirection: 'row', alignItems: 'flex-end', gap: 6, marginTop: 12 }}>{state.bodyMeasurements.slice(-12).map(item => { const values = state.bodyMeasurements!.slice(-12).map(x => x.weightKg ?? 0); const lo = Math.min(...values), hi = Math.max(...values); const barHeight = hi === lo ? 55 : 24 + ((item.weightKg! - lo) / (hi - lo)) * 85; return <View key={item.id} style={{ flex: 1, alignItems: 'center' }}><View style={{ height: barHeight, width: '80%', backgroundColor: styles.metric.color as string, borderRadius: 5 }} /><Text style={styles.small}>{new Date(item.measuredAt).toLocaleDateString().slice(5)}</Text></View>; })}</View></Card> : null}
     {[...(state.bodyMeasurements ?? [])].reverse().map(item => <Card key={item.id}><Text style={styles.body}>{new Date(item.measuredAt).toLocaleDateString()}　{item.weightKg} kg{item.bodyFatPercent !== undefined ? `　${item.bodyFatPercent}%` : ''}</Text></Card>)}
   </>;
+}
+
+function SettingsSection({ title, plain = false, children }: React.PropsWithChildren<{ title: string; plain?: boolean }>) {
+  const { colors, styles } = useTheme();
+  return <View style={{ marginBottom: 24 }}>
+    <Text accessibilityRole="header" style={[styles.small, { fontWeight: '700', marginBottom: 8, marginLeft: 4 }]}>{title}</Text>
+    {plain ? children : <Card style={{ padding: 0, marginBottom: 0, overflow: 'hidden' }}>
+      {React.Children.toArray(children).map((child, index) => <View key={index} style={index ? { borderTopWidth: 1, borderTopColor: colors.line } : undefined}>{child}</View>)}
+    </Card>}
+  </View>;
+}
+
+function SettingsRow({ label, description, disabled = false, onPress }: {
+  label: string; description?: string; disabled?: boolean; onPress: () => void;
+}) {
+  const { colors, styles } = useTheme();
+  return <Pressable accessibilityRole="button" accessibilityState={{ disabled }} disabled={disabled} onPress={onPress}
+    style={({ pressed }) => ({ minHeight: 56, paddingHorizontal: 16, paddingVertical: 14,
+      flexDirection: 'row', alignItems: 'center', gap: 12, opacity: disabled ? 0.4 : 1,
+      backgroundColor: pressed ? colors.soft : colors.surface })}>
+    <View style={{ flex: 1 }}>
+      <Text style={styles.body}>{label}</Text>
+      {description && <Text style={[styles.small, { marginTop: 6 }]}>{description}</Text>}
+    </View>
+    <AppIcon name="next" size={18} color={colors.muted} />
+  </Pressable>;
 }

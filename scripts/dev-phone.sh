@@ -39,8 +39,13 @@ trap 'kill "$bundler" "$tunnel" 2>/dev/null || true' EXIT
 for ((i=0; i<60; i++)); do
   kill -0 "$bundler" "$tunnel" 2>/dev/null || exit 1
   if link=$(curl -fsS "http://127.0.0.1:$metro/_expo/open?platform=android&runtime=custom" 2>/dev/null); then
-    url=$(printf '%s' "$link" | node -e 'let s="";process.stdin.on("data",c=>s+=c).on("end",()=>console.log(JSON.parse(s).url))')
-    "${adb_phone[@]}" shell "am start -a android.intent.action.VIEW -d '$url' -p dev.local.fitlogsolo.expodev"
+    url=$(printf '%s' "$link" | node -e 'let s="";process.stdin.on("data",c=>s+=c).on("end",()=>console.log(JSON.parse(s).url || ""))')
+    if [[ -z "$url" ]]; then
+      url=$(node -e 'const {slug}=require("./mobile/app.json").expo; console.log("exp+" + slug + "://expo-development-client/?url=" + encodeURIComponent(process.argv[1]))' "http://127.0.0.1:$metro")
+    fi
+    if ! "${adb_phone[@]}" shell "am start -a android.intent.action.VIEW -d '$url' -p dev.local.fitlogsolo.expodev"; then
+      echo 'Warning: Could not open the dev client automatically. Open FitSwipe Dev manually; Metro is still running.' >&2
+    fi
     wait "$bundler"
     exit $?
   fi

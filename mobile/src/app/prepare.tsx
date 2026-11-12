@@ -3,7 +3,7 @@ import { usePremium } from '../premium-context';
 import React, { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { useApp } from '../context';
-import { selectedPreset, formatWeight } from '../logic';
+import { selectedPreset, formatWeight, presetColor } from '../logic';
 import { Button, Card, Screen, SectionTitle, useTheme } from '../ui';
 import { AppIcon } from '../components/AppIcon';
 import { PresetEditor } from '../components/PresetEditor';
@@ -27,10 +27,11 @@ export default function PrepareScreen() {
   };
   return (
     <Screen title="メニュー">
-      <SectionTitle>プリセットから選ぶ</SectionTitle>
+      <SectionTitle>プリセット</SectionTitle>
       <View style={[styles.wrap, { gap: 10 }]}>
         {state.presets.map((item) => {
           const selected = item.id === preset?.id;
+          const color = presetColor(item, colors.primary);
           const items = item.exercises.filter((c) => state.exercises.some((e) => e.id === c.exerciseId && !e.archived));
           return <Pressable key={item.id} accessibilityRole="button" accessibilityLabel={item.name}
             accessibilityState={{ selected }}
@@ -38,9 +39,9 @@ export default function PrepareScreen() {
             style={{ width: '48%' }}>
             <Card style={{ marginBottom: 0, padding: 12,
               backgroundColor: selected ? colors.soft : colors.surface,
-              borderColor: selected ? colors.primary : colors.line, borderWidth: selected ? 2 : 1 }}>
+              borderColor: selected ? color : colors.line, borderWidth: selected ? 2 : 1 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <Text style={{ color: colors.primary, fontSize: 18 }}>{selected ? '●' : '○'}</Text>
+                <Text style={{ color, fontSize: 18 }}>{selected ? '●' : '○'}</Text>
                 <Text numberOfLines={1} style={[styles.body, { flex: 1, fontSize: 17, fontWeight: '800' }]}>{item.name}</Text>
               </View>
               <Text style={styles.small}>{items.length}種目 · {items.reduce((sum, c) => sum + Math.max(1, c.sets), 0)}セット</Text>
@@ -58,12 +59,15 @@ export default function PrepareScreen() {
       {preset ? <>
         <View style={[styles.row, { marginTop: 16, marginBottom: 16 }]}>
           <View style={{ flex: 1 }}>
-            <Text style={[styles.body, { fontWeight: '800', fontSize: 18 }]}>{preset.name}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: presetColor(preset, colors.primary) }} />
+              <Text style={[styles.body, { fontWeight: '800', fontSize: 18 }]}>{preset.name}</Text>
+            </View>
             <Text style={styles.small}>{configs.length}種目 · {configs.reduce((sum, c) => sum + Math.max(1, c.sets), 0)}セット</Text>
           </View>
           <Pressable accessibilityRole="button" accessibilityLabel={`${preset.name}を編集・並べ替え`}
-            onPress={() => edit()} style={{ minHeight: 44, justifyContent: 'center', paddingHorizontal: 8 }}>
-            <Text style={[styles.body, { color: colors.primary, fontWeight: '700' }]}>編集・並べ替え</Text>
+            onPress={() => edit()} style={{ minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' }}>
+            <AppIcon name="edit" color={colors.primary} />
           </Pressable>
         </View>
         {configs.map((config) => {

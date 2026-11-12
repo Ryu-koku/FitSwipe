@@ -298,12 +298,14 @@ export function Button({
 
 export function IconButton({
   label,
-  symbol,
+  symbol = '',
+  icon,
   onPress,
   disabled = false,
 }: {
   label: string;
-  symbol: string;
+  symbol?: string;
+  icon?: React.ReactElement;
   onPress: () => void;
   disabled?: boolean;
 }) {
@@ -326,7 +328,7 @@ export function IconButton({
         opacity: disabled ? 0.3 : 1,
       }}
     >
-      {symbolIcons[symbol] ? <AppIcon name={symbolIcons[symbol]} color={colors.primary} /> : <Text style={{ color: colors.primary, fontSize: 24 }}>{symbol}</Text>}
+      {icon ?? (symbolIcons[symbol] ? <AppIcon name={symbolIcons[symbol]} color={colors.primary} /> : <Text style={{ color: colors.primary, fontSize: 24 }}>{symbol}</Text>)}
     </Pressable>
   );
 }
@@ -465,8 +467,9 @@ export function Sheet({
   bottomSheet = false,
   popup = false,
   fullScreen = false,
+  closeOnly = false,
   onBack,
-}: PropsWithChildren<{ title: string; right?: React.ReactNode; onClose: () => void; scroll?: boolean; bottomSheet?: boolean; popup?: boolean; fullScreen?: boolean; onBack?: () => void }>) {
+}: PropsWithChildren<{ title: string; right?: React.ReactNode; onClose: () => void; scroll?: boolean; bottomSheet?: boolean; popup?: boolean; fullScreen?: boolean; closeOnly?: boolean; onBack?: () => void }>) {
   const { styles, colors } = useTheme();
   const refreshIllustrations = useRefreshExerciseVisibility();
   const insets = useSafeAreaInsets();
@@ -527,7 +530,7 @@ export function Sheet({
   return (
     <Modal transparent animationType={popup ? 'fade' : bottomSheet ? 'none' : 'slide'} onRequestClose={onBack ?? dismiss}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' || popup || fullScreen ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' || popup || fullScreen ? 'padding' : bottomSheet ? 'height' : undefined}
         style={{
           flex: 1,
           justifyContent: popup ? 'center' : 'flex-end',
@@ -547,7 +550,8 @@ export function Sheet({
             width: popup ? '100%' : undefined,
             alignSelf: popup ? 'center' : undefined,
             maxHeight: popup ? '100%' : bottomSheet ? availableSheetHeight : '90%',
-            flexShrink: 0,
+            // Let keyboard avoidance shrink the fixed-height bottom sheet and its list.
+            flexShrink: bottomSheet ? 1 : 0,
             transform: [{ translateY: Animated.add(sheetOffset, entrance) }],
             backgroundColor: colors.bg,
             borderTopLeftRadius: 28,
@@ -559,7 +563,7 @@ export function Sheet({
             ...(fullScreen ? { flex: 1, height: undefined, maxHeight: '100%', borderTopLeftRadius: 0, borderTopRightRadius: 0, paddingBottom: insets.bottom } : {}),
           }}
         >
-          <View style={{ flexShrink: 0 }}>
+          {!closeOnly && <View style={{ flexShrink: 0 }}>
           {bottomSheet && <View collapsable={false} {...sheetPan.panHandlers} style={{ height: 32, width: '100%', alignItems: 'center', justifyContent: 'center' }}>
             <View accessible={false} style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: colors.line }} />
           </View>}
@@ -579,7 +583,7 @@ export function Sheet({
             {right}
             <IconButton label="閉じる" symbol="×" onPress={onClose} />
           </View>}
-          </View>
+          </View>}
           {scroll ? <ScrollView
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="none"
@@ -590,6 +594,9 @@ export function Sheet({
             <SheetDismissContext.Provider value={{ onClose, dismiss }}>{children}</SheetDismissContext.Provider>
           </ScrollView> : <View style={{ flex: 1, minHeight: 0 }}><SheetDismissContext.Provider value={{ onClose, dismiss }}>{children}</SheetDismissContext.Provider></View>}
         </Animated.View>
+        {closeOnly && <View style={{ position: 'absolute', top: insets.top + 8, right: 12, zIndex: 10 }}>
+          <IconButton label="閉じる" symbol="×" onPress={dismiss} />
+        </View>}
       </KeyboardAvoidingView>
     </Modal>
   );

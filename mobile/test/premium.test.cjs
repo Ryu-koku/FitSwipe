@@ -44,3 +44,40 @@ test('custom flag survives personal cloud synchronization', () => {
   const received = receive(state, { changes, cursor: changes.length, hasMore: false });
   assert.ok(received.exercises.some(e => e.custom === true));
 });
+
+const { freeTrialForProduct } = require('../src/premium.ts');
+const phase = (iso8601, billingCycleCount = 1) => ({ billingPeriod: { iso8601 }, billingCycleCount });
+test('Android uses selected free phase, falling back only without a default option', () => {
+  assert.deepEqual(freeTrialForProduct({ defaultOption: { freePhase: phase('P1M') } }, 'android'), { label: '1か月', headline: '初月無料' });
+  assert.deepEqual(freeTrialForProduct({ subscriptionOptions: [{ freePhase: null }, { freePhase: phase('P1W', 2) }] }, 'android'), { label: '2週間', headline: '2週間無料' });
+  assert.equal(freeTrialForProduct({ defaultOption: { freePhase: null }, subscriptionOptions: [{ freePhase: phase('P1M') }] }, 'android'), undefined);
+});
+test('iOS zero-price intro periods are localized with all cycles', () => {
+  for (const [period, cycles, label, headline] of [['P1M', 1, '1か月', '初月無料'], ['P1W', 1, '1週間', '1週間無料'], ['P3D', 2, '6日間', '6日間無料'], ['P1Y', 1, '1年間', '1年間無料']]) {
+    assert.deepEqual(freeTrialForProduct({ introPrice: { price: 0, period, cycles } }, 'ios'), { label, headline });
+  }
+  assert.equal(freeTrialForProduct({ introPrice: { price: 100, period: 'P1M', cycles: 1 } }, 'ios'), undefined);
+});
+test('missing or invalid trial metadata never advertises a trial', () => {
+  for (const platform of ['android', 'ios', 'web']) {
+    assert.equal(freeTrialForProduct(undefined, platform), undefined);
+    assert.equal(freeTrialForProduct({}, platform), undefined);
+  }
+  for (const period of ['', 'P0M', 'P1Q', 'P1M2D']) {
+    assert.equal(freeTrialForProduct({ defaultOption: { freePhase: phase(period) } }, 'android'), undefined);
+  }
+  assert.equal(freeTrialForProduct({ introPrice: { price: 0, period: 'P1M', cycles: 0 } }, 'ios'), undefined);
+});
+
+const { packagesForOffering, defaultPremiumPlan, packageForPlan } = require('../src/premium.ts');
+test('current offering packages, default plan and explicit purchase selection', () => {
+  const monthly = { identifier: 'monthly' };
+  const lifetime = { identifier: 'lifetime' };
+  for (const [offering, expected] of [[undefined, 'monthly'], [null, 'monthly'], [{ monthly }, 'monthly'], [{ lifetime }, 'lifetime'], [{ monthly, lifetime }, 'monthly']]) {
+    const packages = packagesForOffering(offering);
+    assert.equal(defaultPremiumPlan(packages), expected);
+    assert.equal(packageForPlan(packages, 'monthly'), offering?.monthly);
+    assert.equal(packageForPlan(packages, 'lifetime'), offering?.lifetime);
+  }
+  assert.deepEqual(packagesForOffering({ monthly: null, lifetime: null }), { monthly: undefined, lifetime: undefined });
+});
