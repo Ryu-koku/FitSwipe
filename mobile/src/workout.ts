@@ -1,4 +1,4 @@
-import { now } from './logic';
+import { indexSessionSets, now, previousSet } from './logic';
 import type {
   AppState,
   Exercise,
@@ -40,6 +40,10 @@ export function exerciseDefaults(exercise: Exercise): PresetExerciseConfig {
   };
 }
 
+export function presetExerciseDefaults(exerciseId: number): PresetExerciseConfig {
+  return { exerciseId, sets: 3 };
+}
+
 export function nextId(state: AppState) {
   return Math.max(
     state.nextId,
@@ -78,56 +82,44 @@ export function workoutCards(
   );
 }
 
-export function cardCompleted(state: AppState, card: WorkoutCard) {
-  const set = state.sets.find((s) => s.id === card.setId);
-  return !set || !!set.skippedInputs?.[card.side ?? 'normal'] ||
-    (card.side ? set[`${card.side}Completed`] : set.isCompleted);
-}
-
 export function currentCard(state: AppState, sessionId: number) {
-  const saved =
-    state.workout?.sessionId === sessionId ? state.workout.card : undefined;
-  return saved && state.sets.some((set) => set.id === saved.setId && set.sessionId === sessionId)
-    ? saved
-    : workoutCards(state, sessionId).find(
-        (card) => !cardCompleted(state, card),
-      );
+  const cards = workoutCards(state, sessionId);
+  const saved = state.workout?.sessionId === sessionId ? state.workout.card : undefined;
+  return cards.find((card) => card.setId === saved?.setId && card.side === saved.side)
+    ?? cards[0];
 }
 
-// A reorder changes the next displayed card, without resetting rest or set data.
+// Reordering keeps the same card when it still exists in the deck.
 export function reorderWorkout(state: AppState, exerciseOrder: number[]): AppState {
   if (!state.workout) return state;
-  return { ...state, workout: { ...state.workout, exerciseOrder, card: undefined } };
+  const card = currentCard(state, state.workout.sessionId);
+  const reordered = { ...state, workout: { ...state.workout, exerciseOrder } };
+  return card ? atPosition(reordered, card) : reordered;
 }
 
-// Revisit a skipped card as editable work, keeping every other set intact.
-export function reopenSkippedCard(state: AppState, card: WorkoutCard): AppState {
-  const set = state.sets.find((row) => row.id === card.setId);
-  const side = card.side ?? 'normal';
-  const input = set?.skippedInputs?.[side];
-  if (!set || !input || state.sessions.some((session) =>
-    session.status === 'IN_PROGRESS' && session.id !== set.sessionId)) return state;
-  const skippedInputs = { ...set.skippedInputs };
-  delete skippedInputs[side];
+function atPosition(state: AppState, card: WorkoutCard): AppState {
+  const progress = state.workout;
+  if (!progress) return state;
+  const cards = workoutCards(state, progress.sessionId);
+  const index = cards.findIndex((item) => item.setId === card.setId && item.side === card.side);
+  if (index < 0) return state;
+  const visited = new Set(cards.slice(0, index).map((item) => `${item.setId}:${item.side ?? 'normal'}`));
   return {
     ...state,
-    sessions: state.sessions.map((session) => session.id === set.sessionId
-      ? { ...session, status: 'IN_PROGRESS', endedAt: undefined }
-      : session),
-    sets: state.sets.map((row) => row.id === set.id ? {
-      ...row, skippedInputs, finalSkippedSide: undefined, [`${side}WeightKg`]: input.weightKg,
-      [`${side}Reps`]: input.reps, isCompleted: false, updatedAt: now(),
-      ...(card.side ? { [`${side}Completed`]: false } : {}),
-    } : row),
-    workout: {
-      ...(state.workout?.sessionId === set.sessionId ? state.workout : {
-        sessionId: set.sessionId,
-        exerciseOrder: [...new Set(state.sets.filter((row) => row.sessionId === set.sessionId).map((row) => row.exerciseId))],
-        history: [],
-      }),
-      card, restStartedAt: undefined, restEndsAt: undefined,
-    },
+    sets: state.sets.map((set) => {
+      if (set.sessionId !== progress.sessionId) return set;
+      const bilateral = state.exercises.find((exercise) => exercise.id === set.exerciseId)?.mode === 'BILATERAL';
+      const leftCompleted = bilateral && visited.has(`${set.id}:left`);
+      const rightCompleted = bilateral && visited.has(`${set.id}:right`);
+      const isCompleted = bilateral ? leftCompleted && rightCompleted : visited.has(`${set.id}:normal`);
+      return { ...set, leftCompleted: !!leftCompleted, rightCompleted: !!rightCompleted, isCompleted: !!isCompleted };
+    }),
+    workout: { ...progress, card, restStartedAt: undefined, restEndsAt: undefined },
   };
+}
+
+export function moveToCard(state: AppState, card: WorkoutCard): AppState {
+  return atPosition(state, card);
 }
 
 // Personal sync can bring another device's open session. Keep following the
@@ -167,29 +159,41 @@ export function startWorkout(state: AppState, presetId?: string): AppState {
   let id = nextId(state);
   const sessionId = id++;
   const timestamp = now();
+  const setsBySession = indexSessionSets(state.sets);
   const sets = configs.flatMap((config) =>
     Array.from(
       { length: Math.min(30, Math.max(1, config.sets || 3)) },
-      (_, index): WorkoutSet => ({
-        id: id++,
-        sessionId,
-        exerciseId: config.exerciseId,
-        setOrder: index + 1,
-        ...(state.exercises.find((e) => e.id === config.exerciseId)?.mode ===
-        'BILATERAL'
-          ? {
-              leftWeightKg: config.leftWeightKg ?? config.weightKg,
-              leftReps: config.reps,
-              rightWeightKg: config.rightWeightKg ?? config.weightKg,
-              rightReps: config.reps,
-            }
-          : { normalWeightKg: config.weightKg, normalReps: config.reps }),
-        leftCompleted: false,
-        rightCompleted: false,
-        isCompleted: false,
-        createdAt: timestamp,
-        updatedAt: timestamp,
-      }),
+      (_, index): WorkoutSet => {
+        const exercise = state.exercises.find((e) => e.id === config.exerciseId)!;
+        const defaults = exerciseDefaults(exercise);
+        const prior = (side: 'normal' | 'left' | 'right') =>
+          previousSet(state, config.exerciseId, sessionId, index + 1, side, setsBySession);
+        const normal = exercise.mode === 'NORMAL' ? prior('normal') : undefined;
+        const left = exercise.mode === 'BILATERAL' ? prior('left') : undefined;
+        const right = exercise.mode === 'BILATERAL' ? prior('right') : undefined;
+        return {
+          id: id++,
+          sessionId,
+          exerciseId: config.exerciseId,
+          setOrder: index + 1,
+          ...(exercise.mode === 'BILATERAL'
+            ? {
+                leftWeightKg: config.leftWeightKg ?? config.weightKg ?? left?.leftWeightKg ?? defaults.leftWeightKg,
+                leftReps: config.reps ?? left?.leftReps ?? defaults.reps,
+                rightWeightKg: config.rightWeightKg ?? config.weightKg ?? right?.rightWeightKg ?? defaults.rightWeightKg,
+                rightReps: config.reps ?? right?.rightReps ?? defaults.reps,
+              }
+            : {
+                normalWeightKg: config.weightKg ?? normal?.normalWeightKg ?? defaults.weightKg,
+                normalReps: config.reps ?? normal?.normalReps ?? defaults.reps,
+              }),
+          leftCompleted: false,
+          rightCompleted: false,
+          isCompleted: false,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        };
+      },
     ),
   );
   return {
@@ -215,17 +219,23 @@ export function startWorkout(state: AppState, presetId?: string): AppState {
 }
 
 export function finishWorkout(state: AppState, sessionId: number): AppState {
-  // Kotlin finishSession changes only the session, never the unperformed sets.
+  const timestamp = now();
   return {
     ...state,
+    sets: state.sets.map((set) => set.sessionId === sessionId
+      ? { ...set, isCompleted: true,
+          leftCompleted: state.exercises.find((exercise) => exercise.id === set.exerciseId)?.mode === 'BILATERAL',
+          rightCompleted: state.exercises.find((exercise) => exercise.id === set.exerciseId)?.mode === 'BILATERAL',
+          updatedAt: timestamp }
+      : set),
     sessions: state.sessions.map((s) =>
-      s.id === sessionId ? { ...s, status: 'COMPLETED', endedAt: now() } : s,
+      s.id === sessionId ? { ...s, status: 'COMPLETED', endedAt: timestamp } : s,
     ),
     workout: undefined,
   };
 }
 
-// Pure bulk edit: preserve completed work and the inputs restored after a skip.
+// Pure bulk edit; keep legacy skipped input values readable.
 export function updateExerciseSets(
   state: AppState, sessionId: number, exerciseId: number,
   changes: Partial<Pick<WorkoutSet, 'normalWeightKg' | 'normalReps' | 'leftWeightKg' | 'leftReps' | 'rightWeightKg' | 'rightReps'>>,
@@ -261,7 +271,7 @@ export function updateSet(
   if (!previous) return state;
   const timestamp = now();
   const weights = ['normalWeightKg', 'leftWeightKg', 'rightWeightKg'] as const;
-  // Editing a skipped set must also update the saved input restored by Back.
+  // Keep legacy skipped input values in sync with edits.
   if (previous.skippedInputs && !('skippedInputs' in changes)) {
     const skippedInputs = { ...previous.skippedInputs };
     for (const side of ['normal', 'left', 'right'] as const) {
@@ -302,99 +312,82 @@ export function updateSet(
   };
 }
 
-export function advanceWorkout(state: AppState, skip = false): AppState {
+export function advanceWorkout(state: AppState): AppState {
   const progress = state.workout;
   if (!progress) return state;
-  const card = currentCard(state, progress.sessionId);
-  const set = state.sets.find((s) => s.id === card?.setId);
-  if (!set || !card || cardCompleted(state, card)) return state;
-  const side = card.side ?? 'normal';
-  const skippedInputs = { ...set.skippedInputs };
-  if (skip) skippedInputs[side] = {
-    weightKg: set[`${side}WeightKg`], reps: set[`${side}Reps`],
-  };
-  else delete skippedInputs[side];
-  const changes: Partial<WorkoutSet> = {
-    skippedInputs,
-    ...(card.side ? { [`${side}Completed`]: !skip } : { isCompleted: !skip }),
-    ...(skip ? { [`${side}WeightKg`]: undefined, [`${side}Reps`]: undefined } : {}),
-  };
-  if (card.side) {
-    const other = card.side === 'left' ? 'right' : 'left';
-    changes.isCompleted = !!(set[`${other}Completed`] || skippedInputs[other]) &&
-      (!skip || set[`${other}Completed`]);
-  }
-  const changed = updateSet(state, set.id, changes);
-  const next = workoutCards(changed, progress.sessionId).find(
-    (item) => changed.sets.find((row) => row.id === item.setId)?.exerciseId === set.exerciseId &&
-      !cardCompleted(changed, item),
-  );
-  // Completing a set never changes exercises. Keep the last card until a swipe.
-  const sideSwitch = next?.setId === set.id;
-  const seconds =
-    !skip &&
-    !state.restTimerDisabled &&
-    !!next &&
-    (!sideSwitch || state.sideSwitchRestExerciseIds.includes(set.exerciseId))
-      ? (state.exerciseRestDurations[set.exerciseId] ??
-        state.restDurationSeconds)
-      : 0;
+  const cards = workoutCards(state, progress.sessionId);
+  const current = currentCard(state, progress.sessionId);
+  const index = cards.findIndex((card) => card.setId === current?.setId && card.side === current.side);
+  if (index < 0) return state;
+  if (index === cards.length - 1) return finishWorkout(state, progress.sessionId);
+  const next = cards[index + 1];
+  const fromSet = state.sets.find((set) => set.id === current!.setId)!;
+  const nextSet = state.sets.find((set) => set.id === next.setId)!;
+  const seconds = !state.restTimerDisabled && fromSet.exerciseId === nextSet.exerciseId &&
+    (fromSet.id !== nextSet.id || state.sideSwitchRestExerciseIds.includes(fromSet.exerciseId))
+      ? (state.exerciseRestDurations[fromSet.exerciseId] ?? state.restDurationSeconds) : 0;
   const started = Date.now();
-  return {
-    ...changed,
-    sets: changed.sets.map((row) => row.id === set.id
-      ? { ...row, finalSkippedSide: skip && !next && !nextExerciseCard(changed, card) ? side : undefined } : row),
-    workout: {
-      ...progress,
-      card: next ?? card,
-      history: [...progress.history, { card, set: { ...set } }],
-      restStartedAt: seconds > 0 ? started : undefined,
-      restEndsAt: seconds > 0 ? started + seconds * 1000 : undefined,
-    },
-  };
+  const moved = atPosition(state, next);
+  return { ...moved, workout: { ...moved.workout!,
+    restStartedAt: seconds > 0 ? started : undefined,
+    restEndsAt: seconds > 0 ? started + seconds * 1000 : undefined,
+  } };
 }
 
-// Resolve the same destination for the live deck and the committed transition.
 export function nextExerciseCard(state: AppState, from: WorkoutCard) {
   const sessionId = state.workout?.sessionId;
-  const set = state.sets.find(row => row.id === from.setId && row.sessionId === sessionId);
+  const set = state.sets.find((row) => row.id === from.setId && row.sessionId === sessionId);
   if (!set || sessionId === undefined) return undefined;
   const cards = workoutCards(state, sessionId);
-  const order = [...new Set(cards.map(card => state.sets.find(row => row.id === card.setId)!.exerciseId))];
-  const later = new Set(order.slice(order.indexOf(set.exerciseId) + 1));
-  return cards.find(card => later.has(state.sets.find(row => row.id === card.setId)!.exerciseId) && !cardCompleted(state, card));
+  const index = cards.findIndex((card) => card.setId === from.setId && card.side === from.side);
+  return cards.slice(index + 1).find((card) =>
+    state.sets.find((row) => row.id === card.setId)?.exerciseId !== set.exerciseId);
 }
 
-export function skipToNextExercise(state: AppState, from = state.workout && currentCard(state, state.workout.sessionId)): AppState {
-  const sessionId = state.workout?.sessionId;
-  const set = state.sets.find(row => row.id === from?.setId && row.sessionId === sessionId);
-  if (!state.workout || !from || !set) return state;
-  const next = nextExerciseCard(state, from);
-  const remaining = workoutCards(state, state.workout.sessionId).filter(card =>
-    state.sets.find(row => row.id === card.setId)?.exerciseId === set.exerciseId && !cardCompleted(state, card));
-  let changed = state;
-  for (const card of remaining) {
-    changed = advanceWorkout({ ...changed, workout: { ...changed.workout!, card } }, true);
-  }
-  if (!next) return changed.workout ? finishWorkout(changed, set.sessionId) : changed;
-  return { ...changed, workout: { ...changed.workout!, card: next, restStartedAt: undefined, restEndsAt: undefined } };
-}
-
-export function undoWorkout(state: AppState): AppState {
+export function moveToNextExercise(state: AppState): AppState {
   const progress = state.workout;
-  const previous = progress?.history.at(-1);
-  if (!progress || !previous) return state;
-  return {
-    ...state,
-    sets: state.sets.map((s) => (s.id === previous.set.id ? previous.set : s)),
-    workout: {
-      ...progress,
-      card: previous.card,
-      history: progress.history.slice(0, -1),
-      restStartedAt: undefined,
-      restEndsAt: undefined,
-    },
-  };
+  const current = progress && currentCard(state, progress.sessionId);
+  const next = current && nextExerciseCard(state, current);
+  return next ? atPosition(state, next) : state;
+}
+
+export function moveToExercise(state: AppState, exerciseId: number): AppState {
+  const progress = state.workout;
+  if (!progress) return state;
+  const first = workoutCards(state, progress.sessionId).find((card) =>
+    state.sets.find((set) => set.id === card.setId && set.sessionId === progress.sessionId)?.exerciseId === exerciseId);
+  return first ? atPosition(state, first) : state;
+}
+
+export function moveToPreviousExercise(state: AppState): AppState {
+  const progress = state.workout;
+  if (!progress) return state;
+  const cards = workoutCards(state, progress.sessionId);
+  const current = currentCard(state, progress.sessionId);
+  const index = cards.findIndex((card) => card.setId === current?.setId && card.side === current.side);
+  const exerciseId = state.sets.find((set) => set.id === current?.setId)?.exerciseId;
+  const previous = cards.slice(0, index).reverse().find((card) =>
+    state.sets.find((set) => set.id === card.setId)?.exerciseId !== exerciseId);
+  if (!previous) return state;
+  const first = cards.find((card) => state.sets.find((set) => set.id === card.setId)?.exerciseId ===
+    state.sets.find((set) => set.id === previous.setId)?.exerciseId);
+  return first ? atPosition(state, first) : state;
+}
+
+export function deleteWorkoutSet(state: AppState, setId: number): AppState {
+  const progress = state.workout;
+  const row = state.sets.find((set) => set.id === setId && set.sessionId === progress?.sessionId);
+  if (!progress || !row) return state;
+  const cards = workoutCards(state, progress.sessionId);
+  const current = currentCard(state, progress.sessionId);
+  const index = cards.findIndex((card) => card.setId === current?.setId && card.side === current.side);
+  const remaining = cards.filter((card) => card.setId !== setId);
+  const next = remaining[index] ?? remaining.at(-1);
+  const exerciseOrder = progress.exerciseOrder.filter((id) => id !== row.exerciseId ||
+    state.sets.some((set) => set.sessionId === progress.sessionId && set.exerciseId === id && set.id !== setId));
+  const changed = { ...state, sets: state.sets.filter((set) => set.id !== setId),
+    workout: { ...progress, exerciseOrder } };
+  return next ? atPosition(changed, next) : finishWorkout(changed, progress.sessionId);
 }
 
 export function resizeSets(

@@ -3,15 +3,17 @@ import React, { useState } from 'react';
 import { View } from 'react-native';
 import { useApp } from '../context';
 import { Button, Sheet } from '../ui';
-import { reorderWorkout, resizeSets, updateExerciseSets } from '../workout';
+import { currentCard as getCurrentCard, reorderWorkout, resizeSets, updateExerciseSets } from '../workout';
 import { WorkoutNumberWheel } from './WorkoutNumberWheel';
 import { ExerciseEditor } from './ExerciseEditor';
 import { ExerciseOrderList } from './ExerciseOrderList';
 import { ExercisePictogram } from './ExercisePictogram';
 import { moveItem } from '../reorder';
 import { addWorkoutExercises } from '../exercise-additions';
+import { formatWeight } from '../logic';
+import type { WorkoutCard } from '../types';
 
-export function WorkoutOrderEditor({ sessionId, onClose, initialExerciseId }: { sessionId: number; onClose: () => void; initialExerciseId?: number }) {
+export function WorkoutOrderEditor({ sessionId, onClose, onJumpToSet, initialExerciseId }: { sessionId: number; onClose: () => void; onJumpToSet: (card: WorkoutCard) => void; initialExerciseId?: number }) {
   const { state, update } = useApp();
   const [addNew, setAddNew] = useState(false);
   const [editing, setEditing] = useState<number | undefined>(initialExerciseId);
@@ -23,8 +25,34 @@ export function WorkoutOrderEditor({ sessionId, onClose, initialExerciseId }: { 
   const repsSide = exercise?.mode === 'BILATERAL' ? 'left' : 'normal';
   const patch = (changes: Parameters<typeof updateExerciseSets>[3]) => update((s) => updateExerciseSets(s, sessionId, exercise!.id, changes, new Date().toISOString()));
   const add = (ids: number[]) => update((s) => addWorkoutExercises(s, sessionId, ids));
+  const currentCard = state.workout?.sessionId === sessionId ? getCurrentCard(state, sessionId) : undefined;
+  const displayWeight = (weight?: number) => formatWeight(weight, state.weightUnit).replace(' ', '');
   return <Sheet title="種目を編集" onClose={onClose} scroll={false} bottomSheet>
-    <ExerciseOrderList items={order.map((id) => ({ id, name: state.exercises.find((e) => e.id === id)?.name ?? '種目', detail: `${sets.filter((s) => s.exerciseId === id).length}セット` }))}
+    <ExerciseOrderList items={order.map((id) => {
+      const exerciseSets = sets.filter((s) => s.exerciseId === id).sort((a, b) => a.setOrder - b.setOrder);
+      const exerciseName = state.exercises.find((e) => e.id === id)?.name ?? '種目';
+      const bilateral = state.exercises.find((e) => e.id === id)?.mode === 'BILATERAL';
+      return { id, name: exerciseName, detail: `${exerciseSets.length}セット`,
+        setRows: exerciseSets.map((set, index) => {
+          const left = `左${displayWeight(set.leftWeightKg)}×${set.leftReps ?? '—'}${set.leftCompleted ? '✓' : ''}`;
+          const right = `右${displayWeight(set.rightWeightKg)}×${set.rightReps ?? '—'}${set.rightCompleted ? '✓' : ''}`;
+          const values = bilateral ? `${left} / ${right}` : `${displayWeight(set.normalWeightKg)}×${set.normalReps ?? '—'}`;
+          const spokenValues = bilateral
+            ? `左${displayWeight(set.leftWeightKg)} ${set.leftReps ?? '—'}回、右${displayWeight(set.rightWeightKg)} ${set.rightReps ?? '—'}回`
+            : `${displayWeight(set.normalWeightKg)} ${set.normalReps ?? '—'}回`;
+          const completed = bilateral ? set.isCompleted || (set.leftCompleted && set.rightCompleted) : set.isCompleted;
+          const firstSide = state.leftFirstExerciseIds.includes(id) ? 'left' : 'right';
+          const side = currentCard?.setId === set.id && currentCard.side ? currentCard.side
+            : !set[`${firstSide}Completed`] ? firstSide : firstSide === 'left' ? 'right' : 'left';
+          return { key: set.id, label: `${index + 1}セット目 / ${values}${completed ? ' ✓' : ''} / ›`,
+            accessibilityLabel: `${exerciseName} ${index + 1}セット目 ${spokenValues}。タップで移動`,
+            completed, current: currentCard?.setId === set.id,
+            onPress: () => onJumpToSet(bilateral ? { setId: set.id, side } : { setId: set.id }) };
+        }),
+        stepper: { sets: exerciseSets.length,
+          min: Math.max(1, exerciseSets.filter((s) => s.isCompleted || s.leftCompleted || s.rightCompleted).length), max: 30,
+          onChange: (n: number) => update((s) => resizeSets(s, sessionId, id, n)) } };
+    })}
       onDelete={(id) => update((s) => ({ ...s, sets: s.sets.filter((set) => !(set.sessionId === sessionId && set.exerciseId === id)), workout: s.workout ? { ...s.workout, exerciseOrder: s.workout.exerciseOrder.filter((exerciseId) => exerciseId !== id) } : undefined }))}
       onEdit={setEditing} onMove={(from, to) => update((s) => reorderWorkout(s, moveItem(order, from, to)))}
       footer={<>

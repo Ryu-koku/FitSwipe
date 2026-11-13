@@ -73,6 +73,27 @@ test('empty comparison and bodyweight load comparison explain absent data withou
   app.press('同じ回数');
   assert.match(app.text(), /重量ありの完了記録がありません/);
   assert.ok(!app.render().some(n => n.type === 'TextInput'));
+  app.press('1RM');
+  assert.match(app.text(), /重量あり・1〜10回の完了記録がありません/);
+});
+
+test('1RM mode shows session values, kg and percent difference, all-time best and tappable records without value chips', () => {
+  const opened = [];
+  const rows = [record(1, 100, 1), record(1, 80, 10), record(2, 90, 5), record(3, 90, 1)];
+  const app = view('../src/components/RecordComparison.tsx', 'RecordComparison',
+    { records: rows, onOpenRecord: r => opened.push(r) }, { weightUnit: 'kg' });
+  assert.deepEqual(app.render().filter(n => n.type === 'Chip').map(n => n.props.label), ['同じ重量', '同じ回数', '1RM', '80 kg', '90 kg', '100 kg']);
+  app.press('1RM');
+  assert.deepEqual(app.render().filter(n => n.type === 'Chip').map(n => n.props.label), ['同じ重量', '同じ回数', '1RM']);
+  assert.match(app.text(), /前回：105 kg/);
+  assert.match(app.text(), /最新：90 kg/);
+  assert.match(app.text(), /−15 kg · −14\.3%/);
+  assert.match(app.text(), /全期間ベスト · 1RM/);
+  assert.match(app.text(), /過去の実績：106\.67 kg/);
+  for (const label of ['前回', '最新']) {
+    app.render().find(n => n.props?.accessibilityLabel === `${label}・2026-11-10の記録を見る`).props.onPress();
+  }
+  assert.deepEqual(opened.map(r => r.sessionId), [2, 3]);
 });
 
 test('growth period changes bests while keeping the graph and comparison history unfiltered', () => {

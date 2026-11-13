@@ -1,4 +1,3 @@
-import { WeightWheel } from './WeightWheel';
 import React, { useState } from 'react';
 import { Alert, Pressable, Text, View } from 'react-native';
 import { useApp } from '../context';
@@ -50,7 +49,10 @@ export function PresetEditor({ presetId, onClose: close, initialExerciseId }: { 
       style={{ minWidth: 48, minHeight: 48, alignItems: 'center', justifyContent: 'center' }}>
       <AppIcon name="trash" color={colors.red} />
     </Pressable>}>
-    <ExerciseOrderList items={configs.map((c) => ({ id: c.exerciseId, name: state.exercises.find((e) => e.id === c.exerciseId)!.name, detail: `${c.sets}セット × ${c.reps ?? '—'}回` }))}
+    <ExerciseOrderList items={configs.map((c) => ({ id: c.exerciseId, name: state.exercises.find((e) => e.id === c.exerciseId)!.name, detail: `${c.sets}セット`,
+      stepper: { sets: c.sets, min: 1, max: 30, onChange: (sets: number) => update((s) => ({ ...s,
+        presets: s.presets.map((p) => p.id === presetId ? { ...p, exercises: p.exercises.map((item) => item.exerciseId === c.exerciseId ? { ...item, sets } : item) } : p),
+      })) } }))}
       onDelete={removeExercise} onEdit={setEditing} onMove={(from, to) => update((s) => ({ ...s, presets: s.presets.map((p) => p.id === presetId ? { ...p, exercises: moveItem(configs, from, to).concat(p.exercises.filter((c) => !configs.includes(c))) } : p) }))}
       header={<>
         <Field label="プリセット名" value={draftName ?? preset.name} maxLength={24} onChangeText={setDraftName} onBlur={commitName} />
@@ -79,12 +81,7 @@ export function PresetEditor({ presetId, onClose: close, initialExerciseId }: { 
       onAdded={(ids) => update((s) => addPresetExercises(s, presetId, ids))} />}
     {config && exercise && <Sheet title={exercise.name} onClose={() => setEditing(undefined)} popup>
       <View style={{ alignItems: 'center', marginBottom: 12 }}><ExercisePictogram name={exercise.name} animate={false} /></View>
-      <View style={{ flexDirection: 'row', gap: 4 }}>
-        {exercise.mode === 'BILATERAL' ? <>
-          <WeightWheel step={state.exerciseWeightSteps[exercise.id] ?? state.weightStepKg} label="左kg" unit="kg" value={config.leftWeightKg} onChange={(leftWeightKg) => patch({ leftWeightKg })} />
-          <WeightWheel step={state.exerciseWeightSteps[exercise.id] ?? state.weightStepKg} label="右kg" unit="kg" value={config.rightWeightKg} onChange={(rightWeightKg) => patch({ rightWeightKg })} />
-        </> : <WeightWheel step={state.exerciseWeightSteps[exercise.id] ?? state.weightStepKg} label="重量（kg）" unit="kg" value={config.weightKg} onChange={(weightKg) => patch({ weightKg })} />}
-        <WorkoutNumberWheel label="回数" unit="回" step={1} value={config.reps} onChange={(reps) => patch({ reps })} />
+      <View style={{ flexDirection: 'row', justifyContent: 'center' }}>
         <WorkoutNumberWheel min={1} max={30} label="セット数" unit="セット" step={1} value={config.sets} onChange={(sets) => patch({ sets })} />
       </View>
       <Button label="完了" onPress={() => setEditing(undefined)} />

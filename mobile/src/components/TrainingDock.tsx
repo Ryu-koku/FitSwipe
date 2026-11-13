@@ -1,3 +1,4 @@
+import { useTourTarget } from '../tour';
 import React, { useRef, useState } from 'react';
 import { Alert, Pressable, Text, View } from 'react-native';
 import { router, usePathname } from 'expo-router';
@@ -10,6 +11,7 @@ import { AppIcon } from './AppIcon';
 export function TrainingDock() {
   const path = usePathname();
   const preparing = path === '/prepare';
+  const tourTarget = useTourTarget(preparing ? 'start-dock' : 'home-dock');
   // Keep the dock scoped to screens that provide its navigation/actions.
   // In particular, the workout completion screen must remain unobstructed.
   const visible = ['/', '/prepare', '/rooms'].includes(path);
@@ -59,7 +61,7 @@ export function TrainingDock() {
         </Pressable>
         {/* Reserve the same space for both sizes so the side navigation stays put. */}
         <View style={{ width: 84, height: 84, marginTop: -28, alignItems: 'center', justifyContent: 'flex-end' }}>
-        <Pressable accessibilityRole="button"
+        <Pressable {...tourTarget} accessibilityRole="button"
           accessibilityLabel={showStart ? active ? 'トレーニングを再開' : 'トレーニングを開始' : 'トレーニングメニューを開く'}
           accessibilityState={{ disabled: showStart && (starting || !canStart), busy: starting }}
           disabled={showStart && (starting || !canStart)}

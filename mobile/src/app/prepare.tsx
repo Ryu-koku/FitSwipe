@@ -1,3 +1,4 @@
+import { useTour, useTourTarget } from '../tour';
 import { canAddPreset } from '../premium';
 import { usePremium } from '../premium-context';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
@@ -13,6 +14,8 @@ import { PrepareExerciseCard } from '../components/PrepareExerciseCard';
 
 export default function PrepareScreen() {
   const { state, update } = useApp();
+  const tour = useTour();
+  const presetsTarget = useTourTarget('presets');
   const active = state.sessions.some((s) => s.status === 'IN_PROGRESS');
   useEffect(() => {
     if (active) router.replace('/workout');
@@ -42,14 +45,14 @@ export default function PrepareScreen() {
   return (
     <Screen title="メニュー">
       <SectionTitle>プリセット</SectionTitle>
-      <View style={[styles.wrap, { gap: 10 }]}>
+      <View {...presetsTarget} style={[styles.wrap, { gap: 10 }]}>
         {state.presets.map((item) => {
           const selected = item.id === preset?.id;
           const color = presetColor(item, colors.primary);
           const summary = summaries.get(item.id)!;
           return <Pressable key={item.id} accessibilityRole="button" accessibilityLabel={item.name}
             accessibilityState={{ selected }}
-            onPress={() => { feedback(); return update((s) => ({ ...s, selectedPresetId: item.id })); }}
+            onPress={() => { feedback(); tour.notify('preset-selected'); return update((s) => ({ ...s, selectedPresetId: item.id })); }}
             style={{ width: '48%' }}>
             <Card style={{ marginBottom: 0, padding: 12,
               backgroundColor: selected ? colors.soft : colors.surface,
@@ -86,7 +89,7 @@ export default function PrepareScreen() {
         </View>
         {configs.map((config) => <PrepareExerciseCard key={config.exerciseId}
           exercise={exercisesById.get(config.exerciseId)!} config={config}
-          weightUnit={state.weightUnit} animate={!editing && !adding} onEdit={edit} />)}
+          animate={!editing && !adding} onEdit={edit} />)}
         {!configs.length && <Card><Text style={styles.body}>種目を追加して、トレーニングの準備をしましょう。</Text></Card>}
         <Button label="メニューを編集・種目を追加" secondary onPress={() => edit()} />
       </> : <Card style={{ marginTop: 16 }}>

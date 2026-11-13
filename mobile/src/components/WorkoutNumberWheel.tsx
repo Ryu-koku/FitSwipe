@@ -1,3 +1,4 @@
+import type { useTourTarget } from '../tour';
 import React, { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Animated, AppState, FlatList, Pressable, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { useFocusEffect } from 'expo-router';
@@ -16,7 +17,7 @@ const NumberWheelRow = memo(function NumberWheelRow({ value, empty, index, rowHe
 }) {
   const { colors, styles } = useTheme();
   const center = index * rowHeight;
-  const scale = offset.interpolate({ inputRange: [center - rowHeight, center, center + rowHeight], outputRange: [0.45, 1, 0.45], extrapolate: 'clamp' });
+  const scale = offset.interpolate({ inputRange: [center - rowHeight, center, center + rowHeight], outputRange: [0.6, 1, 0.6], extrapolate: 'clamp' });
   const opacity = offset.interpolate({ inputRange: [center - rowHeight * 2, center - rowHeight, center, center + rowHeight, center + rowHeight * 2], outputRange: [0.15, 0.65, 1, 0.65, 0.15], extrapolate: 'clamp' });
   return <Pressable accessible={false} disabled={disabled} onPress={() => onTap(index)}
     delayLongPress={WHEEL_HOLD_DELAY} onLongPress={() => onHold(index)} onPressOut={onRelease}
@@ -26,22 +27,23 @@ const NumberWheelRow = memo(function NumberWheelRow({ value, empty, index, rowHe
       opacity, transform: [{ scale }] }}>
       <Text accessible={false} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.5}
         style={{ color: !empty && value === highlightValue ? colors.primary : colors.ink,
-          fontSize: 40, fontWeight: '700', fontVariant: ['tabular-nums'], letterSpacing: -1.5, flexShrink: 1 }}>{empty ? '—' : value}</Text>
-      <Animated.Text accessible={false} style={[styles.small, { marginTop: 18,
+          fontSize: 30, includeFontPadding: false, fontWeight: '700', fontVariant: ['tabular-nums'], letterSpacing: -1.5, flexShrink: 1 }}>{empty ? '—' : value}</Text>
+      <Animated.Text accessible={false} style={[styles.small, { marginTop: 10,
         opacity: offset.interpolate({ inputRange: [center - rowHeight, center, center + rowHeight], outputRange: [0, 1, 0], extrapolate: 'clamp' }) }]}>{unit}</Animated.Text>
     </Animated.View>
   </Pressable>;
 });
 
-export function WorkoutNumberWheel({ label, unit, value, highlightValue, step, onChange, resetToken, min = 0, max = Infinity, disabled = false }: {
+export function WorkoutNumberWheel({ tourTarget, label, unit, value, highlightValue, step, onChange, resetToken, min = 0, max = Infinity, disabled = false }: {
+  tourTarget?: ReturnType<typeof useTourTarget>;
   label: string; unit: string; value?: number; highlightValue?: number; step: number;
   onChange: (value: number) => void; resetToken?: string | number; disabled?: boolean; min?: number; max?: number;
 }) {
   const { colors, styles } = useTheme();
   const { fontScale } = useWindowDimensions();
   const reduced = useReducedMotion();
-  const neighborHeight = Math.max(44, Math.ceil(24 * fontScale));
-  const centerHeight = Math.max(56, Math.ceil(48 * fontScale));
+  const neighborHeight = Math.max(20, Math.ceil(20 * fontScale));
+  const centerHeight = Math.max(48, Math.ceil(48 * fontScale));
   const rowHeight = (neighborHeight + centerHeight) / 2;
   const height = neighborHeight * 2 + centerHeight;
   const padding = (height - rowHeight) / 2;
@@ -171,7 +173,7 @@ export function WorkoutNumberWheel({ label, unit, value, highlightValue, step, o
     close();
   };
   return <>
-    <View pointerEvents="box-none" style={{ flex: 1, minWidth: 0, alignItems: 'center', paddingTop: 8, paddingBottom: 6 }}>
+    <View {...tourTarget} pointerEvents="box-none" style={{ flex: 1, minWidth: 0, alignItems: 'center', paddingTop: 8, paddingBottom: 6 }}>
       <Text pointerEvents="none" style={[styles.small, { fontWeight: '600', textAlign: 'center' }]}>{label}</Text>
       <View testID={`workout-wheel-${(unit === 'kg' || unit === 'lb') ? 'weight' : 'reps'}`}
         accessible accessibilityRole="adjustable" accessibilityLabel={label}

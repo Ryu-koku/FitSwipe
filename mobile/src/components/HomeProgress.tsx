@@ -19,6 +19,7 @@ import type {
   ProgressSide,
 } from '../home-progress';
 import { ProgressChart } from './ProgressChart';
+import type { HomeProgressSize } from '../home-display';
 
 export function ProgressTrend({
   records,
@@ -56,7 +57,7 @@ export function ProgressTrend({
       </Text>
       {bodyweight && (
         <Text style={styles.small}>
-          重量なしの記録は最多回数で表示します。推定最大重量は重量ありの記録が対象です。
+          重量なしの記録は最多回数で表示します。1RMは重量ありの記録が対象です。
         </Text>
       )}
       {points.length ? (
@@ -77,7 +78,7 @@ export function ProgressTrend({
       )}
       {effectiveMetric === 'estimated' && (
         <Text style={styles.small}>
-          重量と回数からの推定値です。実際に持ち上げた最大重量ではありません。重量あり・1〜10回の完了記録が対象です。
+          重量あり・1〜10回の完了記録が対象です。
         </Text>
       )}
       {effectiveMetric === 'reps' && (
@@ -96,7 +97,9 @@ export function openProgress(exerciseId: number, side: ProgressSide, metric: Pro
   });
 }
 
-export function HomeProgress({ availableHeight = 0, layoutReady = true }: { availableHeight?: number; layoutReady?: boolean }) {
+const cardHeights: Record<HomeProgressSize, number> = { small: 240, medium: 300, large: 360 };
+
+export function HomeProgress({ size = 'medium' }: { size?: HomeProgressSize }) {
   const [interactionsReady, setInteractionsReady] = useState(false);
   const navigation = useNavigation<{
     addListener(event: 'transitionStart' | 'transitionEnd', listener: () => void): () => void;
@@ -119,6 +122,7 @@ export function HomeProgress({ availableHeight = 0, layoutReady = true }: { avai
   const [choosing, setChoosing] = useState(false);
   const [query, setQuery] = useState('');
   const preferences = progressPreferences(state.homeProgress);
+  const cardHeight = cardHeights[size];
   const today = new Date().toDateString();
   const index = useMemo(
     () =>
@@ -133,7 +137,7 @@ export function HomeProgress({ availableHeight = 0, layoutReady = true }: { avai
   const side: ProgressSide = exercise?.mode === 'BILATERAL' ? preferences.side : 0;
   const records = useMemo(() => index && exercise ? exerciseRecords(index, exercise.id, side) : [], [index, exercise, side]);
   const bodyweight = useMemo(() => isBodyweight(records), [records]);
-  const metric = bodyweight ? 'reps' : preferences.metric;
+  const metric = bodyweight ? 'reps' : 'estimated';
   const rows = useMemo(() =>
     index && preferences.view === 'ranking' ? progressRanking(state, index, preferences.ranking, new Date(today)) : [],
     // Ranking reads only exercises from state; history is captured by index.
@@ -152,7 +156,7 @@ export function HomeProgress({ availableHeight = 0, layoutReady = true }: { avai
   return (
     <>
       <Pressable accessibilityRole="button" accessibilityLabel="記録の詳細を見る" onPress={() => { feedback(); open(); }} style={{ marginTop: 12 }}>
-      <Card style={{ minHeight: availableHeight, marginBottom: 0, padding: 16 }}>
+      <Card style={{ ...(preferences.view === 'trend' ? { height: cardHeight } : {}), marginBottom: 0, padding: 16 }}>
         <View onLayout={(event) => { const next = event.nativeEvent.layout.height; if (Math.abs(next - headerHeight) >= 1) setHeaderHeight(next); }} style={styles.row}>
           <Text numberOfLines={1} style={[styles.body, { flex: 1, fontWeight: '800', fontSize: 17 }]}>
             {preferences.view === 'ranking' ? preferences.ranking === 'change' ? '伸び率' : '自己ベスト更新' : `${exercise?.name ?? '筋力'}${exercise?.mode === 'BILATERAL' ? side === 1 ? '（左）' : '（右）' : ''}`}
@@ -171,7 +175,7 @@ export function HomeProgress({ availableHeight = 0, layoutReady = true }: { avai
           </Pressable>
         )) : <>
           <Text onLayout={(event) => { const next = event.nativeEvent.layout.height; if (Math.abs(next - metricHeight) >= 1) setMetricHeight(next); }} style={styles.small}>{metricLabels[metric]}</Text>
-          {points.length ? <ProgressChart compact layoutReady={layoutReady && headerHeight > 0 && metricHeight > 0} availableHeight={Math.max(0, availableHeight - 34 - headerHeight - metricHeight)} points={points} unit={metric === 'reps' ? '回' : 'kg'} /> : null}
+          {points.length ? <ProgressChart compact layoutReady={headerHeight > 0 && metricHeight > 0} availableHeight={Math.max(0, cardHeight - 34 - headerHeight - metricHeight)} points={points} unit={metric === 'reps' ? '回' : 'kg'} /> : null}
         </>}
         {interactionsReady && (preferences.view === 'ranking' ? !rows.length : !points.length) && <Text style={[styles.small, { paddingVertical: 16 }]}>記録なし</Text>}
       </Card>
@@ -184,9 +188,6 @@ export function HomeProgress({ availableHeight = 0, layoutReady = true }: { avai
             <Chip label="自己ベスト更新" active={preferences.view === 'ranking' && preferences.ranking === 'updates'} onPress={() => change({ view: 'ranking', ranking: 'updates' })} />
           </View>
           {preferences.view === 'trend' && <>
-          {!bodyweight && <View style={[styles.wrap, { marginTop: 8 }]}>
-            {(['estimated', 'weight', 'reps'] as const).map((key) => <Chip key={key} label={metricLabels[key]} active={metric === key} onPress={() => change({ metric: key })} />)}
-          </View>}
           {exercise?.mode === 'BILATERAL' && <View style={[styles.wrap, { marginTop: 8 }]}>
             <Chip label="左" active={side === 1} onPress={() => change({ side: 1 })} />
             <Chip label="右" active={side === 2} onPress={() => change({ side: 2 })} />

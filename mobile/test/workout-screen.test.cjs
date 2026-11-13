@@ -11,13 +11,14 @@ const { startWorkout, updateSet, currentCard, advanceWorkout } = require('../src
 function screen(initial, deferred = false) {
   let state = initial, cursor = 0;
   const slots = [];
-  const routes = [];
+  const routes = [], tourEvents = [];
   const queuedUpdates = [];
   const filename = path.resolve(__dirname, '../src/app/workout.tsx');
   const mod = new Module(filename, module);
   mod.filename = filename; mod.paths = Module._nodeModulePaths(path.dirname(filename));
   const original = mod.require.bind(mod);
   mod.require = name => {
+    if (name === '../tour') return { TourProvider: 'TourProvider', useTour: () => ({ active: false, step: null, start: () => {}, notify: event => tourEvents.push(event) }), useTourTarget: () => ({}) };
     if (name === 'react') return {
       useLayoutEffect: () => {}, Profiler: 'Profiler', // PERF-TEMP
       useState: initial => { const i = cursor++; if (!(i in slots)) slots[i] = typeof initial === 'function' ? initial() : initial; return [slots[i], value => { slots[i] = value; }]; },
@@ -54,7 +55,7 @@ function screen(initial, deferred = false) {
     }
     visit(mod.exports.default()); return nodes;
   }
-  return { render, getState: () => state, routes, flush: () => { while (queuedUpdates.length) state = queuedUpdates.shift()(state); }, press: label => {
+  return { tourEvents, render, getState: () => state, routes, flush: () => { while (queuedUpdates.length) state = queuedUpdates.shift()(state); }, press: label => {
     if (label === 'セット完了' || label === 'スキップ') {
       const card = render().find(node => node.type === 'SwipeActions');
       assert.ok(card, 'swipe card exists');
@@ -73,19 +74,7 @@ function screen(initial, deferred = false) {
   } };
 }
 
-test('skip then back shows entered numbers and set-complete records them', () => {
-  let state = startWorkout(seedState());
-  state.restDurationSeconds = 0;
-  const card = currentCard(state, state.workout.sessionId);
-  state = updateSet(state, card.setId, { normalWeightKg: 62.5, normalReps: 8 });
-  const app = screen(state);
-  app.press('スキップ'); app.press('前のカードへ');
-  const inputs = app.render().filter(node => node.type === 'WorkoutNumberWheel');
-  assert.deepEqual(inputs.map(node => node.props.value), [62.5, 8]);
-  app.press('セット完了');
-  const saved = app.getState().sets.find(set => set.id === card.setId);
-  assert.equal(saved.isCompleted, true); assert.equal(saved.normalWeightKg, 62.5); assert.equal(saved.normalReps, 8);
-});
+
 
 test('wheel edits carry weight to upcoming sets and keep repetitions local without advancing', () => {
   const state = startWorkout(seedState());
@@ -142,63 +131,21 @@ test('closing order editor exits browsing and shows reordered current exercise',
   assert.ok(app.render().some(node => node.type === 'Text' && node.props.children === expected));
 });
 
-
-test('exercise segments follow workout order and keep skipped cards incomplete', () => {
-  let state = startWorkout(seedState());
-  state.restDurationSeconds = 0;
-  state.workout.exerciseOrder.reverse();
-  state.workout.card = undefined;
+test('jumping from the order editor moves to the selected set and closes the sheet', () => {
+  const state = startWorkout(seedState());
   const app = screen(state);
-  const segments = () => app.render().find(node => node.type?.name === 'WorkoutProgressBar').props.segments;
-  assert.deepEqual(segments().map(item => item.id), state.workout.exerciseOrder);
-  assert.ok(segments().every(item => item.completed === 0 && item.total > 0));
-  app.press('セット完了');
-  assert.equal(segments()[0].completed, 1);
-  app.press('スキップ');
-  assert.equal(segments()[0].completed, 1);
+  app.press('カードの種目を編集');
+  const editor = app.render().find(node => node.type === 'WorkoutOrderEditor');
+  const target = state.sets.find(row => row.sessionId === state.workout.sessionId && row.id !== currentCard(state, state.workout.sessionId).setId);
+  editor.props.onJumpToSet({ setId: target.id });
+  assert.deepEqual(currentCard(app.getState(), state.workout.sessionId), { setId: target.id });
+  assert.equal(app.render().some(node => node.type === 'WorkoutOrderEditor'), false);
 });
 
-test('exercise progress follows the displayed card and stays unchanged when sets complete', () => {
-  const initial = seedState();
-  initial.restDurationSeconds = 0;
-  initial.presets[0].exercises.forEach(config => { config.sets = 3; });
-  const state = startWorkout(initial);
-  const app = screen(state);
-  const bars = () => {
-    const node = app.render().find(node => node.type?.name === 'WorkoutProgressBar');
-    return node.type(node.props).props.children;
-  };
-  const first = currentCard(state, state.workout.sessionId);
-  const snapshot = () => bars().map(bar => ({
-    value: bar.props.accessibilityValue.now,
-    selected: bar.props.accessibilityState?.selected === true,
-    style: bar.props.style,
-  }));
-  const before = snapshot();
-  assert.ok(before.every(bar => bar.value === 0));
-  assert.deepEqual(before.map(bar => bar.selected), before.map((_, i) => i === 0));
-  assert.equal(before[0].style.backgroundColor, 'soft');
-  assert.equal(before[0].style.borderColor, 'primary');
-  assert.ok(before[0].style.borderWidth > 0);
-  assert.ok(before[0].style.height > before[1].style.height);
-  assert.ok(before.slice(1).every(bar => bar.style.backgroundColor === 'line'));
-  app.press('セット完了');
-  assert.notEqual(currentCard(app.getState(), state.workout.sessionId).setId, first.setId);
-  assert.deepEqual(snapshot(), before);
-  app.press('セット完了');
-  app.press('セット完了');
-  assert.deepEqual(snapshot(), before);
-  app.render().find(node => node.type === 'SwipeCard').props.onAdvance();
-  const next = snapshot();
-  assert.equal(next[0].value, 1);
-  assert.equal(next[0].style.backgroundColor, 'primary');
-  assert.deepEqual(next.map(bar => bar.selected), next.map((_, i) => i === 1));
-  assert.equal(next[1].style.backgroundColor, 'soft');
-  assert.ok(next.slice(1).every(bar => bar.value === 0));
-  assert.ok(next.slice(2).every(bar => bar.style.backgroundColor === 'line'));
-  const node = app.render().find(node => node.type?.name === 'WorkoutProgressBar');
-  assert.equal(node.props.currentId, state.workout.exerciseOrder[1]);
-});
+
+
+
+
 
 test('returning from history to the current card permits recording it', () => {
   let state = startWorkout(seedState());
@@ -329,48 +276,87 @@ test('wheels highlight previous values for the displayed side, including zero', 
   }
 });
 
+test('recording card shows every previous set in order and emphasizes the matching set', () => {
+  const state = startWorkout(seedState());
+  const card = currentCard(state, state.workout.sessionId);
+  const row = state.sets.find(item => item.id === card.setId);
+  state.sessions.push({ id: -1, status: 'COMPLETED', startedAt: '2020-01-01T00:00:00Z' });
+  for (const [order, weight, reps] of [[3, 17.5, 8], [1, 20, 10], [2, 20, 8]]) {
+    state.sets.push({ ...row, id: -order, sessionId: -1, setOrder: order, isCompleted: true,
+      normalWeightKg: weight, normalReps: reps });
+  }
+  const nodes = screen(state).render();
+  const label = nodes.find(node => node.type === 'Text' && node.props.children?.[0] === '前回');
+  assert.ok(label);
+  assert.equal(label.props.numberOfLines, undefined);
+  const entries = label.props.children[2];
+  assert.deepEqual(entries.map(entry => entry.props.children.join('')),
+    ['20 kg × 10回', ' / 20 kg × 8回', ' / 17.5 kg × 8回']);
+  assert.deepEqual(entries.map(entry => entry.props.style?.fontWeight), ['bold', undefined, undefined]);
+});
 
-test('header taps go back, complete and open history without wrapping wheels', () => {
+
+test('set swipes navigate and the history tap still opens records', () => {
   const state = startWorkout(seedState()); state.restDurationSeconds = 0;
   const app = screen(state);
   const tap = label => app.render().find(n => n.props?.accessibilityLabel === label).props.onPress();
   const first = currentCard(state, state.workout.sessionId);
-  tap('セット完了して次へ');
+  app.render().find(n => n.type === 'SwipeCard').props.onSwipeLeft();
   assert.equal(app.getState().sets.find(s => s.id === first.setId).isCompleted, true);
-  tap('前のセット');
+  app.render().find(n => n.type === 'SwipeCard').props.onSwipeRight();
+  assert.equal(app.render().find(n => n.type?.name === 'SetProgressBar').props.currentSet.id, first.setId);
   tap('過去の記録を見る');
   assert.ok(app.render().some(n => n.type === 'Sheet'));
 });
 
-test('swiping while browsing skips displayed exercise and preserves queued wheel edits', () => {
-  const state = startWorkout(seedState()); state.restDurationSeconds = 0;
-  const app = screen(state, true);
-  app.render().find(n => n.type === 'WorkoutNumberWheel').props.onChange(77.5);
-  app.render().find(n => n.type === 'SwipeCard').props.onAdvance(); app.flush();
-  const updated = app.getState();
-  const firstExercise = state.workout.exerciseOrder[0];
-  assert.ok(updated.sets.filter(s => s.exerciseId === firstExercise).every(s => s.skippedInputs.normal.weightKg === 77.5));
-  assert.equal(updated.sets.find(s => s.id === currentCard(updated, updated.workout.sessionId).setId).exerciseId, state.workout.exerciseOrder[1]);
-});
-
-
-test('mounted next-exercise card retains its key and becomes interactive after browsing swipe', () => {
-  const state = startWorkout(seedState()); state.restDurationSeconds = 0;
+test('exercise progress only lets passed segments return to their first card', () => {
+  const state = startWorkout(seedState());
   const app = screen(state);
-  app.press('セット完了'); app.press('前のカードへ');
-  const deck = app.render(true).filter(n => n.type === 'SwipeCard');
-  const behind = deck.find(n => n.props.behind);
-  assert.ok(behind.props.disabled);
-  deck.find(n => !n.props.behind).props.onAdvance();
-  const promoted = app.render().find(n => n.type === 'SwipeCard');
-  assert.equal(promoted.key, behind.key);
-  assert.equal(promoted.props.disabled, false);
-  assert.equal(app.getState().sets[0].isCompleted, true);
-  assert.ok(app.getState().sets[1].skippedInputs.normal);
-  const promotedSetId = currentCard(app.getState(), state.workout.sessionId).setId;
-  app.press('セット完了');
-  assert.ok(app.getState().sets.find(s => s.id === promotedSetId).isCompleted);
+  const sessionId = state.workout.sessionId;
+  app.render().find(n => n.type === 'SwipeCard').props.onSwipeUp();
+  app.render().find(n => n.type === 'SwipeCard').props.onSwipeUp();
+  const bar = app.render().find(n => n.type?.name === 'WorkoutProgressBar');
+  const segments = bar.type(bar.props).props.children;
+  assert.deepEqual(segments.map(node => node.type), ['Pressable', 'Pressable', 'View']);
+  assert.equal(segments[0].props.accessibilityRole, 'button');
+  assert.match(segments[0].props.accessibilityLabel, /に戻る$/);
+  assert.ok(segments[0].props.hitSlop.top > 0);
+  segments[0].props.onPress();
+  assert.deepEqual(currentCard(app.getState(), sessionId), require('../src/workout.ts').workoutCards(state, sessionId)[0]);
+  const currentSegments = app.render().find(n => n.type?.name === 'WorkoutProgressBar');
+  assert.ok(currentSegments.type(currentSegments.props).props.children.every(node => node.type === 'View'));
 });
+
+test('set progress returns to an earlier set on the same side and blocks card swipes during touch', () => {
+  const initial = seedState();
+  initial.exercises.find(exercise => exercise.id === initial.presets[0].exercises[0].exerciseId).mode = 'BILATERAL';
+  let state = startWorkout(initial);
+  const sessionId = state.workout.sessionId;
+  const cards = require('../src/workout.ts').workoutCards(state, sessionId);
+  state = require('../src/workout.ts').moveToCard(state, cards[2]);
+  const app = screen(state);
+  const nodes = app.render();
+  const bar = nodes.find(n => n.type?.name === 'SetProgressBar');
+  const segments = bar.type(bar.props).props.children[1].props.children;
+  assert.equal(segments[0].type, 'Pressable');
+  assert.equal(segments[1].type, 'View');
+  assert.equal(segments[0].props.accessibilityLabel, 'セット1に戻る');
+  assert.ok(segments[0].props.hitSlop.top > 0);
+  const swipe = nodes.find(n => n.type === 'SwipeCard').props;
+  const guard = nodes.find(n => n.type === 'View' && n.props.onTouchStart && n.props.children?.type?.name === 'SetProgressBar');
+  guard.props.onTouchStart(); assert.equal(swipe.isGestureBlocked(), true);
+  guard.props.onTouchEnd(); assert.equal(swipe.isGestureBlocked(), false);
+  segments[0].props.onPress();
+  assert.deepEqual(currentCard(app.getState(), sessionId), cards[0]);
+  const behind = app.render(true).find(n => n.type?.name === 'SetProgressBar' && n.props.disabled);
+  assert.ok(behind);
+  assert.ok(behind.type(behind.props).props.children[1].props.children.every(node => node.type === 'View'));
+});
+
+
+
+
+
 
 test('artwork keeps playing and wheels do not send activity to the screen', () => {
   const app = screen(startWorkout(seedState()));
@@ -380,24 +366,15 @@ test('artwork keeps playing and wheels do not send activity to the screen', () =
   assert.ok(app.render().filter(n => n.type === 'WorkoutNumberWheel').every(n => !n.props.onActive));
 });
 
-test('card edge underlay spans full height and precedes foreground controls', () => {
+test('card has no set navigation tap targets and keeps the history tap target', () => {
   const app = screen(startWorkout(seedState()));
   const nodes = app.render();
-  const edges = nodes.find(n => n.props?.testID === 'workout-card-edges');
-  assert.equal(edges.props.pointerEvents, 'box-none');
-  for (const edge of edges.props.children) {
-    assert.equal(edge.props.style.top, 0);
-    assert.equal(edge.props.style.bottom, 0);
-  }
-  const previous = edges.props.children.find(n => n.props.accessibilityLabel === '前のセット');
-  const next = edges.props.children.find(n => n.props.accessibilityLabel === 'セット完了して次へ');
-  assert.equal(previous.props.style.width, '20%');
-  assert.equal(next.props.style.width, '20%');
+  assert.ok(!nodes.some(n => n.props?.testID === 'workout-card-edges'));
+  assert.ok(!nodes.some(n => ['前のセット', 'セット完了して次へ'].includes(n.props?.accessibilityLabel)));
   const history = nodes.find(n => n.props?.accessibilityLabel === '過去の記録を見る');
+  assert.equal(history.type, 'Pressable');
   assert.equal(history.props.style.left, '20%');
   assert.equal(history.props.style.width, '60%');
-  assert.ok(nodes.indexOf(edges) < nodes.findIndex(n => n.type === 'WorkoutNumberWheel'));
-  assert.ok(nodes.indexOf(edges) < nodes.findIndex(n => n.type === 'SwipeActions'));
 });
 
 const restToggle = app => app.render().find(node => node.type === 'Switch' && node.props.accessibilityLabel === '休憩タイマー');
@@ -434,30 +411,45 @@ test('turning rest off during a rest ends it without advancing the set', () => {
   assert.deepEqual(currentCard(app.getState(), state.workout.sessionId), before);
 });
 
-test('rest toggle stays global across swiped exercises and back cannot change exercises', () => {
+test('rest toggle stays global across swiped exercises and back can browse exercises', () => {
   const state = startWorkout(seedState());
   const firstId = state.workout.exerciseOrder[0];
   state.restTimerDisabled = true;
   const app = screen(state);
   assert.equal(restToggle(app).props.value, false);
-  app.render().find(node => node.type === 'SwipeCard').props.onAdvance();
+  app.render().find(node => node.type === 'SwipeCard').props.onSwipeUp();
   const secondId = app.getState().sets.find(row => row.id === currentCard(app.getState(), state.workout.sessionId).setId).exerciseId;
   assert.notEqual(secondId, firstId);
   assert.equal(restToggle(app).props.value, false);
   restToggle(app).props.onValueChange(false);
-  assert.equal(app.render().find(node => node.type === 'SwipeActions').props.canGoBack, false);
+  assert.equal(app.render().find(node => node.type === 'SwipeActions').props.canGoBack, true);
   assert.equal(restToggle(app).props.value, false);
   restToggle(app).props.onValueChange(true);
   assert.equal(app.getState().restTimerDisabled, false);
 });
 
+test('left swipe records the set and advances like the complete button', () => {
+  const state = startWorkout(seedState()); state.restDurationSeconds = 0;
+  const first = currentCard(state, state.workout.sessionId);
+  const app = screen(state);
+  assert.equal(app.render().find(n => n.type === 'SwipeCard').props.onSwipeRight, null);
+  app.render().find(n => n.type === 'SwipeCard').props.onSwipeLeft();
+  assert.equal(app.getState().sets.find(row => row.id === first.setId).isCompleted, true);
+  assert.notEqual(currentCard(app.getState(), state.workout.sessionId).setId, first.setId);
+  assert.equal(app.tourEvents.at(-1), 'advanced');
+});
 
-test('wheel and action containers guard swipes using refs, leaving edge taps independent', () => {
+
+
+
+
+
+test('wheel and action containers guard swipes using refs', () => {
   const app = screen(startWorkout(seedState()));
   const nodes = app.render();
   const swipe = nodes.find(n => n.type === 'SwipeCard').props;
   const controls = nodes.filter(n => n.type === 'View' && n.props.onTouchStart);
-  assert.equal(controls.length, 2);
+  assert.equal(controls.length, 3);
   for (const control of controls) {
     assert.equal(control.props.pointerEvents, 'box-none');
     assert.equal(swipe.isGestureBlocked(), false);
@@ -467,28 +459,7 @@ test('wheel and action containers guard swipes using refs, leaving edge taps ind
   }
 });
 
-test('edge taps and complete buttons hold the last set; only swiping changes exercise or finishes', () => {
-  for (const edge of [false, true]) {
-    const initial = seedState();
-    initial.restDurationSeconds = 0;
-    initial.presets[0].exercises.forEach(config => { config.sets = 1; });
-    const app = screen(startWorkout(initial));
-    const order = [...app.getState().workout.exerciseOrder];
-    for (const exerciseId of order) {
-      const complete = () => edge
-        ? app.render().find(node => node.props?.accessibilityLabel === 'セット完了して次へ').props.onPress()
-        : app.press('セット完了');
-      complete(); complete();
-      const state = app.getState();
-      assert.equal(state.sets.find(row => row.id === currentCard(state, state.workout.sessionId).setId).exerciseId, exerciseId);
-      assert.deepEqual(app.routes, []);
-      app.render().find(node => node.type === 'SwipeCard').props.onAdvance();
-    }
-    assert.equal(app.getState().workout, undefined);
-    assert.equal(app.routes.length, 1);
-    assert.equal(app.routes[0].pathname, '/complete');
-  }
-});
+
 
 test('current set stays darkest even when completed, completed sets are soft and pending sets use line', () => {
   const state = startWorkout(seedState());
@@ -503,50 +474,12 @@ test('current set stays darkest even when completed, completed sets are soft and
 });
 
 
-test('set navigation retains the exercise card and artwork and input wheels', () => {
-  const state = startWorkout(seedState()); state.restDurationSeconds = 0;
-  const app = screen(state);
-  const before = app.render();
-  const card = before.find(n => n.type === 'SwipeCard');
-  const artwork = before.find(n => n.type === 'WorkoutPictogram');
-  const wheels = before.filter(n => n.type === 'WorkoutNumberWheel');
-  app.press('セット完了');
-  const after = app.render();
-  assert.equal(after.find(n => n.type === 'SwipeCard').key, card.key);
-  assert.deepEqual(after.find(n => n.type === 'WorkoutPictogram').props, artwork.props);
-  assert.ok(after.filter(n => n.type === 'WorkoutNumberWheel').every((n, i) => n.key === wheels[i].key && n.props.resetToken !== wheels[i].props.resetToken));
-  app.press('前のカードへ');
-  assert.equal(app.render().find(n => n.type === 'SwipeCard').key, card.key);
-});
 
 
-test('retained wheels update the new set and queued writes retain their target set ID', () => {
-  const state = startWorkout(seedState()); state.restDurationSeconds = 0;
-  const app = screen(state, true);
-  const before = app.render().filter(n => n.type === 'WorkoutNumberWheel');
-  before[1].props.onChange(7);
-  app.press('セット完了'); app.flush();
-  const after = app.render().filter(n => n.type === 'WorkoutNumberWheel');
-  after[1].props.onChange(11); app.flush();
-  assert.equal(before[1].key, after[1].key);
-  assert.notEqual(before[1].props.resetToken, after[1].props.resetToken);
-  assert.equal(app.getState().sets.find(s => s.id === before[1].props.resetToken).normalReps, 7);
-  assert.equal(app.getState().sets.find(s => s.id === after[1].props.resetToken).normalReps, 11);
-  app.press('前のカードへ');
-  assert.equal(app.render().filter(n => n.type === 'WorkoutNumberWheel')[1].props.value, 7);
-});
 
-test('behind card uses static values and promotes to exactly two interactive wheels', () => {
-  const app = screen(startWorkout(seedState()));
-  const nodes = app.render(true);
-  assert.equal(nodes.filter(n => n.type === 'WorkoutNumberWheel').length, 2);
-  assert.equal(nodes.filter(n => n.props?.testID === 'workout-next-values').length, 1);
-  const behind = nodes.find(n => n.type === 'SwipeCard' && n.props.behind);
-  nodes.find(n => n.type === 'SwipeCard' && !n.props.behind).props.onAdvance();
-  assert.equal(app.render().find(n => n.type === 'SwipeCard').key, behind.key);
-  assert.equal(app.render().filter(n => n.type === 'WorkoutNumberWheel').length, 2);
-  assert.ok(!app.render().some(n => n.props?.testID === 'workout-next-values'));
-});
+
+
+
 
 for (const active of [false, true]) {
   test(`empty workout navigation returns home and offers the correct destination (active=${active})`, () => {
@@ -558,3 +491,34 @@ for (const active of [false, true]) {
     assert.deepEqual(app.routes, ['/', active ? '/' : '/prepare']);
   });
 }
+
+
+
+
+test('card actions have the same controls when moving back and forward', () => {
+  const initial = startWorkout(seedState());
+  initial.restTimerDisabled = true;
+  const app = screen(initial);
+  const actions = () => app.render().find(node => node.type === 'SwipeActions').props;
+  const first = actions();
+  assert.equal(first.reviewing, undefined);
+  assert.equal(first.onSkip, undefined);
+  first.onAdvance();
+  const second = actions();
+  assert.equal(second.reviewing, undefined);
+  assert.equal(second.onSkip, undefined);
+  second.onBack();
+  assert.equal(actions().canGoBack, false);
+  assert.ok(app.render().some(node => node.props?.accessibilityLabel === 'セットを削除'));
+});
+
+test('deleting the current set selects its successor and routes to completion when empty', () => {
+  const state = startWorkout(seedState());
+  state.sets = state.sets.slice(0, 1);
+  state.workout.exerciseOrder = [state.sets[0].exerciseId];
+  const app = screen(state);
+  app.render().find(node => node.props?.accessibilityLabel === 'セットを削除').props.onPress();
+  assert.equal(app.getState().sets.length, 0);
+  assert.equal(app.getState().sessions[0].status, 'COMPLETED');
+  assert.equal(app.routes.at(-1).pathname, '/complete');
+});

@@ -1,8 +1,8 @@
+import { useTour, useTourTarget } from '../tour';
 import { WeightWheel } from '../components/WeightWheel';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
-  useWindowDimensions,
   Pressable,
   Switch,
   Text,
@@ -11,7 +11,7 @@ import {
 import { router, useFocusEffect } from 'expo-router';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import { useApp } from '../context';
-import { formatWeight, indexSessionSets, localDay, previousSet } from '../logic';
+import { formatWeight, indexSessionSets, localDay, previousSessionSets, previousSet } from '../logic';
 import {
   feedback,
   Button,
@@ -25,9 +25,12 @@ import {
 import {
   advanceWorkout,
   nextExerciseCard,
-  skipToNextExercise,
+  moveToNextExercise,
+  moveToPreviousExercise,
+  moveToExercise,
+  moveToCard,
+  deleteWorkoutSet,
   currentCard,
-  reopenSkippedCard,
   activeSession,
   finishWorkout,
   startWorkout,
@@ -48,8 +51,11 @@ import { WorkoutNumberWheel } from '../components/WorkoutNumberWheel';
 import { dailyProgress, exerciseRecords, isBodyweight, progressIndex } from '../home-progress';
 
 export default function WorkoutScreen() {
-  const { fontScale } = useWindowDimensions();
-  const wheelHeight = Math.max(44, Math.ceil(24 * fontScale)) * 2 + Math.max(56, Math.ceil(48 * fontScale));
+  const tour = useTour();
+  const weightTarget = useTourTarget('weight');
+  const repsTarget = useTourTarget('reps');
+  const advanceTarget = useTourTarget('advance');
+  const exerciseTarget = useTourTarget('exercise');
   const { state, update, getState } = useApp();
   const { colors, styles } = useTheme();
   const [orderEditor, setOrderEditor] = useState(false);
@@ -62,7 +68,6 @@ export default function WorkoutScreen() {
   const [history, setHistory] = useState(false);
   const [historySessionId, setHistorySessionId] = useState<number>();
   const [historyMetric, setHistoryMetric] = useState<'weight' | 'reps'>('weight');
-  const [browsing, setBrowsing] = useState<WorkoutCard>();
   const [swipeProgress] = useState(() => new Animated.Value(0));
   const session = activeSession(state);
   const hasActiveSession = state.sessions.some((s) => s.status === 'IN_PROGRESS');
@@ -71,15 +76,9 @@ export default function WorkoutScreen() {
     ?? 'トレーニング';
   const progress = state.workout;
   const current = useMemo(() => session ? currentCard(state, session.id) : undefined, [state, session]);
-  const validBrowsing = browsing && state.sets.some((item) => item.id === browsing.setId && item.sessionId === session?.id) ? browsing : undefined;
-  const card = validBrowsing ?? current;
+  const card = current;
   const cardSetId = card?.setId;
-  const storedSet = useMemo(() => state.sets.find(s => s.id === cardSetId), [state.sets, cardSetId]);
-  const draft = storedSet?.skippedInputs?.[card?.side ?? 'normal'];
-  const set = storedSet && draft ? { ...storedSet,
-    [`${card?.side ?? 'normal'}WeightKg`]: draft.weightKg,
-    [`${card?.side ?? 'normal'}Reps`]: draft.reps,
-  } : storedSet;
+  const set = useMemo(() => state.sets.find(s => s.id === cardSetId), [state.sets, cardSetId]);
   const exercise = state.exercises.find((e) => e.id === set?.exerciseId);
   const locked = useRef(false);
   useEffect(() => {
@@ -141,15 +140,11 @@ export default function WorkoutScreen() {
   const rows = state.sets.filter((s) => s.sessionId === session.id);
   const cards = workoutCards(state, session.id);
   const exerciseIds = [...new Set(cards.map((item) => rows.find((row) => row.id === item.setId)!.exerciseId))];
-  const segments = exerciseIds.map((id) => {
-    const exerciseCards = cards.filter((item) => rows.find((row) => row.id === item.setId)?.exerciseId === id);
-    return { id, name: state.exercises.find((item) => item.id === id)?.name ?? '種目',
-      total: exerciseCards.length, completed: exerciseCards.filter((item) => {
-        const row = rows.find((entry) => entry.id === item.setId)!;
-        return !row.skippedInputs?.[item.side ?? 'normal'] && (item.side ? row[`${item.side}Completed`] : row.isCompleted);
-      }).length };
-  });
-  const completedExercises = segments.filter((item) => item.completed === item.total).length;
+  const currentExerciseIndex = exerciseIds.indexOf(exercise.id);
+  const segments = exerciseIds.map((id) => ({ id,
+    name: state.exercises.find((item) => item.id === id)?.name ?? '種目',
+  }));
+  const exercisePosition = currentExerciseIndex + 1;
   const weightKey = `${side}WeightKg` as const;
   const repsKey = `${side}Reps` as const;
   const skipRest = () =>
@@ -159,66 +154,42 @@ export default function WorkoutScreen() {
         ? { ...s.workout, restStartedAt: undefined, restEndsAt: undefined }
         : undefined,
     }));
-  const advance = (skip = false) => {
-    if (validBrowsing) {
-      const next = cards[position + 1];
-      if (next && state.sets.find((row) => row.id === next.setId)?.exerciseId === exercise.id) {
-        const nextSet = state.sets.find((row) => row.id === next.setId);
-        if (nextSet?.skippedInputs?.[next.side ?? 'normal']) {
-          update((s) => reopenSkippedCard(s, next));
-          setBrowsing(undefined);
-        } else setBrowsing(next.setId === current?.setId && next.side === current?.side ? undefined : next);
-      }
-      return;
-    }
+  const position = cards.findIndex((c) => c.setId === card.setId && c.side === card.side);
+  const canGoBack = position > 0;
+  const previousExerciseCard = cards.slice(0, position).reverse().find((item) =>
+    rows.find((row) => row.id === item.setId)?.exerciseId !== exercise.id);
+  const nextCard = cards[position + 1];
+  const rest = !!progress?.restEndsAt;
+  const advance = () => {
     if (locked.current) return;
     locked.current = true;
-    const latest = getState();
-    const changed = advanceWorkout(latest, skip);
-    if (changed === latest) { locked.current = false; return; }
-
-    // A wheel edit may still be waiting for disk. Advance from the state after
-    // those queued edits, rather than replacing it with this earlier snapshot.
-    update((s) => advanceWorkout(s, skip));
-    if (!changed.workout)
-      router.replace({
-        pathname: '/complete',
-        params: { sessionId: session.id },
-      });
+    tour.notify('advanced');
+    const changed = advanceWorkout(getState());
+    update((s) => advanceWorkout(s));
+    if (!changed.workout) router.replace({ pathname: '/complete', params: { sessionId: session.id } });
   };
-  const position = cards.findIndex(
-    (c) => c.setId === card.setId && c.side === card.side,
-  );
-  const canGoBack = position > 0 && rows.find((row) => row.id === cards[position - 1].setId)?.exerciseId === exercise.id;
-  const nextCard = nextExerciseCard(state, card);
-  const rest = !validBrowsing && !!progress?.restEndsAt;
-  const skipExercise = () => {
-    if (locked.current) return;
-    locked.current = true;
-    const changed = skipToNextExercise(getState(), card);
-    update(s => skipToNextExercise(s, card));
-    setBrowsing(undefined);
+  const goBack = () => {
+    const previous = cards[position - 1];
+    if (previous) update((s) => moveToCard(s, previous));
+  };
+  const goToPreviousExercise = () => update(moveToPreviousExercise);
+  const goToNextExercise = () => {
+    tour.notify('exercise-moved');
+    update(moveToNextExercise);
+  };
+  const removeSet = (setId: number) => {
+    const changed = deleteWorkoutSet(getState(), setId);
+    update((s) => deleteWorkoutSet(s, setId));
     if (!changed.workout) router.replace({ pathname: '/complete', params: { sessionId: session.id } });
   };
   const change = (setId: number, key: typeof weightKey | typeof repsKey, value: number) => {
+    if (value !== set[key]) tour.notify(key === weightKey ? 'weight-changed' : 'reps-changed');
     update((s) => updateSet(s, setId, { [key]: value }));
-  };
-  const goBack = () => {
-    const previousCard = cards[position - 1];
-    if (!previousCard) return;
-    const previousSet = state.sets.find((row) => row.id === previousCard.setId);
-    if (previousSet?.exerciseId !== exercise.id) return;
-    if (previousSet?.skippedInputs?.[previousCard.side ?? 'normal']) {
-      update((s) => reopenSkippedCard(s, previousCard));
-      setBrowsing(undefined);
-    } else setBrowsing(previousCard);
   };
   const renderCard = (displayCard: WorkoutCard) => {
     const behind = displayCard.setId !== card.setId || displayCard.side !== card.side;
     const displaySet = state.sets.find(row => row.id === displayCard.setId)!;
-    const set = behind ? displaySet : storedSet && draft ? { ...storedSet,
-      [`${card.side ?? 'normal'}WeightKg`]: draft.weightKg, [`${card.side ?? 'normal'}Reps`]: draft.reps,
-    } : displaySet;
+    const set = displaySet;
     const exercise = state.exercises.find(item => item.id === set.exerciseId)!;
     const cardSide = displayCard.side;
     const side = cardSide ?? 'normal';
@@ -227,15 +198,21 @@ export default function WorkoutScreen() {
     const exerciseSets = rows.filter(row => row.exerciseId === exercise.id);
     const step = state.exerciseWeightSteps[exercise.id] ?? state.weightStepKg;
     const previous = previousSet(state, exercise.id, session.id, set.setOrder, side, setsBySession);
+    const previousSets = previousSessionSets(state, exercise.id, session.id, side, setsBySession);
     return (
           <SwipeCard
-            key={exercise.id}
+            tourTarget={behind ? undefined : exerciseTarget}
+            key={`${displayCard.setId}-${displayCard.side ?? 'normal'}`}
+            resetToken={`${displayCard.setId}-${displayCard.side ?? 'normal'}`}
             behind={behind}
             progress={swipeProgress}
             disabled={behind || orderEditor || history}
             isGestureBlocked={() => controlTouch.current}
-            onAdvance={skipExercise}
-            onSkip={skipExercise}
+            onAdvance={() => advance()}
+            onSwipeLeft={() => advance()}
+            onSwipeRight={canGoBack ? goBack : null}
+            onSwipeUp={nextExerciseCard(state, displayCard) ? goToNextExercise : null}
+            onSwipeDown={previousExerciseCard ? goToPreviousExercise : null}
           >
             <View style={{ flex: 1, borderRadius: 20, backgroundColor: colors.surface,
               shadowColor: '#193039', shadowOffset: { width: 0, height: 6 },
@@ -249,20 +226,12 @@ export default function WorkoutScreen() {
                 marginBottom: 0,
               }}
             >
-              {/* Underlay: foreground controls win hit testing; empty edge space navigates. */}
-              <View pointerEvents="box-none" testID="workout-card-edges" style={{ position: 'absolute', inset: 0 }}>
-                <Pressable accessibilityRole="button" accessibilityLabel="前のセット" disabled={behind || orderEditor || history || !canGoBack}
-                  accessibilityState={{ disabled: behind || orderEditor || history || !canGoBack }} onPress={() => { feedback(); goBack(); }}
-                  style={{ position: 'absolute', top: 0, bottom: 0, left: 0, width: '20%', justifyContent: 'center', paddingLeft: 12,
-                  }}>
-                </Pressable>
-                <Pressable accessibilityRole="button" accessibilityLabel="セット完了して次へ" disabled={behind || orderEditor || history}
-                  onPress={() => { feedback(); return advance(); }}
-                  style={{ position: 'absolute', top: 0, bottom: 0, right: 0, width: '20%', justifyContent: 'center', alignItems: 'flex-end', paddingRight: 12,
-                  }}>
-                </Pressable>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <View pointerEvents="box-none" {...controlTouchHandlers} style={{ flex: 1 }}><SetProgressBar sets={exerciseSets} currentSet={set} side={cardSide}
+                  onSelect={(setId) => { update((s) => moveToCard(s, { setId, side: cardSide })); }} disabled={behind} /></View>
+                <Pressable accessibilityRole="button" accessibilityLabel="セットを削除" onPress={() => { feedback(); removeSet(set.id); }}
+                  style={{ padding: 12 }}><AppIcon name="trash" color={colors.muted} size={22} /></Pressable>
               </View>
-              <View pointerEvents="none"><SetProgressBar sets={exerciseSets} currentSet={set} side={cardSide} /></View>
               <View pointerEvents="box-none" style={{ flex: 1.25, minHeight: 80 }}>
                 <View pointerEvents="none" style={{ flex: 1, padding: 8 }}>
                   <WorkoutPictogram name={exercise.name} />
@@ -283,9 +252,13 @@ export default function WorkoutScreen() {
                     {cardSide === 'left' ? '左' : '右'}
                   </Text>
                 )}
-                {previous && (
-                  <Text pointerEvents="none" style={[styles.small, { textAlign: 'center', color: colors.muted }]}>
-                    前回 {previous[weightKey] ? `${formatWeight(previous[weightKey], state.weightUnit)} × ` : ''}{previous[repsKey] ?? '—'}回
+                {previousSets.length > 0 && (
+                  <Text pointerEvents="none" style={[styles.small, { textAlign: 'center', color: colors.muted, flexShrink: 1 }]}>
+                    前回{' '}{previousSets.map((row, index) => (
+                      <Text key={row.id} style={row.id === previous?.id ? { color: colors.primary, fontWeight: 'bold' } : undefined}>
+                        {index > 0 ? ' / ' : ''}{row[weightKey] ? `${formatWeight(row[weightKey], state.weightUnit)} × ` : ''}{row[repsKey] ?? '—'}回
+                      </Text>
+                    ))}
                   </Text>
                 )}
                 <View pointerEvents="box-none" {...controlTouchHandlers}
@@ -298,15 +271,8 @@ export default function WorkoutScreen() {
                     paddingBottom: 8,
                   }}
                 >
-                  {behind ? <View testID="workout-next-values" style={{ flex: 1, paddingTop: 8, paddingBottom: 6 }}>
-                    <Text style={[styles.small, { textAlign: 'center' }]}>重量 × 回数</Text>
-                    <View style={{ height: wheelHeight, alignItems: 'center', justifyContent: 'center' }}>
-                      <Text style={[styles.title, { textAlign: 'center' }]}>
-                        {formatWeight(set[weightKey], state.weightUnit)} × {set[repsKey] ?? '—'}回
-                      </Text>
-                    </View>
-                  </View> : <>
                   <WeightWheel
+                    tourTarget={weightTarget}
                     key={`${side}-weight`}
                     resetToken={set.id}
                     label="重量"
@@ -319,6 +285,7 @@ export default function WorkoutScreen() {
                   />
                   <View accessible={false} style={{ width: 1, alignSelf: 'stretch', marginVertical: 26, backgroundColor: colors.line }} />
                   <WorkoutNumberWheel
+                    tourTarget={repsTarget}
                     key={`${side}-reps`}
                     resetToken={set.id}
                     label="回数"
@@ -329,17 +296,15 @@ export default function WorkoutScreen() {
                     disabled={orderEditor || history}
                     onChange={(value) => change(set.id, repsKey, value)}
                   />
-                  </>}
                 </View>
               </View>
               <View pointerEvents="box-none" {...controlTouchHandlers}>
               <SwipeActions
+                tourTarget={behind ? undefined : advanceTarget}
                 canGoBack={canGoBack}
                 onBack={goBack}
                 onEdit={() => setOrderEditor(true)}
-                reviewing={!!validBrowsing}
                 onAdvance={() => advance()}
-                onSkip={() => advance(true)}
               />
               </View>
             </Card>
@@ -364,17 +329,17 @@ export default function WorkoutScreen() {
             onValueChange={(enabled) => { feedback(); return update((s) => ({
               ...s,
               restTimerDisabled: !enabled,
-              workout: !enabled && !validBrowsing && s.workout
+              workout: !enabled && s.workout
                 ? { ...s.workout, restStartedAt: undefined, restEndsAt: undefined }
                 : s.workout,
             })); }}
           />
         </View>
       </View>
-      <Text accessibilityLabel={`全${segments.length}種目中${completedExercises}種目完了`} style={[styles.title, { textAlign: 'center', color: colors.primary, marginBottom: 10 }]}>
-        {completedExercises} / {segments.length}
+      <Text accessibilityLabel={`全${segments.length}種目中${exercisePosition}種目目`} style={[styles.title, { textAlign: 'center', color: colors.primary, marginBottom: 10 }]}>
+        {exercisePosition} / {segments.length}
       </Text>
-      <WorkoutProgressBar segments={segments} currentId={set?.exerciseId} />
+      <WorkoutProgressBar segments={segments} currentId={set?.exerciseId} onSelect={(exerciseId) => update((s) => moveToExercise(s, exerciseId))} />
       <View style={{ flex: 1, alignSelf: 'stretch', marginHorizontal: -8, paddingBottom: 16 }}>
         {rest ? (
           <RestCard
@@ -386,14 +351,15 @@ export default function WorkoutScreen() {
             onSkip={skipRest}
           />
         ) : (
-          [nextCard, card].filter((item): item is WorkoutCard => !!item).map(item => renderCard(item))
+          [nextCard, card].filter((item): item is WorkoutCard => !!item).reverse().map(item => renderCard(item))
         )}
 
       </View>
       {orderEditor && (
         <WorkoutOrderEditor
           sessionId={session.id}
-          onClose={() => { setOrderEditor(false); setBrowsing(undefined); }}
+          onClose={() => { setOrderEditor(false); }}
+          onJumpToSet={(target) => { update((s) => moveToCard(s, target)); setOrderEditor(false); }}
         />
       )}
       {history && (
@@ -448,10 +414,12 @@ export default function WorkoutScreen() {
   );
 }
 
-function SetProgressBar({ sets, currentSet, side }: {
+function SetProgressBar({ sets, currentSet, side, onSelect, disabled }: {
   sets: WorkoutSet[];
   currentSet: WorkoutSet;
   side: WorkoutCard['side'];
+  onSelect: (setId: number) => void;
+  disabled: boolean;
 }) {
   const { colors, styles } = useTheme();
   const ordered = [...sets].sort((a, b) => a.setOrder - b.setOrder);
@@ -460,16 +428,19 @@ function SetProgressBar({ sets, currentSet, side }: {
     <Text style={[styles.small, { textAlign: 'center', color: colors.primary, marginBottom: 8 }]}>
       セット {currentIndex + 1} / {ordered.length}
     </Text>
-    <View style={{ flexDirection: 'row', gap: 4 }}>
+    <View style={{ flexDirection: 'row', gap: 4, paddingVertical: 12, marginVertical: -12 }}>
       {ordered.map((row, index) => {
         const current = row.id === currentSet.id;
-        const completed = !row.skippedInputs?.[side ?? 'normal'] && (side ? row[`${side}Completed`] : row.isCompleted);
-        return <View key={row.id}
+        const completed = index < currentIndex;
+        const style = { flex: 1, height: 8, borderRadius: 4,
+          backgroundColor: current ? colors.primary : completed ? colors.soft : colors.line,
+          borderWidth: current ? 2 : 0, borderColor: colors.primary };
+        return completed && !disabled ? <Pressable key={row.id} accessibilityRole="button"
+          accessibilityLabel={`セット${index + 1}に戻る`} hitSlop={{ top: 12, bottom: 12 }}
+          onPress={() => { feedback(); onSelect(row.id); }} style={style} /> : <View key={row.id}
           accessible
-          accessibilityLabel={`セット${index + 1}：${current ? '表示中、' : ''}${completed ? '完了' : '未完了'}`}
-          style={{ flex: 1, height: 8, borderRadius: 4,
-            backgroundColor: current ? colors.primary : completed ? colors.soft : colors.line,
-            borderWidth: current ? 2 : 0, borderColor: colors.primary }} />;
+          accessibilityLabel={`セット${index + 1}：${current ? '表示中、' : ''}${completed ? '通過済み' : '未到達'}`}
+          style={style} />;
       })}
     </View>
   </View>;

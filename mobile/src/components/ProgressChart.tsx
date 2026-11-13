@@ -28,7 +28,7 @@ export function ProgressChart({
   const measured = layoutReady && width > 0 && valueHeight > 0 && (points.length !== 1 || hintHeight > 0);
   const adaptive = availableHeight !== undefined;
   const height = adaptive
-    ? Math.max(100, Math.min(220, availableHeight - valueHeight - (points.length === 1 ? hintHeight : 0) - 8))
+    ? Math.max(100, Math.min(320, availableHeight - valueHeight - (points.length === 1 ? hintHeight : 0) - 8))
     : compact ? 140 : 240;
   // Use actual SVG dimensions for the home card, keeping labels at 11px.
   const plotWidth = adaptive ? width : 360;

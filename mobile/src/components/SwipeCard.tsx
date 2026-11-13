@@ -1,3 +1,4 @@
+import type { useTourTarget } from '../tour';
 import React, {
   PropsWithChildren,
   createContext,
@@ -12,7 +13,6 @@ import {
   Animated,
   PanResponder,
   Pressable,
-  Text,
   View,
   useWindowDimensions,
 } from 'react-native';
@@ -28,22 +28,30 @@ const SwipeFeedback = createContext<{
 export function SwipeCard({
   children,
   onAdvance,
-  onSkip,
+  onSwipeRight,
+  onSwipeLeft,
+  onSwipeUp,
+  onSwipeDown,
   behind = false,
   progress,
   disabled = false,
-  rest = false,
   isGestureBlocked,
+  tourTarget,
+  resetToken,
 }: PropsWithChildren<{
   onAdvance: () => void;
-  onSkip: () => void;
+  onSwipeRight?: (() => void) | null;
+  onSwipeLeft?: (() => void) | null;
+  onSwipeUp?: (() => void) | null;
+  onSwipeDown?: (() => void) | null;
   behind?: boolean;
   progress?: Animated.Value;
   disabled?: boolean;
   rest?: boolean;
   isGestureBlocked?: () => boolean;
+  tourTarget?: ReturnType<typeof useTourTarget>;
+  resetToken?: string;
 }>) {
-  const { colors } = useTheme();
   const { width, height } = useWindowDimensions();
   const [position] = useState(() => new Animated.ValueXY());
   const [localProgress] = useState(() => new Animated.Value(0));
@@ -51,10 +59,10 @@ export function SwipeCard({
   const revealProgress = progress ?? localProgress;
   const reduced = useReducedMotion();
   const busy = useRef(false);
-  const actions = useRef({ onAdvance, onSkip, disabled, isGestureBlocked });
+  const actions = useRef({ onAdvance, onSwipeRight, onSwipeLeft, onSwipeUp, onSwipeDown, disabled, isGestureBlocked });
   useEffect(() => {
-    actions.current = { onAdvance, onSkip, disabled, isGestureBlocked };
-  }, [onAdvance, onSkip, disabled, isGestureBlocked]);
+    actions.current = { onAdvance, onSwipeRight, onSwipeLeft, onSwipeUp, onSwipeDown, disabled, isGestureBlocked };
+  }, [onAdvance, onSwipeRight, onSwipeLeft, onSwipeUp, onSwipeDown, disabled, isGestureBlocked]);
   useEffect(() => () => {
     position.stopAnimation();
     actionProgress.stopAnimation();
@@ -67,11 +75,10 @@ export function SwipeCard({
       position.setValue({ x: 0, y: 0 });
       busy.current = false;
     }
-  }, [behind, actionProgress, revealProgress, position]);
+  }, [behind, resetToken, actionProgress, revealProgress, position]);
   const runAction = (action: () => void) => {
     if (!busy.current && !actions.current.disabled) action();
   };
-  const [hint, setHint] = useState<string>();
   const pan = useMemo(
     () =>
       // PanResponder only stores event callbacks; no ref is read during render.
@@ -88,17 +95,13 @@ export function SwipeCard({
           const distance = Math.max(Math.abs(g.dx), Math.abs(g.dy));
           actionProgress.setValue(Math.max(-1, Math.min(1, distance / (Math.min(width, height) * 0.08))));
           revealProgress.setValue(Math.min(1, distance / width));
-          setHint(rest ? '休憩をスキップ' : undefined);
         },
         onPanResponderRelease: (_, g) => {
           if (busy.current || actions.current.disabled) return;
           const horizontal = Math.abs(g.dx) >= Math.abs(g.dy);
           const velocity = horizontal ? g.vx : g.vy;
           const delta = horizontal ? g.dx : g.dy;
-          if (
-            Math.abs(delta) < Math.min(width, height) * 0.08 &&
-            Math.abs(velocity) < 0.8
-          ) {
+          const reset = () => {
             Animated.timing(revealProgress, { toValue: 0, duration: reduced ? 0 : 120, useNativeDriver: false }).start();
             Animated.timing(actionProgress, { toValue: 0, duration: reduced ? 0 : 120, useNativeDriver: false }).start();
             Animated.timing(position, {
@@ -106,12 +109,24 @@ export function SwipeCard({
               toValue: { x: 0, y: 0 },
               useNativeDriver: true,
             }).start();
-            setHint(undefined);
+          };
+          if (
+            Math.abs(delta) < Math.min(width, height) * 0.08 &&
+            Math.abs(velocity) < 0.8
+          ) {
+            reset();
+            return;
+          }
+          const direction =
+            Math.abs(delta) < 10 ? Math.sign(velocity) : Math.sign(delta);
+          const action = horizontal
+            ? direction > 0 ? actions.current.onSwipeRight : actions.current.onSwipeLeft
+            : direction > 0 ? actions.current.onSwipeDown : actions.current.onSwipeUp;
+          if (action === null) {
+            reset();
             return;
           }
           busy.current = true;
-          const direction =
-            Math.abs(delta) < 10 ? Math.sign(velocity) : Math.sign(delta);
           actionProgress.setValue(1);
           Animated.timing(revealProgress, { toValue: 1, duration: reduced ? 0 : 170, useNativeDriver: false }).start();
           feedback();
@@ -124,7 +139,7 @@ export function SwipeCard({
             useNativeDriver: true,
           }).start(({ finished }) => {
             if (finished) {
-              actions.current.onAdvance();
+              (action ?? actions.current.onAdvance)();
               // Leave the outgoing card offscreen until the mounted back card is promoted.
               return;
             }
@@ -133,7 +148,6 @@ export function SwipeCard({
             revealProgress.stopAnimation();
             revealProgress.setValue(0);
             busy.current = false;
-            setHint(undefined);
           });
         },
         onPanResponderTerminate: () => {
@@ -143,13 +157,13 @@ export function SwipeCard({
           revealProgress.setValue(0);
           position.setValue({ x: 0, y: 0 });
           busy.current = false;
-          setHint(undefined);
         },
       }),
-    [actionProgress, revealProgress, height, position, reduced, rest, width],
+    [actionProgress, revealProgress, height, position, reduced, width],
   );
   return (
     <Animated.View
+      {...tourTarget}
       {...(behind ? {} : pan.panHandlers)}
       pointerEvents={behind ? "none" : "auto"}
       accessibilityElementsHidden={behind}
@@ -170,36 +184,17 @@ export function SwipeCard({
       }}
     >
       <SwipeFeedback.Provider value={{ progress: actionProgress, runAction }}>{children}</SwipeFeedback.Provider>
-      {hint && (
-        <Text
-          pointerEvents="none"
-          style={{
-            position: 'absolute',
-            top: 90,
-            alignSelf: 'center',
-            color: hint.startsWith('×') ? colors.orange : colors.primary,
-            backgroundColor: colors.surface,
-            borderRadius: 20,
-            padding: 12,
-            fontSize: 24,
-            fontWeight: '800',
-          }}
-        >
-          {hint}
-        </Text>
-      )}
     </Animated.View>
   );
 }
 
 
-export function SwipeActions({ reviewing = false, onAdvance, onSkip, onBack, onEdit, canGoBack }: {
+export function SwipeActions({ tourTarget, onAdvance, onBack, onEdit, canGoBack }: {
+  tourTarget?: ReturnType<typeof useTourTarget>;
   onBack: () => void;
   onEdit: () => void;
   canGoBack: boolean;
-  reviewing?: boolean;
   onAdvance: () => void;
-  onSkip: () => void;
 }) {
   const swipe = useContext(SwipeFeedback);
   const { colors, styles } = useTheme();
@@ -209,17 +204,16 @@ export function SwipeActions({ reviewing = false, onAdvance, onSkip, onBack, onE
   const inactive = new Animated.Value(0);
   return <View pointerEvents="box-none" style={{ flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 8, paddingBottom: 8, justifyContent: 'space-between' }}>
-    {(['back', 'skip', 'complete', 'edit'] as const).map((action) => {
+    {(['back', 'complete', 'edit'] as const).map((action) => {
       const complete = action === 'complete';
-      const skip = action === 'skip';
       const disabled = action === 'back' && !canGoBack;
-      const color = skip ? colors.orange : colors.primary;
+      const color = colors.primary;
       const active = inactive;
-      const label = complete ? reviewing ? '次のカードへ' : 'セット完了' : skip ? 'スキップ' : action === 'back' ? '戻る' : '編集';
+      const label = complete ? '次へ' : action === 'back' ? '戻る' : '編集';
       const accessibilityLabel = action === 'back' ? '前のカードへ' : action === 'edit' ? '種目を編集' : label;
-      const icon = complete ? 'check' : skip ? 'skip' : action === 'back' ? 'undo' : 'edit';
-      const onPress = complete ? onAdvance : skip ? onSkip : action === 'back' ? onBack : onEdit;
-      return <Pressable key={action} accessibilityRole="button" accessibilityLabel={accessibilityLabel}
+      const icon = complete ? 'next' : action === 'back' ? 'undo' : 'edit';
+      const onPress = complete ? onAdvance : action === 'back' ? onBack : onEdit;
+      return <Pressable {...(complete ? tourTarget : {})} key={action} accessibilityRole="button" accessibilityLabel={accessibilityLabel}
         disabled={disabled} accessibilityState={{ disabled }}
         onPress={() => runAction(() => { feedback(); onPress(); })}
         style={({ pressed }) => ({ flex: 1, minHeight: 48, alignItems: 'center', justifyContent: 'center', gap: 4, opacity: disabled ? 0.35 : pressed ? 0.6 : 1 })}>

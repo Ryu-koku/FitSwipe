@@ -46,15 +46,14 @@ export function GrowthRanking() {
           <Text accessible={false} style={{ color: colors.muted, fontSize: 22 }}>›</Text>
         </Pressable>
       ))}
-      <Text style={[styles.small, { marginTop: 12 }]}>直近90日の推定1RM変化率 · 記録2日以上の種目が対象</Text>
+      <Text style={[styles.small, { marginTop: 12 }]}>直近90日の1RM変化率 · 記録2日以上の種目が対象</Text>
       {__DEV__ && <Pressable accessibilityRole="button" onPress={() => { feedback(); return setPreview((value) => !value); }} style={{ paddingVertical: 10 }}>
         <Text style={[styles.small, { color: colors.primary }]}>{showingMock ? 'モック表示中 · 実データに切り替え' : 'モックで表示を確認'}</Text>
       </Pressable>}
     </Card>
     {detail && <Sheet title={detail.name} onClose={() => setSelected(undefined)} popup>
-      <Text style={styles.small}>推定1RM（{state.weightUnit}） · 直近90日{showingMock ? ' · モック' : ''}</Text>
+      <Text style={styles.small}>1RM（{state.weightUnit}） · 直近90日{showingMock ? ' · モック' : ''}</Text>
       <GrowthLine points={detail.points} />
-      <Text style={[styles.small, { marginBottom: 12 }]}>同日の最大値を表示。実際の最大重量ではなく、重量と回数からの推定値です。</Text>
     </Sheet>}
   </>;
 }

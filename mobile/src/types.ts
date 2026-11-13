@@ -128,6 +128,7 @@ export type AppState = {
   selectedPresetId?: string;
   homeGrowthExerciseId?: number;
   homeProgress?: import('./home-progress').ProgressPreferences;
+  homeDisplay?: import('./home-display').HomeDisplay;
   themeMode: ThemeMode;
   weekStartsMonday: boolean;
   weightUnit: "kg" | "lb";

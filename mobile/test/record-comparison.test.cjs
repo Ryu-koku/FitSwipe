@@ -25,6 +25,28 @@ test('same-repetition comparison ignores other repetitions and does not confuse 
   assert.equal(compareRecords(rows.slice(0, 2), 'reps', 8).difference, undefined);
 });
 
+test('1RM compares each session maximum, preserves a decline and shows the all-time best', () => {
+  const rows = [record(1, 100, 1), record(1, 85, 10, undefined, 11),
+    record(2, 90, 5), record(2, 100, 2, undefined, 21),
+    record(3, 95, 1), record(3, 0, 10, undefined, 31), record(3, 110, 11, undefined, 32)];
+  const result = compareRecords(rows, '1rm');
+  assert.equal(result.previous.setId, 21);
+  assert.equal(result.latest.setId, 3);
+  assert.ok(Math.abs(result.difference - (95 - 100 * (1 + 2 / 30))) < 1e-9);
+  assert.equal(result.best.setId, 11);
+  assert.deepEqual(comparisonChoices(rows, '1rm'), []);
+});
+
+test('1RM requires a weighted 1–10 rep record and two eligible sessions for a difference', () => {
+  const invalid = [record(1, 0, 8), record(2, 80, 11)];
+  assert.equal(compareRecords(invalid, '1rm').latest, undefined);
+  const first = compareRecords([...invalid, record(3, 90, 1)], '1rm');
+  assert.equal(first.latest.sessionId, 3);
+  assert.equal(first.previous, undefined);
+  assert.equal(first.difference, undefined);
+  assert.equal(compareRecords([...invalid, record(3, 90, 1), record(4, 90, 1)], '1rm').difference, 0);
+});
+
 test('empty, first-time, tied and bodyweight records do not fabricate progress or a load PR', () => {
   assert.deepEqual(comparisonChoices([], 'weight'), []);
   assert.equal(compareRecords([], 'weight', 50).latest, undefined);
@@ -65,4 +87,8 @@ test('comparison uses actual session time even when same-day imported IDs are re
   const right = compareRecords(exerciseRecords(index, 1, 2), 'weight', 50);
   assert.equal(right.latest.reps, 20);
   assert.equal(right.difference, undefined);
+  const left1rm = compareRecords(exerciseRecords(index, 1, 1), '1rm');
+  assert.equal(left1rm.previous.sessionId, 100);
+  assert.equal(left1rm.latest.sessionId, 1);
+  assert.equal(compareRecords(exerciseRecords(index, 1, 2), '1rm').difference, undefined);
 });

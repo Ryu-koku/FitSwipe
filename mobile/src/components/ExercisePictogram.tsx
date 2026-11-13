@@ -68,8 +68,8 @@ export const ExercisePictogram = React.memo(function ExercisePictogram({ name, l
   }, [request, enqueue, warmed]);
   const playing = eligible && (warmed || released === request);
   useEffect(() => {
-    if (playing) void image.current?.startAnimating();
-    else void image.current?.stopAnimating();
+    if (playing) void image.current?.startAnimating().catch(() => {});
+    else void image.current?.stopAnimating().catch(() => {});
   }, [playing]);
   // Keep the decoded animation source while paused, including before measurement.
   const candidate = assets && ((warmed || playing) ? assets.animation : assets.poster);
@@ -82,10 +82,10 @@ export const ExercisePictogram = React.memo(function ExercisePictogram({ name, l
     contentFit="contain"
     cachePolicy="memory-disk"
     onLoad={() => {
-      if (playing) void image.current?.startAnimating();
+      if (playing) void image.current?.startAnimating().catch(() => {});
     }}
     onDisplay={() => {
-      if (playing) void image.current?.startAnimating();
+      if (playing) void image.current?.startAnimating().catch(() => {});
       if (source === poster.source) setDisplayedPoster(poster);
       if (playing && visual && source === assets?.animation) {
         displayedAnimations.add(visual.key);

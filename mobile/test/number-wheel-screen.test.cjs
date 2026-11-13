@@ -8,7 +8,7 @@ const centerIndex = list => Math.round(list.contentOffset.y / list.snapToInterva
 
 // Real component callbacks with native scroll/Animated hosts and hook scheduling
 // substituted. Storage acknowledgements can be delayed; gestures never render React.
-function mount(overrides = {}, platform = 'android', reduced = false) {
+function mount(overrides = {}, platform = 'android', reduced = false, fontScale = 1) {
   let props, cursor = 0, pendingEffects = [], rowRenders = 0, stateUpdates = 0;
   const slots = [], changes = [], haptics = [], appListeners = [], animations = [];
   const depsEqual = (a, b) => a && b && a.length === b.length && a.every((v, i) => Object.is(v, b[i]));
@@ -44,7 +44,7 @@ function mount(overrides = {}, platform = 'android', reduced = false) {
   const original = mod.require.bind(mod);
   mod.require = name => {
     if (name === 'react') return react;
-    if (name === 'react-native') return { Text: 'Text', View: 'View', Pressable: 'Pressable', TextInput: 'TextInput', Platform: { OS: platform }, Vibration: { vibrate: duration => haptics.push(`vibrate:${duration}`) }, useWindowDimensions: () => ({ fontScale: 1 }),
+    if (name === 'react-native') return { Text: 'Text', View: 'View', Pressable: 'Pressable', TextInput: 'TextInput', Platform: { OS: platform }, Vibration: { vibrate: duration => haptics.push(`vibrate:${duration}`) }, useWindowDimensions: () => ({ fontScale }),
       Animated: { View: 'AnimatedView', Text: 'AnimatedText', FlatList: 'FlatList', Value, event: (mapping, config) => {
         const handler = event => { mapping[0].nativeEvent.contentOffset.y.value = event.nativeEvent.contentOffset.y; config.listener(event); };
         handler.nativeDriver = config.useNativeDriver; return handler;
@@ -81,7 +81,7 @@ function mount(overrides = {}, platform = 'android', reduced = false) {
   const list = () => render().find(n => n.type === 'FlatList').props;
   let dragList, base;
   const event = y => ({ nativeEvent: { contentOffset: { y } } });
-  const begin = () => { dragList = list(); base = centerIndex(dragList) * 50; dragList.onScrollBeginDrag(); };
+  const begin = () => { dragList = list(); base = centerIndex(dragList) * dragList.snapToInterval; dragList.onScrollBeginDrag(); };
   const move = delta => dragList.onScroll(event(base + delta));
   const release = delta => dragList.onScrollEndDrag(event(base + delta));
   const settle = delta => { dragList.onMomentumScrollBegin(); dragList.onMomentumScrollEnd(event(base + delta)); };
@@ -99,16 +99,34 @@ function mount(overrides = {}, platform = 'android', reduced = false) {
 
 const rows = app => app.render().filter(n => n.props?.testID?.startsWith('workout-number-row-'));
 
+test('wheel is 88px tall at default scale and grows with font scale without changing width', () => {
+  for (const [fontScale, neighbor, center] of [[1, 20, 48], [1.5, 30, 72]]) {
+    const app = mount({}, 'android', false, fontScale);
+    const frame = app.render();
+    const control = frame.find(n => n.props?.testID === 'workout-wheel-weight').props;
+    const highlight = frame.find(n => n.type === 'View' && n.props.pointerEvents === 'none' && n.props.style.top === neighbor).props;
+    assert.equal(control.style.height, neighbor * 2 + center);
+    assert.equal(control.style.width, '100%');
+    assert.equal(highlight.style.height, center);
+    assert.equal(app.list().snapToInterval, (neighbor + center) / 2);
+    for (const row of rows(app)) {
+      assert.equal(row.props.style.height, (neighbor + center) / 2);
+      assert.equal(row.props.children[0].props.style.fontSize, 30);
+    }
+    app.unmount();
+  }
+});
+
 test('native scroll tracks detents without React state updates and commits once after release', () => {
   const app = mount();
   assert.equal(app.list().onScroll.nativeDriver, true);
-  assert.equal(app.list().snapToInterval, 50);
+  assert.equal(app.list().snapToInterval, 34);
   app.begin(); const updates = app.stateUpdates();
-  for (const delta of [8, 24, 26, 48, 88]) app.move(delta);
+  for (const delta of [8, 16, 18, 32, 60]) app.move(delta);
   assert.equal(app.stateUpdates(), updates); assert.deepEqual(app.changes, []);
   assert.deepEqual(app.haptics, ['selection', 'selection']);
-  app.release(88); assert.deepEqual(app.changes, []);
-  app.settle(100); assert.deepEqual(app.changes, [65]);
+  app.release(60); assert.deepEqual(app.changes, []);
+  app.settle(68); assert.deepEqual(app.changes, [65]);
   app.unmount();
 });
 
@@ -136,8 +154,8 @@ test('reduced motion disables momentum and aligns immediately without animation'
 });
 
 test('native momentum can cross more detents but saves only its final snap', () => {
-  const app = mount(); app.begin(); app.move(50); app.release(50);
-  app.move(200); app.settle(200); assert.deepEqual(app.changes, [70]); app.unmount();
+  const app = mount(); app.begin(); app.move(34); app.release(34);
+  app.move(136); app.settle(136); assert.deepEqual(app.changes, [70]); app.unmount();
 });
 
 test('a release without momentum commits when native momentum does not start', t => {
@@ -212,7 +230,7 @@ test('set changes reuse the wheel and synchronously replace values and highlight
     assert.equal(list.initialNumToRender, 21);
     assert.equal(list.maxToRenderPerBatch, 10);
     assert.equal(list.windowSize, 5);
-    assert.equal(offset.value, centerIndex(list) * 50);
+    assert.equal(offset.value, centerIndex(list) * list.snapToInterval);
     for (const row of frame.filter(n => n.props?.testID?.startsWith('workout-number-row-'))) {
       assert.equal(row.props.style.transform[0].scale.value, offset);
       const text = row.props.children[0].props;
@@ -278,7 +296,7 @@ test('distant centers remount the list with an initial window containing the sel
     assert.ok(first <= Math.max(0, centerIndex(next.props) - 1));
     assert.ok(last >= Math.min(next.props.data.length - 1, centerIndex(next.props) + 1));
     assert.equal(next.props.data[centerIndex(next.props)].value, value ?? 0);
-    assert.equal(app.animations.at(-1).offset, centerIndex(next.props) * 50);
+    assert.equal(app.animations.at(-1).offset, centerIndex(next.props) * next.props.snapToInterval);
     previous = next;
   }
   app.unmount();

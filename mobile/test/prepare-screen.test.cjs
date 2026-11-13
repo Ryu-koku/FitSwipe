@@ -14,6 +14,7 @@ function prepareScreen(colors = { primary: 'primary' }) {
   mod.filename = filename; mod.paths = Module._nodeModulePaths(path.dirname(filename));
   const original = mod.require.bind(mod);
   mod.require = name => {
+    if (name === '../tour') return { TourProvider: 'TourProvider', useTour: () => ({ active: false, step: null, start: () => {}, notify: () => {} }), useTourTarget: () => ({}) };
     if (name === 'expo-router') return { router: { replace: route => routes.push(route) } };
     if (name === 'react') return { useEffect: effect => effect(), useMemo: factory => factory(), useCallback: callback => callback, useState: initial => {
       const i = cursor++;

@@ -68,6 +68,29 @@ test('default menus and training values match Kotlin defaults', () => {
   );
 });
 
+test('set-only presets use previous completed values and defaults on workout start', () => {
+  let state = seedState();
+  const normalId = state.exercises[0].id;
+  const bilateral = { id: 900, name: '新しい種目', mode: 'BILATERAL', sortOrder: 20, archived: false };
+  state.exercises.push(bilateral);
+  state.presets = [{ id: 'new', name: '新規', exercises: [
+    { exerciseId: normalId, sets: 2 }, { exerciseId: bilateral.id, sets: 2 },
+  ] }];
+  state.sessions.push({ id: 800, startedAt: '2020-01-01T00:00:00.000Z', status: 'COMPLETED' });
+  state.sets.push(
+    { id: 801, sessionId: 800, exerciseId: normalId, setOrder: 1, normalWeightKg: 42.5, normalReps: 8, isCompleted: true },
+    { id: 802, sessionId: 800, exerciseId: bilateral.id, setOrder: 1, leftWeightKg: 12, leftReps: 6,
+      rightWeightKg: 14, rightReps: 7, leftCompleted: true, rightCompleted: true, isCompleted: true },
+  );
+  state = startWorkout(state, 'new');
+  const normal = state.sets.filter((s) => s.sessionId === state.workout.sessionId && s.exerciseId === normalId);
+  assert.deepEqual(normal.map((s) => [s.normalWeightKg, s.normalReps]), [[42.5, 8], [42.5, 8]]);
+  const sides = state.sets.filter((s) => s.sessionId === state.workout.sessionId && s.exerciseId === bilateral.id);
+  assert.deepEqual(sides.map((s) => [s.leftWeightKg, s.leftReps, s.rightWeightKg, s.rightReps]), [[12, 6, 14, 7], [12, 6, 14, 7]]);
+  const fresh = startWorkout({ ...seedState(), presets: [{ id: 'fresh', name: '初回', exercises: [{ exerciseId: normalId, sets: 1 }] }] });
+  assert.deepEqual([fresh.sets[0].normalWeightKg, fresh.sets[0].normalReps], [55, 10]);
+});
+
 test('starting twice resumes, and selecting another preset never adds sets', () => {
   const state = workout();
   assert.equal(startWorkout(state, 'home'), state);
@@ -92,29 +115,9 @@ test('old RN sessions resume without replacing IDs or values', () => {
   );
 });
 
-test('ending a workout preserves unperformed sets as incomplete', () => {
-  const state = workout();
-  const ended = finishWorkout(state, state.sessions[0].id);
-  assert.ok(ended.sets.every((s) => !s.isCompleted));
-  assert.equal(achievementSummary(ended).completedSets, 0);
-  assert.equal(achievementSummary(ended).trainingDays, 0);
-});
 
-test('normal cards complete, rest between sets, and finish only after a swipe', () => {
-  const state = workout();
-  const next = advanceWorkout(state);
-  assert.equal(next.sets[0].isCompleted, true);
-  assert.equal(next.sets[1].isCompleted, false);
-  assert.equal(next.workout.restEndsAt - next.workout.restStartedAt, 90000);
-  const held = advanceWorkout(next);
-  assert.equal(held.sessions[0].status, 'IN_PROGRESS');
-  assert.deepEqual(currentCard(held, held.workout.sessionId), currentCard(next, next.workout.sessionId));
-  const ended = skipToNextExercise(held);
-  assert.equal(ended.sessions[0].status, 'COMPLETED');
-  assert.equal(ended.workout, undefined);
-  assert.equal(achievementSummary(ended).completedSets, 2);
-  assert.equal(achievementSummary(ended).liftedWeightKg, 400);
-});
+
+
 
 test('bilateral cards default to right then left; rest-on-side-switch is optional', () => {
   const state = workout({ bilateral: true });
@@ -151,19 +154,7 @@ test('left-first and per-exercise rest settings survive serialization', () => {
   );
 });
 
-test('skip clears only current values; undo restores exact card and cancels rest', () => {
-  const state = workout({ bilateral: true });
-  const skipped = advanceWorkout(state, true);
-  assert.equal(skipped.sets[0].rightWeightKg, undefined);
-  assert.equal(skipped.sets[0].leftWeightKg, 20);
-  const restored = undoWorkout(skipped);
-  assert.deepEqual(restored.sets, state.sets);
-  assert.deepEqual(
-    currentCard(restored, restored.sessions[0].id),
-    currentCard(state, state.sessions[0].id),
-  );
-  assert.equal(restored.workout.restEndsAt, undefined);
-});
+
 
 test('weight changes carry to later incomplete sets, repetitions do not', () => {
   const state = workout({ sets: 3 });
@@ -290,19 +281,7 @@ test('BIG3 supports normalized English names and requires all three lifts', () =
   assert.equal(achievementSummary(state).big3, undefined);
 });
 
-test('sharing includes only completed sides and uses a stable installation-scoped ID', () => {
-  let state = advanceWorkout(workout({ bilateral: true }));
-  state = finishWorkout(state, state.sessions[0].id);
-  const snapshot = workoutSnapshot(state, state.sessions[0].id);
-  assert.equal(snapshot.exercises[0].sets.length, 1);
-  assert.equal(snapshot.exercises[0].sets[0].side, '右');
-  assert.equal(
-    snapshot.clientId,
-    workoutSnapshot(state, state.sessions[0].id).clientId,
-  );
-  assert.ok(snapshot.clientId.startsWith(state.installationId));
-  assert.throws(() => workoutSnapshot(workout(), 100), /完了/);
-});
+
 
 test('numeric controls accept decimal comma but reject negatives, infinity, and fractional reps', () => {
   assert.equal(numeric('2,5'), 2.5);
@@ -374,111 +353,19 @@ test('weekly streak keeps last week when this week has no record, for either wee
 const { reorderWorkout, reopenSkippedCard } = require('../src/workout.ts');
 const { restRemaining } = require('../src/rest-progress.ts');
 
-test('reordering replaces a saved current card and preserves inputs, completed sets and rest', () => {
-  let state = advanceWorkout(startWorkout(seedState()));
-  const before = state;
-  const order = [...state.workout.exerciseOrder].reverse();
-  state = reorderWorkout(state, order);
-  const card = currentCard(state, state.workout.sessionId);
-  assert.equal(state.sets.find((set) => set.id === card.setId).exerciseId, order[0]);
-  assert.deepEqual(state.sets, before.sets);
-  assert.equal(state.workout.restStartedAt, before.workout.restStartedAt);
-  assert.equal(state.workout.restEndsAt, before.workout.restEndsAt);
-});
 
-test('skip survives restart, is excluded from records, and can be revisited and completed', () => {
-  let state = workout();
-  const card = currentCard(state, state.workout.sessionId);
-  state = updateSet(state, card.setId, { normalWeightKg: 27.5, normalReps: 7 });
-  state = JSON.parse(JSON.stringify(advanceWorkout(state, true)));
-  assert.deepEqual(state.sets[0].skippedInputs.normal, { weightKg: 27.5, reps: 7 });
-  assert.equal(state.sets[0].isCompleted, false);
-  assert.equal(achievementSummary(state).completedSets, 0);
-  state = reopenSkippedCard(state, card);
-  assert.deepEqual(currentCard(state, state.workout.sessionId), card);
-  assert.equal(state.sets[0].normalWeightKg, 27.5);
-  assert.equal(state.sets[0].normalReps, 7);
-  state = advanceWorkout(state);
-  assert.equal(state.sets[0].isCompleted, true);
-  assert.equal(state.sets[0].skippedInputs.normal, undefined);
-  assert.notEqual(currentCard(state, state.workout.sessionId).setId, card.setId);
-});
 
-test('editing skipped inputs survives restart and reopening without restoring stale values', () => {
-  for (const bilateral of [false, true]) {
-    let state = workout({ bilateral });
-    const card = currentCard(state, state.workout.sessionId);
-    const side = card.side ?? 'normal';
-    state = advanceWorkout(state, true);
-    state = updateSet(state, card.setId, { [`${side}WeightKg`]: 32.5, [`${side}Reps`]: 6 });
-    state = reopenSkippedCard(JSON.parse(JSON.stringify(state)), card);
-    const row = state.sets.find(item => item.id === card.setId);
-    assert.equal(row[`${side}WeightKg`], 32.5);
-    assert.equal(row[`${side}Reps`], 6);
-    assert.equal(row.isCompleted, false);
-  }
-});
 
-test('last skipped card can reopen a finished workout after serialization', () => {
-  let state = workout({ sets: 1 });
-  const card = currentCard(state, state.workout.sessionId);
-  state = JSON.parse(JSON.stringify(skipToNextExercise(state)));
-  assert.equal(state.workout, undefined);
-  assert.equal(achievementSummary(state).completedSets, 0);
-  assert.equal(state.sets[0].finalSkippedSide, 'normal');
-  state = reopenSkippedCard(state, { setId: state.sets[0].id, side: state.sets[0].finalSkippedSide === 'normal' ? undefined : state.sets[0].finalSkippedSide });
-  assert.equal(state.sessions[0].status, 'IN_PROGRESS');
-  assert.equal(state.sessions[0].endedAt, undefined);
-  assert.equal(state.sets[0].normalReps, 10);
-  state = skipToNextExercise(advanceWorkout(state));
-  assert.equal(achievementSummary(state).completedSets, 1);
-  assert.equal(state.sets[0].finalSkippedSide, undefined);
-});
 
-test('bilateral skip keeps the performed side and restores only the skipped side', () => {
-  let state = workout({ sets: 1, bilateral: true });
-  const right = currentCard(state, state.workout.sessionId);
-  state = advanceWorkout(state, true);
-  state = skipToNextExercise(advanceWorkout(state));
-  assert.equal(state.sets[0].isCompleted, true);
-  assert.equal(state.sets[0].leftCompleted, true);
-  assert.equal(state.sets[0].rightCompleted, false);
-  assert.equal(achievementSummary(state).liftedWeightKg, 200);
-  state = skipToNextExercise(state);
-  assert.equal(workoutSnapshot(state, state.sessions[0].id).exercises[0].sets.length, 1);
-  state = reopenSkippedCard(state, right);
-  assert.equal(state.sets[0].leftCompleted, true);
-  assert.equal(state.sets[0].rightWeightKg, 20);
-  state = skipToNextExercise(advanceWorkout(state));
-  assert.equal(achievementSummary(state).liftedWeightKg, 400);
-});
 
-test('skipping both sides contributes no sets, weight, or shared exercises', () => {
-  let state = workout({ sets: 1, bilateral: true });
-  state = skipToNextExercise(advanceWorkout(advanceWorkout(state, true), true));
-  assert.equal(state.sets[0].isCompleted, false);
-  assert.equal(achievementSummary(state).completedSets, 0);
-  assert.equal(achievementSummary(state).liftedWeightKg, 0);
-  assert.throws(() => workoutSnapshot(state, state.sessions[0].id), /完了セットがありません/);
-  state = reopenSkippedCard(state, { setId: state.sets[0].id, side: state.sets[0].finalSkippedSide === 'normal' ? undefined : state.sets[0].finalSkippedSide });
-  state = skipToNextExercise(advanceWorkout(state));
-  assert.equal(state.sets[0].isCompleted, true);
-  assert.equal(achievementSummary(state).liftedWeightKg, 200);
-});
 
-test('revisiting a skip preserves later completed sets and refuses another active session', () => {
-  let state = workout({ sets: 3, rest: 0 });
-  const card = currentCard(state, state.workout.sessionId);
-  state = advanceWorkout(advanceWorkout(state, true));
-  const later = state.sets[1];
-  state = reopenSkippedCard(state, card);
-  assert.deepEqual(state.sets[1], later);
-  state = advanceWorkout(state);
-  assert.equal(currentCard(state, state.workout.sessionId).setId, state.sets[2].id);
-  state = finishWorkout(state, state.workout.sessionId);
-  const other = startWorkout(state);
-  assert.equal(reopenSkippedCard(other, card), other);
-});
+
+
+
+
+
+
+
 
 test('ring and seconds derive from elapsed time including background and expiry', () => {
   assert.deepEqual(restRemaining(1000, 61000, 1000), { seconds: 60, fraction: 1 });
@@ -536,81 +423,101 @@ test('global timer opt-outs suppress rest, preserving configured durations', () 
 
 
 const { skipToNextExercise, nextExerciseCard, cardCompleted } = require('../src/workout.ts');
-test('exercise skip preserves performed sides, stores all remaining inputs and matches preview', () => {
-  for (const bilateral of [false, true]) {
-    const initial = seedState(); if (bilateral) initial.exercises[0].mode = 'BILATERAL';
-    let state = advanceWorkout(startWorkout(initial));
-    const before = structuredClone(state);
-    const from = currentCard(state, state.workout.sessionId);
-    const next = nextExerciseCard(state, from);
-    const result = skipToNextExercise(state);
-    assert.deepEqual(state, before);
-    assert.deepEqual(currentCard(result, result.workout.sessionId), next);
-    assert.equal(result.workout.restEndsAt, undefined);
-    const exerciseId = state.sets.find(s => s.id === from.setId).exerciseId;
-    for (const card of workoutCards(state, state.workout.sessionId).filter(c => state.sets.find(s => s.id === c.setId).exerciseId === exerciseId)) {
-      const row = result.sets.find(s => s.id === card.setId);
-      if (!cardCompleted(state, card)) assert.ok(row.skippedInputs[card.side ?? 'normal']);
-    }
-    assert.equal(result.sets[0][bilateral ? 'rightCompleted' : 'isCompleted'], true);
-  }
+
+
+
+
+
+
+
+
+const { moveToCard, moveToNextExercise, moveToPreviousExercise, moveToExercise, deleteWorkoutSet } = require('../src/workout.ts');
+
+test('cursor moves in both directions, updates records by position, and finishes after the final card', () => {
+  let state = workout({ sets: 3, rest: 0 });
+  const sessionId = state.workout.sessionId;
+  const cards = workoutCards(state, sessionId);
+  assert.deepEqual(currentCard(state, sessionId), cards[0]);
+  state = advanceWorkout(state);
+  assert.deepEqual(currentCard(state, sessionId), cards[1]);
+  assert.equal(state.sets[0].isCompleted, true);
+  state = moveToCard(state, cards[0]);
+  assert.equal(state.sets[0].isCompleted, false);
+  state = updateSet(state, cards[0].setId, { normalReps: 14 });
+  state = moveToCard(state, cards[2]);
+  assert.equal(state.sets[0].normalReps, 14);
+  assert.deepEqual(state.sets.map(s => s.isCompleted), [true, true, false]);
+  state = advanceWorkout(state);
+  assert.equal(state.workout, undefined);
+  assert.ok(state.sets.every(s => s.isCompleted));
+  assert.equal(state.sessions[0].status, 'COMPLETED');
 });
 
-test('browsing skip uses displayed exercise; last exercise finishes; invalid card is harmless', () => {
+test('bilateral cards share one editable set row and completion follows the cursor', () => {
+  let state = workout({ bilateral: true, sets: 1, rest: 0 });
+  const sessionId = state.workout.sessionId;
+  const cards = workoutCards(state, sessionId);
+  assert.equal(cards.length, 2);
+  assert.equal(cards[0].setId, cards[1].setId);
+  state = advanceWorkout(state);
+  assert.equal(state.sets[0][`${cards[0].side}Completed`], true);
+  assert.equal(state.sets[0].isCompleted, false);
+  state = moveToCard(state, cards[0]);
+  assert.equal(state.sets[0][`${cards[0].side}Completed`], false);
+  state = advanceWorkout(advanceWorkout(state));
+  assert.equal(state.sets[0].leftCompleted, true);
+  assert.equal(state.sets[0].rightCompleted, true);
+});
+
+test('exercise swipes move to exercise starts without generating skipped inputs', () => {
   let state = startWorkout(seedState());
-  const first = currentCard(state, state.workout.sessionId);
-  state = skipToNextExercise(state);
-  const second = currentCard(state, state.workout.sessionId);
-  assert.deepEqual(currentCard(skipToNextExercise(state, first), state.workout.sessionId), second);
-  assert.equal(skipToNextExercise(state, { setId: -999 }), state);
-  while (state.workout) state = skipToNextExercise(state);
-  assert.equal(state.sessions.at(-1).status, 'COMPLETED');
-  assert.equal(achievementSummary(state).completedSets, 0);
-  assert.ok(state.sets.at(-1).finalSkippedSide);
+  const sessionId = state.workout.sessionId;
+  const initialCount = state.sets.length;
+  state = moveToNextExercise(state);
+  const second = currentCard(state, sessionId);
+  assert.equal(state.sets.find(s => s.id === second.setId).exerciseId, state.workout.exerciseOrder[1]);
+  assert.equal(state.sets.length, initialCount);
+  assert.ok(state.sets.every(s => !s.skippedInputs));
+  state = moveToPreviousExercise(state);
+  assert.equal(currentCard(state, sessionId).setId, workoutCards(state, sessionId)[0].setId);
 });
 
-test('set completion stays in its exercise, survives restart, and repeated completion is a no-op', () => {
-  for (const bilateral of [false, true]) for (const rest of [0, 30]) {
-    const initial = seedState();
-    initial.restDurationSeconds = rest;
-    if (bilateral) initial.exercises[0].mode = 'BILATERAL';
-    let state = startWorkout(initial);
-    const sessionId = state.workout.sessionId;
-    for (const exerciseId of state.workout.exerciseOrder) {
-      const cards = workoutCards(state, sessionId).filter(card => state.sets.find(row => row.id === card.setId).exerciseId === exerciseId);
-      for (const card of cards) {
-        assert.deepEqual(currentCard(state, sessionId), card);
-        const before = structuredClone(state);
-        const completed = advanceWorkout(state);
-        assert.deepEqual(state, before, 'input remains unchanged');
-        state = JSON.parse(JSON.stringify(completed));
-        assert.equal(state.sessions[0].status, 'IN_PROGRESS');
-        assert.equal(state.sets.find(row => row.id === currentCard(state, sessionId).setId).exerciseId, exerciseId);
-        // A rest expiry only clears the timer, never the saved destination.
-        state.workout.restStartedAt = undefined;
-        state.workout.restEndsAt = undefined;
-      }
-      assert.deepEqual(currentCard(state, sessionId), cards.at(-1));
-      assert.equal(advanceWorkout(state), state);
-      assert.equal(advanceWorkout(state, true), state);
-      state = skipToNextExercise(state);
-    }
-    assert.equal(state.workout, undefined);
-    assert.equal(state.sessions[0].status, 'COMPLETED');
-    assert.ok(state.sets.every(row => row.isCompleted));
-  }
+test('moveToExercise selects the first card of a prior exercise and ignores missing targets', () => {
+  const initial = seedState();
+  initial.exercises.find(exercise => exercise.id === initial.presets[0].exercises[0].exerciseId).mode = 'BILATERAL';
+  let state = startWorkout(initial);
+  const sessionId = state.workout.sessionId;
+  const firstExercise = state.workout.exerciseOrder[0];
+  const firstCard = workoutCards(state, sessionId)[0];
+  state = moveToNextExercise(state);
+  state = moveToNextExercise(state);
+  const before = structuredClone(state);
+  const moved = moveToExercise(state, firstExercise);
+  assert.deepEqual(currentCard(moved, sessionId), firstCard);
+  assert.equal(moved.workout.restEndsAt, undefined);
+  assert.deepEqual(state, before);
+  assert.equal(moveToExercise(state, -999), state);
+  assert.equal(moveToExercise({ ...state, workout: undefined }, firstExercise).workout, undefined);
 });
 
-test('global rest preference applies to every exercise', () => {
-  for (const disabled of [false, true]) {
-    let state = startWorkout({ ...seedState(), restTimerDisabled: disabled });
-    const order = [...state.workout.exerciseOrder];
-    assert.ok(order.length > 1);
-    for (const exerciseId of order) {
-      assert.equal(state.sets.find(s => s.id === currentCard(state, state.workout.sessionId).setId).exerciseId, exerciseId);
-      state = advanceWorkout(state, false);
-      assert.equal(!!state.workout.restEndsAt, !disabled);
-      state = skipToNextExercise(state);
-    }
-  }
+test('deleting a set removes the whole bilateral row, selects the next card, and finishes when empty', () => {
+  let state = workout({ bilateral: true, sets: 2, rest: 0 });
+  const sessionId = state.workout.sessionId;
+  const first = currentCard(state, sessionId);
+  state = deleteWorkoutSet(state, first.setId);
+  assert.equal(state.sets.length, 1);
+  assert.equal(currentCard(state, sessionId).setId, state.sets[0].id);
+  state = deleteWorkoutSet(state, state.sets[0].id);
+  assert.equal(state.sets.length, 0);
+  assert.equal(state.workout, undefined);
+  assert.equal(state.sessions[0].status, 'COMPLETED');
+});
+
+test('legacy skipped input fields remain loadable while cursor movement does not create skips', () => {
+  let state = workout({ sets: 2, rest: 0 });
+  state.sets[0].skippedInputs = { normal: { weightKg: 20, reps: 10 } };
+  state = JSON.parse(JSON.stringify(state));
+  state = advanceWorkout(state);
+  assert.equal(state.sets[0].isCompleted, true);
+  assert.equal(state.sets[1].skippedInputs, undefined);
 });
