@@ -63,7 +63,7 @@ function calendar(state) {
   mod.require = name => {
     if (name === 'react') return {
       useState: initial => { const i = cursor++; if (!(i in slots)) slots[i] = typeof initial === 'function' ? initial() : initial; const set = value => { slots[i] = value; }; if (slots[i] instanceof Date) setMonth = set; return [slots[i], set]; },
-      useRef: initial => { const i = cursor++; return slots[i] ??= { current: initial }; }, useCallback: f => f, useEffect() {}, useLayoutEffect() {},
+      useRef: initial => { const i = cursor++; return slots[i] ??= { current: initial }; }, useCallback: f => f, useMemo: f => f(), useEffect() {}, useLayoutEffect() {},
     };
     if (name === 'react-native') return { Animated: { Value, View: 'AnimatedView' }, View: 'View', Text: 'Text', Pressable: 'Pressable' };
     if (name === '../context') return { useApp: () => ({ state }) };

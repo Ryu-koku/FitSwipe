@@ -45,6 +45,7 @@ export function SwipeDeleteRow({ name, open, onOpenChange, onDelete, children }:
     onPanResponderRelease: (_, g) => {
       gesturing.current = false;
       const revealed = origin.current + g.dx < -WIDTH * 0.42;
+      if (revealed !== (origin.current < 0)) feedback();
       latest.current.onOpenChange(revealed);
       settle(revealed);
     },

@@ -40,7 +40,10 @@ test('React Native client interoperates with the rooms Worker, including automat
   );
   assert.equal((await api.list(bob))[0].competitive, false);
   let state = startWorkout(seedState());
-  while (state.workout) state = advanceWorkout(state);
+  while (state.workout) {
+    const next = advanceWorkout(state);
+    state = next === state ? require('../src/workout.ts').skipToNextExercise(state) : next;
+  }
   const entry = {
     roomId: created.id,
     workout: workoutSnapshot(state, state.sessions[0].id),

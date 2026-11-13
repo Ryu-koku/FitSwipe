@@ -3,7 +3,7 @@ import { Alert, Image, Modal, Platform, Pressable, Share, Text, View } from 'rea
 import { router, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { useApp } from '../context';
-import { Button, Card, Screen, useTheme } from '../ui';
+import { feedback, Button, Card, Screen, useTheme } from '../ui';
 import { captureRef } from 'react-native-view-shot';
 import { reopenSkippedCard } from '../workout';
 import { SessionDetails } from '../components/SessionDetails';
@@ -56,7 +56,7 @@ export default function CompleteScreen() {
     <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' }}>FIT SWIPE  ·  WORKOUT</Text>
     <Text style={{ color: '#fff', fontSize: 24, fontWeight: '900', marginTop: 12 }}>{date}</Text>
     <Text style={{ color: '#fff', fontSize: 17, marginTop: 8 }}>{exerciseCount} 種目　{sets.length} セット　{minutes} 分</Text>
-    {sets.slice(0, 6).map((set) => <Text key={set.id} style={{ color: '#fff', marginTop: 4 }}>{exerciseName(set.exerciseId)}　{set.normalWeightKg ?? set.leftWeightKg ?? 0}kg × {set.normalReps ?? set.leftReps ?? 0}</Text>)}
+    {sets.slice(0, 6).map((set) => <Text key={set.id} style={{ color: '#fff', marginTop: 4 }}>{exerciseName(set.exerciseId)}　{formatWeight(set.normalWeightKg ?? set.leftWeightKg ?? 0, state.weightUnit)} × {set.normalReps ?? set.leftReps ?? 0}</Text>)}
   </>;
   const selectPhoto = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
@@ -91,7 +91,7 @@ export default function CompleteScreen() {
         <Text style={{ color: colors.primary, fontSize: 13, fontWeight: '800', marginBottom: 8 }}>↗ 今回の成長</Text>
         <Text style={[styles.sectionTitle, { marginBottom: 8 }]}>{exerciseName(highlight.id)}{highlight.side === 'left' ? ' · 左' : highlight.side === 'right' ? ' · 右' : ''}</Text>
         <Text style={[styles.metric, { color: colors.primary }]}>+{(highlight.gain * 100).toFixed(1)}%</Text>
-        <Text style={[styles.body, { fontWeight: '700', marginTop: 8 }]}>{formatWeight(highlight.before)} → {formatWeight(highlight.after)}</Text>
+        <Text style={[styles.body, { fontWeight: '700', marginTop: 8 }]}>{formatWeight(highlight.before, state.weightUnit)} → {formatWeight(highlight.after, state.weightUnit)}</Text>
         <Text style={[styles.small, { marginTop: 6 }]}>前回比 · 推定1RM（重量と回数から算出）</Text>
       </Card>}
       <View style={[styles.row, { marginBottom: 16 }]}>{[[exerciseCount, '種目'], [sets.length, 'セット'], [minutes, '分']].map(([value, label]) => <Card key={label} style={{ flex: 1, alignItems: 'center' }}><Text style={styles.metric}>{value}</Text><Text style={styles.small}>{label}</Text></Card>)}</View>
@@ -106,10 +106,10 @@ export default function CompleteScreen() {
           router.replace('/workout');
         }} />}
       <Modal visible={sheet} transparent animationType="slide" onRequestClose={() => setSheet(false)}>
-        <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: '#0008' }}><Pressable style={{ flex: 1 }} onPress={() => setSheet(false)} /><View style={{ backgroundColor: colors.surface, padding: 20, paddingBottom: 32, borderTopLeftRadius: 24, borderTopRightRadius: 24 }}>
+        <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: '#0008' }}><Pressable style={{ flex: 1 }} onPress={() => { feedback(); return setSheet(false); }} /><View style={{ backgroundColor: colors.surface, padding: 20, paddingBottom: 32, borderTopLeftRadius: 24, borderTopRightRadius: 24 }}>
           <Text style={styles.sectionTitle}>共有方法を選択</Text>
-          {([['activity', 'アクティビティシェア', '記録をまとめた画像を作成'], ['overlay', 'スタッツオーバーレイ', '写真に統計情報を重ねる'], ['story', 'ストーリーズシェア', '縦長 9:16 の画像を作成']] as const).map(([value, title, detail]) => <Pressable key={value} onPress={() => void choose(value)} style={{ padding: 14, marginVertical: 4, borderRadius: 14, backgroundColor: kind === value ? colors.soft : colors.bg }}><Text style={{ color: colors.ink, fontSize: 16, fontWeight: '800' }}>{title}</Text><Text style={styles.small}>{detail}</Text></Pressable>)}
-          {kind === 'overlay' && <Pressable onPress={() => void selectPhoto()} style={{ padding: 12 }}><Text style={{ color: colors.primary, fontWeight: '700' }}>{photo ? '写真を変更' : '写真を選択'}</Text></Pressable>}
+          {([['activity', 'アクティビティシェア', '記録をまとめた画像を作成'], ['overlay', 'スタッツオーバーレイ', '写真に統計情報を重ねる'], ['story', 'ストーリーズシェア', '縦長 9:16 の画像を作成']] as const).map(([value, title, detail]) => <Pressable key={value} onPress={() => { feedback(); return void choose(value); }} style={{ padding: 14, marginVertical: 4, borderRadius: 14, backgroundColor: kind === value ? colors.soft : colors.bg }}><Text style={{ color: colors.ink, fontSize: 16, fontWeight: '800' }}>{title}</Text><Text style={styles.small}>{detail}</Text></Pressable>)}
+          {kind === 'overlay' && <Pressable onPress={() => { feedback(); return void selectPhoto(); }} style={{ padding: 12 }}><Text style={{ color: colors.primary, fontWeight: '700' }}>{photo ? '写真を変更' : '写真を選択'}</Text></Pressable>}
           <View style={{ position: 'absolute', left: -1000, top: 0 }} pointerEvents="none">{renderCard()}{renderCard(true)}<View ref={overlayRef} collapsable={false} style={{ width: 320, padding: 18, backgroundColor: 'transparent' }}>{stats}</View></View>
           {kind === 'overlay' && photo && <View style={{ height: 130, marginVertical: 8 }}><Image source={{ uri: photo }} style={{ width: '100%', height: '100%', position: 'absolute', borderRadius: 12 }} resizeMode="cover"/><View style={{ alignSelf: 'flex-start', margin: 8, padding: 10, backgroundColor: '#0008', borderRadius: 10 }}>{stats}</View></View>}
           <Button label="プレビューを共有" onPress={() => void sendImage(kind === 'story' ? storyRef : kind === 'overlay' ? overlayRef : cardRef, kind === 'story' ? 'FitSwipe ストーリーズ' : 'FitSwipe トレーニング記録')} />

@@ -1,3 +1,5 @@
+import { formatWeight } from '../logic';
+import { WeightField } from './WeightField';
 import { canAddPreset } from '../premium';
 import { usePremium } from '../premium-context';
 import React, { useRef, useState } from 'react';
@@ -81,7 +83,7 @@ export function PresetCreator({ onClose }: { onClose: () => void }) {
       </View>
       <ExerciseOrderList items={configs.map((item) => ({ id: item.exerciseId,
         name: state.exercises.find((e) => e.id === item.exerciseId)?.name ?? '削除された種目',
-        detail: `${item.sets}セット × ${item.reps ?? '—'}回 · ${state.exercises.find((e) => e.id === item.exerciseId)?.mode === 'BILATERAL' ? `左${item.leftWeightKg ?? 0} / 右${item.rightWeightKg ?? 0}` : item.weightKg ?? 0}kg`,
+        detail: `${item.sets}セット × ${item.reps ?? '—'}回 · ${state.exercises.find((e) => e.id === item.exerciseId)?.mode === 'BILATERAL' ? `左${formatWeight(item.leftWeightKg ?? 0, state.weightUnit)} / 右${formatWeight(item.rightWeightKg ?? 0, state.weightUnit)}` : formatWeight(item.weightKg ?? 0, state.weightUnit)}`,
       }))}
         onEdit={(exerciseId) => { Keyboard.dismiss(); setEditing(exerciseId); }}
         onMove={(from, to) => setConfigs((items) => moveItem(items, from, to))}
@@ -105,9 +107,9 @@ export function PresetCreator({ onClose }: { onClose: () => void }) {
       })])} />}
     {config && exercise && <Sheet title={exercise.name} onClose={() => setEditing(undefined)}>
       {exercise.mode === 'BILATERAL' ? <View style={styles.row}>
-        <NumberField label="左kg" value={config.leftWeightKg} onChange={(leftWeightKg) => patch({ leftWeightKg })} />
-        <NumberField label="右kg" value={config.rightWeightKg} onChange={(rightWeightKg) => patch({ rightWeightKg })} />
-      </View> : <NumberField label="重量（kg）" value={config.weightKg} onChange={(weightKg) => patch({ weightKg })} />}
+        <WeightField label="左kg" value={config.leftWeightKg} onChange={(leftWeightKg) => patch({ leftWeightKg })} />
+        <WeightField label="右kg" value={config.rightWeightKg} onChange={(rightWeightKg) => patch({ rightWeightKg })} />
+      </View> : <WeightField label="重量（kg）" value={config.weightKg} onChange={(weightKg) => patch({ weightKg })} />}
       <View style={styles.row}>
         <NumberField label="回数" value={config.reps} integer onChange={(reps) => patch({ reps })} />
         <NumberField label="セット数" value={config.sets} integer onChange={(sets) => patch({ sets: Math.max(1, Math.min(30, sets ?? 1)) })} />

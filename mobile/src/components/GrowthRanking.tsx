@@ -2,8 +2,8 @@ import React, { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import Svg, { Circle, Line, Polyline, Text as SvgText } from 'react-native-svg';
 import { useApp } from '../context';
-import { strengthGrowth } from '../logic';
-import { Card, SectionTitle, Sheet, useTheme } from '../ui';
+import { weightToDisplay, strengthGrowth } from '../logic';
+import { feedback, Card, SectionTitle, Sheet, useTheme } from '../ui';
 
 const mockRanking = [
   { name: 'スクワット', change: 18.6 },
@@ -39,7 +39,7 @@ export function GrowthRanking() {
     <Card style={{ padding: 12, marginBottom: 0 }}>
       {!!displayedRanking.length && <Text style={[styles.small, { marginBottom: 4 }]}>種目をタップして推移を見る</Text>}
       {!displayedRanking.length ? <Text style={[styles.small, { marginTop: 12 }]}>重量と回数を記録すると、成長ランキングが表示されます。</Text> : displayedRanking.map((item, index) => (
-        <Pressable key={item.name} accessibilityRole="button" accessibilityLabel={`${item.name}の成長グラフを見る`} onPress={() => setSelected(item.name)} style={[styles.row, { minHeight: 48, paddingVertical: 8, borderBottomWidth: index === displayedRanking.length - 1 ? 0 : 1, borderColor: colors.line }]}>
+        <Pressable key={item.name} accessibilityRole="button" accessibilityLabel={`${item.name}の成長グラフを見る`} onPress={() => { feedback(); return setSelected(item.name); }} style={[styles.row, { minHeight: 48, paddingVertical: 8, borderBottomWidth: index === displayedRanking.length - 1 ? 0 : 1, borderColor: colors.line }]}>
           <Text style={[styles.body, { width: 32, fontWeight: '700', color: colors.primary }]}>{index + 1}位</Text>
           <Text numberOfLines={1} style={[styles.body, { flex: 1, fontWeight: '700' }]}>{item.name}</Text>
           <Text style={[styles.body, { color: item.change >= 0 ? colors.primary : colors.muted, fontWeight: '700' }]}>{item.change > 0 ? '+' : ''}{item.change.toFixed(1)}%</Text>
@@ -47,20 +47,22 @@ export function GrowthRanking() {
         </Pressable>
       ))}
       <Text style={[styles.small, { marginTop: 12 }]}>直近90日の推定1RM変化率 · 記録2日以上の種目が対象</Text>
-      {__DEV__ && <Pressable accessibilityRole="button" onPress={() => setPreview((value) => !value)} style={{ paddingVertical: 10 }}>
+      {__DEV__ && <Pressable accessibilityRole="button" onPress={() => { feedback(); return setPreview((value) => !value); }} style={{ paddingVertical: 10 }}>
         <Text style={[styles.small, { color: colors.primary }]}>{showingMock ? 'モック表示中 · 実データに切り替え' : 'モックで表示を確認'}</Text>
       </Pressable>}
     </Card>
     {detail && <Sheet title={detail.name} onClose={() => setSelected(undefined)} popup>
-      <Text style={styles.small}>推定1RM（kg） · 直近90日{showingMock ? ' · モック' : ''}</Text>
+      <Text style={styles.small}>推定1RM（{state.weightUnit}） · 直近90日{showingMock ? ' · モック' : ''}</Text>
       <GrowthLine points={detail.points} />
       <Text style={[styles.small, { marginBottom: 12 }]}>同日の最大値を表示。実際の最大重量ではなく、重量と回数からの推定値です。</Text>
     </Sheet>}
   </>;
 }
 
-function GrowthLine({ points }: { points: { date: string; value: number }[] }) {
+function GrowthLine({ points: kgPoints }: { points: { date: string; value: number }[] }) {
   const { colors, styles } = useTheme();
+  const { state } = useApp();
+  const points = kgPoints.map(p => ({ ...p, value: weightToDisplay(p.value, state.weightUnit) }));
   const values = points.map((point) => point.value);
   const low = Math.min(...values);
   const high = Math.max(...values);
@@ -78,10 +80,10 @@ function GrowthLine({ points }: { points: { date: string; value: number }[] }) {
     y: 180 - (point.value - minimum) / (maximum - minimum) * 156,
   }));
   return <View style={{ marginVertical: 16 }}>
-    <Text style={[styles.body, { color: colors.primary, fontWeight: '700' }]}>{points[points.length - 1].value.toFixed(1)} kg</Text>
-    <View accessible accessibilityLabel={points.map((point) => `${point.date}：${point.value.toFixed(1)}kg`).join('、')}>
+    <Text style={[styles.body, { color: colors.primary, fontWeight: '700' }]}>{points[points.length - 1].value.toFixed(1)} {state.weightUnit}</Text>
+    <View accessible accessibilityLabel={points.map((point) => `${point.date}：${point.value.toFixed(1)}${state.weightUnit}`).join('、')}>
       <Svg width="100%" height={240} viewBox="0 0 360 220">
-        <SvgText x={8} y={12} fill={colors.muted} fontSize={11}>kg</SvgText>
+        <SvgText x={8} y={12} fill={colors.muted} fontSize={11}>{state.weightUnit}</SvgText>
         {Array.from({ length: tickCount + 1 }, (_, tick) => {
           const y = 180 - tick / tickCount * 156;
           const value = minimum + step * tick;

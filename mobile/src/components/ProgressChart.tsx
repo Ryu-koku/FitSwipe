@@ -1,23 +1,31 @@
+import { useApp } from '../context';
+import { weightToDisplay } from '../logic';
 import React, { useState } from 'react';
 import { Text, View } from 'react-native';
 import Svg, { Circle, Line, Polyline, Text as SvgText } from 'react-native-svg';
 import { useTheme } from '../ui';
 
 export function ProgressChart({
-  points,
-  unit = 'kg',
+  points: kgPoints,
+  unit: metric = 'kg',
   compact = false,
   availableHeight,
+  layoutReady = true,
 }: {
   points: { date: string; value: number }[];
   unit?: 'kg' | '回';
   compact?: boolean;
   availableHeight?: number;
+  layoutReady?: boolean;
 }) {
+  const { state } = useApp();
+  const unit = metric === '回' ? '回' : state.weightUnit ?? 'kg';
+  const points = metric === '回' ? kgPoints : kgPoints.map(p => ({ ...p, value: weightToDisplay(p.value, unit as 'kg' | 'lb') }));
   const { colors, styles } = useTheme();
-  const [width, setWidth] = useState(360);
-  const [valueHeight, setValueHeight] = useState(24);
-  const [hintHeight, setHintHeight] = useState(18);
+  const [width, setWidth] = useState(0);
+  const [valueHeight, setValueHeight] = useState(0);
+  const [hintHeight, setHintHeight] = useState(0);
+  const measured = layoutReady && width > 0 && valueHeight > 0 && (points.length !== 1 || hintHeight > 0);
   const adaptive = availableHeight !== undefined;
   const height = adaptive
     ? Math.max(100, Math.min(220, availableHeight - valueHeight - (points.length === 1 ? hintHeight : 0) - 8))
@@ -56,8 +64,8 @@ export function ProgressChart({
     y: bottom - ((point.value - minimum) / (maximum - minimum)) * (bottom - top),
   }));
   return (
-    <View onLayout={(event) => setWidth(event.nativeEvent.layout.width)} style={{ marginVertical: compact ? 4 : 16 }}>
-      <Text onLayout={(event) => setValueHeight(event.nativeEvent.layout.height)} style={[styles.body, { color: colors.primary, fontWeight: '700' }]}>
+    <View onLayout={(event) => { const next = event.nativeEvent.layout.width; if (Math.abs(next - width) >= 1) setWidth(next); }} accessibilityElementsHidden={!measured} importantForAccessibility={measured ? 'auto' : 'no-hide-descendants'} style={{ marginVertical: compact ? 4 : 16, opacity: measured ? 1 : 0 }}>
+      <Text onLayout={(event) => { const next = event.nativeEvent.layout.height; if (Math.abs(next - valueHeight) >= 1) setValueHeight(next); }} style={[styles.body, { color: colors.primary, fontWeight: '700' }]}>
         {points[points.length - 1].value.toFixed(unit === '回' ? 0 : 1)} {unit}
       </Text>
       <View
@@ -66,7 +74,7 @@ export function ProgressChart({
           .map((point) => `${point.date}：${point.value.toFixed(unit === '回' ? 0 : 1)}${unit}`)
           .join('、')}
       >
-        <Svg width="100%" height={height} viewBox={`0 0 ${plotWidth} ${plotHeight}`}>
+        {measured ? <Svg width="100%" height={height} viewBox={`0 0 ${plotWidth} ${plotHeight}`}>
           <SvgText x={8} y={12} fill={colors.muted} fontSize={11}>
             {unit}
           </SvgText>
@@ -117,9 +125,9 @@ export function ProgressChart({
               fill={colors.primary}
             />
           ))}
-        </Svg>
+        </Svg> : <View style={{ height }} />}
       </View>
-      {points.length === 1 && <Text onLayout={(event) => setHintHeight(event.nativeEvent.layout.height)} style={styles.small}>次の記録で比較できます。</Text>}
+      {points.length === 1 && <Text onLayout={(event) => { const next = event.nativeEvent.layout.height; if (Math.abs(next - hintHeight) >= 1) setHintHeight(next); }} style={styles.small}>次の記録で比較できます。</Text>}
     </View>
   );
 }

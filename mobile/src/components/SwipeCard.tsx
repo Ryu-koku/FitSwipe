@@ -3,6 +3,7 @@ import React, {
   createContext,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -28,30 +29,45 @@ export function SwipeCard({
   children,
   onAdvance,
   onSkip,
-  onSwipeStart,
+  behind = false,
+  progress,
   disabled = false,
   rest = false,
+  isGestureBlocked,
 }: PropsWithChildren<{
   onAdvance: () => void;
   onSkip: () => void;
-  onSwipeStart?: (advance: boolean) => void;
+  behind?: boolean;
+  progress?: Animated.Value;
   disabled?: boolean;
   rest?: boolean;
+  isGestureBlocked?: () => boolean;
 }>) {
   const { colors } = useTheme();
   const { width, height } = useWindowDimensions();
   const [position] = useState(() => new Animated.ValueXY());
+  const [localProgress] = useState(() => new Animated.Value(0));
   const [actionProgress] = useState(() => new Animated.Value(0));
+  const revealProgress = progress ?? localProgress;
   const reduced = useReducedMotion();
   const busy = useRef(false);
-  const actions = useRef({ onAdvance, onSkip, onSwipeStart, disabled });
+  const actions = useRef({ onAdvance, onSkip, disabled, isGestureBlocked });
   useEffect(() => {
-    actions.current = { onAdvance, onSkip, onSwipeStart, disabled };
-  }, [onAdvance, onSkip, onSwipeStart, disabled]);
+    actions.current = { onAdvance, onSkip, disabled, isGestureBlocked };
+  }, [onAdvance, onSkip, disabled, isGestureBlocked]);
   useEffect(() => () => {
     position.stopAnimation();
     actionProgress.stopAnimation();
-  }, [position, actionProgress]);
+    if (!progress) revealProgress.stopAnimation();
+  }, [position, actionProgress, revealProgress, progress]);
+  useLayoutEffect(() => {
+    if (!behind) {
+      actionProgress.setValue(0);
+      revealProgress.setValue(0);
+      position.setValue({ x: 0, y: 0 });
+      busy.current = false;
+    }
+  }, [behind, actionProgress, revealProgress, position]);
   const runAction = (action: () => void) => {
     if (!busy.current && !actions.current.disabled) action();
   };
@@ -63,14 +79,16 @@ export function SwipeCard({
       PanResponder.create({
         onMoveShouldSetPanResponder: (_, g) =>
           !actions.current.disabled &&
+          !actions.current.isGestureBlocked?.() &&
           !busy.current &&
           Math.hypot(g.dx, g.dy) > 12,
         onPanResponderMove: (_, g) => {
           if (busy.current || actions.current.disabled) return;
-          position.setValue({ x: g.dx, y: g.dy });
-          const distance = Math.abs(g.dx) >= Math.abs(g.dy) ? g.dx : -g.dy;
+          if (!reduced) position.setValue({ x: g.dx, y: g.dy });
+          const distance = Math.max(Math.abs(g.dx), Math.abs(g.dy));
           actionProgress.setValue(Math.max(-1, Math.min(1, distance / (Math.min(width, height) * 0.08))));
-          if (rest) setHint('休憩をスキップ');
+          revealProgress.setValue(Math.min(1, distance / width));
+          setHint(rest ? '休憩をスキップ' : undefined);
         },
         onPanResponderRelease: (_, g) => {
           if (busy.current || actions.current.disabled) return;
@@ -81,8 +99,10 @@ export function SwipeCard({
             Math.abs(delta) < Math.min(width, height) * 0.08 &&
             Math.abs(velocity) < 0.8
           ) {
+            Animated.timing(revealProgress, { toValue: 0, duration: reduced ? 0 : 120, useNativeDriver: false }).start();
             Animated.timing(actionProgress, { toValue: 0, duration: reduced ? 0 : 120, useNativeDriver: false }).start();
-            Animated.spring(position, {
+            Animated.timing(position, {
+              duration: reduced ? 0 : 120,
               toValue: { x: 0, y: 0 },
               useNativeDriver: true,
             }).start();
@@ -92,10 +112,10 @@ export function SwipeCard({
           busy.current = true;
           const direction =
             Math.abs(delta) < 10 ? Math.sign(velocity) : Math.sign(delta);
-          const advance = rest || (horizontal ? direction > 0 : direction < 0);
-          actionProgress.setValue(advance ? 1 : -1);
+          actionProgress.setValue(1);
+          Animated.timing(revealProgress, { toValue: 1, duration: reduced ? 0 : 170, useNativeDriver: false }).start();
           feedback();
-          actions.current.onSwipeStart?.(advance);
+
           Animated.timing(position, {
             toValue: horizontal
               ? { x: direction * width * 1.4, y: 0 }
@@ -104,31 +124,41 @@ export function SwipeCard({
             useNativeDriver: true,
           }).start(({ finished }) => {
             if (finished) {
-              if (advance) actions.current.onAdvance();
-              else actions.current.onSkip();
+              actions.current.onAdvance();
+              // Leave the outgoing card offscreen until the mounted back card is promoted.
+              return;
             }
             position.setValue({ x: 0, y: 0 });
             actionProgress.setValue(0);
+            revealProgress.stopAnimation();
+            revealProgress.setValue(0);
             busy.current = false;
             setHint(undefined);
           });
         },
         onPanResponderTerminate: () => {
+          revealProgress.stopAnimation();
           actionProgress.stopAnimation();
           actionProgress.setValue(0);
+          revealProgress.setValue(0);
           position.setValue({ x: 0, y: 0 });
           busy.current = false;
           setHint(undefined);
         },
       }),
-    [actionProgress, height, position, reduced, rest, width],
+    [actionProgress, revealProgress, height, position, reduced, rest, width],
   );
   return (
     <Animated.View
-      {...pan.panHandlers}
+      {...(behind ? {} : pan.panHandlers)}
+      pointerEvents={behind ? "none" : "auto"}
+      accessibilityElementsHidden={behind}
+      importantForAccessibility={behind ? "no-hide-descendants" : "auto"}
       style={{
         flex: 1,
-        transform: [
+        ...(progress ? { position: 'absolute' as const, inset: 0, zIndex: behind ? 0 : 1 } : {}),
+        opacity: behind && !reduced ? revealProgress.interpolate({ inputRange: [0, 1], outputRange: [0.65, 1] }) : 1,
+        transform: behind ? [{ scale: reduced ? 1 : revealProgress.interpolate({ inputRange: [0, 1], outputRange: [0.92, 1] }) }] : reduced ? [] : [
           ...position.getTranslateTransform(),
           {
             rotate: position.x.interpolate({
@@ -175,15 +205,16 @@ export function SwipeActions({ reviewing = false, onAdvance, onSkip, onBack, onE
   const { colors, styles } = useTheme();
   const reduced = useReducedMotion();
   if (!swipe) return null;
-  const { progress, runAction } = swipe;
-  return <View style={{ flexDirection: 'row', alignItems: 'center',
+  const { runAction } = swipe;
+  const inactive = new Animated.Value(0);
+  return <View pointerEvents="box-none" style={{ flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 8, paddingBottom: 8, justifyContent: 'space-between' }}>
     {(['back', 'skip', 'complete', 'edit'] as const).map((action) => {
       const complete = action === 'complete';
       const skip = action === 'skip';
       const disabled = action === 'back' && !canGoBack;
       const color = skip ? colors.orange : colors.primary;
-      const active = progress.interpolate({ inputRange: skip ? [-1, 0] : [0, 1], outputRange: complete ? [0, 1] : skip ? [1, 0] : [0, 0], extrapolate: 'clamp' });
+      const active = inactive;
       const label = complete ? reviewing ? '次のカードへ' : 'セット完了' : skip ? 'スキップ' : action === 'back' ? '戻る' : '編集';
       const accessibilityLabel = action === 'back' ? '前のカードへ' : action === 'edit' ? '種目を編集' : label;
       const icon = complete ? 'check' : skip ? 'skip' : action === 'back' ? 'undo' : 'edit';

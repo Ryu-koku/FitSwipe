@@ -2,6 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import { AppState, useWindowDimensions, View } from 'react-native';
 import { useIsFocused } from 'expo-router';
 import { useMotionPreference } from './use-reduced-motion';
+import { createExerciseMotionQueue } from './exercise-motion-queue';
 import { visibleIllustration } from './exercise-visuals';
 
 type MotionContext = {
@@ -11,12 +12,14 @@ type MotionContext = {
   covered: boolean;
   refresh: () => void;
   subscribe: (check: () => void) => () => void;
+  enqueue: (start: () => void) => () => void;
   overlay: (id: string, visible: boolean) => void;
 };
 const Motion = createContext<MotionContext | undefined>(undefined);
 
 /** One scroll listener per screen, rather than timers on every image. */
 export function ExerciseMotionViewport({ children }: React.PropsWithChildren) {
+  const [queue] = useState(() => createExerciseMotionQueue());
   const focused = useIsFocused();
   const reducedMotion = useMotionPreference();
   const [appState, setAppState] = useState<string | null>(AppState.currentState ?? null);
@@ -51,9 +54,10 @@ export function ExerciseMotionViewport({ children }: React.PropsWithChildren) {
   }, [focused, appState, refresh]);
   useEffect(() => () => {
     if (scheduled.current !== undefined) cancelAnimationFrame(scheduled.current);
-  }, []);
-  const value = useMemo(() => ({ focused, appState, reducedMotion, covered, refresh, subscribe, overlay }),
-    [focused, appState, reducedMotion, covered, refresh, subscribe, overlay]);
+    queue.clear();
+  }, [queue]);
+  const value = useMemo(() => ({ focused, appState, reducedMotion, covered, refresh, subscribe, overlay, enqueue: queue.enqueue }),
+    [focused, appState, reducedMotion, covered, refresh, subscribe, overlay, queue]);
   return <Motion.Provider value={value}>{children}</Motion.Provider>;
 }
 

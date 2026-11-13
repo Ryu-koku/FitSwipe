@@ -14,6 +14,7 @@ const paths = {
   plus: 'M12 5v14M5 12h14',
   play: 'm8 4 12 8-12 8Z',
   back: 'm15 4-8 8 8 8',
+  chevronDown: 'M4 9l8 7 8-7',
   undo: 'm9 4-5 5 5 5M4 9h10a6 6 0 0 1 0 12',
   next: 'm9 4 8 8-8 8',
   close: 'm6 6 12 12M6 18 18 6',

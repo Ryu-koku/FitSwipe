@@ -7,14 +7,15 @@ const ts = require('typescript');
 const { seedState, selectedPreset } = require('../src/logic.ts');
 
 function prepareScreen(colors = { primary: 'primary' }) {
-  const state = seedState(), slots = [];
+  const state = seedState(), slots = [], routes = [];
   let cursor = 0;
   const filename = path.resolve(__dirname, '../src/app/prepare.tsx');
   const mod = new Module(filename, module);
   mod.filename = filename; mod.paths = Module._nodeModulePaths(path.dirname(filename));
   const original = mod.require.bind(mod);
   mod.require = name => {
-    if (name === 'react') return { useState: initial => {
+    if (name === 'expo-router') return { router: { replace: route => routes.push(route) } };
+    if (name === 'react') return { useEffect: effect => effect(), useMemo: factory => factory(), useCallback: callback => callback, useState: initial => {
       const i = cursor++;
       if (!(i in slots)) slots[i] = initial;
       return [slots[i], value => { slots[i] = value; }];
@@ -22,7 +23,7 @@ function prepareScreen(colors = { primary: 'primary' }) {
     if (name === 'react-native') return { View: 'View', Text: 'Text', Pressable: 'Pressable' };
     if (name === '../context') return { useApp: () => ({ state, update: () => {} }) };
     if (name === '../premium-context') return { usePremium: () => ({ premium: false, openPaywall: () => {} }) };
-    if (name === '../ui') return { useTheme: () => ({ colors, styles: { body: { color: colors.ink } } }),
+    if (name === '../ui') return { feedback: () => {}, useTheme: () => ({ colors, styles: { body: { color: colors.ink } } }),
       Button: 'Button', Card: 'Card', Screen: 'Screen', SectionTitle: 'SectionTitle' };
     if (name.startsWith('../components/')) { const component = name.split('/').at(-1); return { [component]: component }; }
     return original(name);
@@ -30,7 +31,7 @@ function prepareScreen(colors = { primary: 'primary' }) {
   mod._compile(ts.transpileModule(fs.readFileSync(filename, 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true },
   }).outputText, filename);
-  return { state, render() {
+  return { state, routes, render() {
     cursor = 0;
     const nodes = [];
     function visit(node) {
@@ -99,3 +100,12 @@ for (const colors of [
     }
   });
 }
+
+test('prepare redirects ongoing sessions without rendering the menu, including after state restoration', () => {
+  const app = prepareScreen();
+  assert.ok(app.render().length);
+  assert.deepEqual(app.routes, []);
+  app.state.sessions.push({ id: 1, status: 'COMPLETED' }, { id: 2, status: 'IN_PROGRESS' });
+  assert.deepEqual(app.render(), []);
+  assert.deepEqual(app.routes, ['/workout']);
+});

@@ -12,7 +12,7 @@ import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import QRCode from 'react-native-qrcode-svg';
 import { useApp } from '../context';
 import { formatWeight } from '../logic';
-import { Button, Card, Field, IconButton, Screen, Sheet, useTheme } from '../ui';
+import { feedback, Button, Card, Field, IconButton, Screen, Sheet, useTheme } from '../ui';
 import { useRooms } from '../use-rooms';
 import { MemberAvatar, RoomComparisonChart } from '../components/RoomComparisonChart';
 import { japanMonth } from '../automatic-sharing';
@@ -119,7 +119,7 @@ export default function RoomsScreen() {
         <Button label="ルームを作成" secondary onPress={() => openAction('create')} />
         <Button label="ルームに参加" secondary onPress={() => openAction('join')} />
       </Animated.View>
-      <Pressable accessibilityRole="button" accessibilityLabel={actionsOpen ? 'ルーム操作を閉じる' : 'ルーム操作を開く'} accessibilityState={{ expanded: actionsOpen }} disabled={rooms.busy} onPress={toggleActions} style={{ width: 58, height: 58, borderRadius: 29, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', elevation: 6 }}>
+      <Pressable accessibilityRole="button" accessibilityLabel={actionsOpen ? 'ルーム操作を閉じる' : 'ルーム操作を開く'} accessibilityState={{ expanded: actionsOpen }} disabled={rooms.busy} onPress={() => { feedback(); toggleActions(); }} style={{ width: 58, height: 58, borderRadius: 29, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', elevation: 6 }}>
         <Animated.Text style={{ color: '#fff', fontSize: 34, lineHeight: 40, transform: [{ rotate: actionProgress.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '45deg'] }) }] }}>＋</Animated.Text>
       </Pressable>
     </View> : undefined}>
@@ -131,7 +131,7 @@ export default function RoomsScreen() {
       <Button label="ルームをはじめる" disabled={rooms.busy || !displayName.trim()} onPress={() => void rooms.run(() => rooms.register(displayName))} />
     </> : !room ? <>
       {!state.rooms.length && <Text style={[styles.small, { marginVertical: 24 }]}>ルームを作って友だちを招待しましょう。</Text>}
-      {state.rooms.map((entry) => <Pressable key={entry.id} accessibilityRole="button" accessibilityLabel={entry.name} disabled={rooms.busy} onPress={() => { setMemberId(undefined); void rooms.run(() => rooms.open(entry.id)); }}>
+      {state.rooms.map((entry) => <Pressable key={entry.id} accessibilityRole="button" accessibilityLabel={entry.name} disabled={rooms.busy} onPress={() => { feedback(); setMemberId(undefined); void rooms.run(() => rooms.open(entry.id)); }}>
         <Card style={{ marginTop: 12 }}><View style={styles.row}><View style={{ flexDirection: 'row', paddingRight: 8 }}>{(entry.memberProfiles?.length ? entry.memberProfiles : (entry.memberNames?.length ? entry.memberNames : [entry.name]).map(name => ({ name, avatar: null }))).map((member, i) => <View key={i} style={{ marginLeft: i ? -12 : 0 }}><MemberAvatar name={member.name} avatar={member.avatar} /></View>)}</View><Text style={[styles.body, { flex: 1, fontWeight: '700' }]}>{entry.name}</Text></View></Card>
       </Pressable>)}
     </> : <>
@@ -153,7 +153,7 @@ export default function RoomsScreen() {
         <Text style={styles.sectionTitle}>この月の最近の活動</Text>
         {displayedComparison.posts.slice(0, 5).map((post) => <Pressable key={post.id} accessibilityRole="button"
           accessibilityLabel={`${post.name}の${post.workout.presetName}。記録を見る`} disabled={rooms.busy}
-          onPress={() => openMember(post.userId)} style={{ paddingVertical: 12 }}>
+          onPress={() => { feedback(); return openMember(post.userId); }} style={{ paddingVertical: 12 }}>
           <Text style={[styles.body, { fontWeight: '700' }]}>{post.name} · {post.workout.presetName}</Text>
           <Text style={styles.small}>{new Date(post.workout.startedAt).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}</Text>
         </Pressable>)}
@@ -228,7 +228,7 @@ export default function RoomsScreen() {
       {dialog === 'create' && <View style={{ marginTop: 20 }}>
         <Text style={styles.small}>ルームの種類 · どちらも記録の詳細は共有されます</Text>
         <View style={{ flexDirection: 'row', gap: 10, marginTop: 8 }}>
-          {([['競い合う', true], ['競い合わない', false]] as const).map(([label, value]) => <Pressable key={label} accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ selected: competitive === value }} onPress={() => setCompetitive(value)} style={{ flex: 1, padding: 12, borderRadius: 16, borderWidth: 2, borderColor: competitive === value ? colors.primary : colors.line, backgroundColor: competitive === value ? colors.soft : colors.surface, opacity: competitive === value ? 1 : 0.72 }}>
+          {([['競い合う', true], ['競い合わない', false]] as const).map(([label, value]) => <Pressable key={label} accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ selected: competitive === value }} onPress={() => { feedback(); return setCompetitive(value); }} style={{ flex: 1, padding: 12, borderRadius: 16, borderWidth: 2, borderColor: competitive === value ? colors.primary : colors.line, backgroundColor: competitive === value ? colors.soft : colors.surface, opacity: competitive === value ? 1 : 0.72 }}>
             <View style={{ height: 82, borderRadius: 10, backgroundColor: colors.bg, padding: 9, overflow: 'hidden' }}>
               {value ? <>
                 <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}><View style={{ width: 18, height: 18, borderRadius: 9, backgroundColor: colors.primary, marginRight: 6 }} /><View style={{ height: 7, width: '45%', borderRadius: 4, backgroundColor: colors.line }} /></View>
@@ -262,7 +262,7 @@ export default function RoomsScreen() {
     </Sheet>}
     <Modal visible={!!created} transparent animationType="fade" onRequestClose={() => rooms.dismissCreated()}>
     {created && <View style={{ flex: 1, backgroundColor: '#0008', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 20, paddingTop: insets.top + 12, paddingBottom: insets.bottom + 12 }}>
-      <Pressable accessibilityLabel="招待ポップアップを閉じる" onPress={() => rooms.dismissCreated()} style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }} />
+      <Pressable accessibilityLabel="招待ポップアップを閉じる" onPress={() => { feedback(); return rooms.dismissCreated(); }} style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }} />
       <View style={{ width: '100%', maxWidth: 440, maxHeight: '100%', backgroundColor: colors.bg, borderRadius: 28, overflow: 'hidden', padding: 24, alignItems: 'center' }}>
         <View accessible={false} style={{ width: 72, height: 72, borderRadius: 20, backgroundColor: colors.soft, alignItems: 'center', justifyContent: 'center' }}>
           <Text style={{ color: colors.primary, fontSize: 34, fontWeight: '800' }}>{Array.from(created.name.trim())[0] ?? '?'}</Text>
@@ -338,9 +338,10 @@ function InviteSheet({ room, onClose }: { room: Room; onClose: () => void }) {
 }
 
 function WorkoutDetails({ post }: { post: RoomPost }) {
+  const { state } = useApp();
   const { styles } = useTheme();
   return <Card><Text style={[styles.body, { fontWeight: '700' }]}>{post.workout.presetName}</Text>
     <Text style={styles.small}>{new Date(post.workout.startedAt).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}</Text>
-    {post.workout.exercises.map((exercise, i) => <View key={i} style={{ marginTop: 12 }}><Text style={styles.body}>{exercise.name}</Text>{exercise.sets.map((set, j) => <Text key={j} style={styles.small}>{set.order}　{set.side ?? ''} {formatWeight(set.weightKg)} × {set.reps}回</Text>)}</View>)}
+    {post.workout.exercises.map((exercise, i) => <View key={i} style={{ marginTop: 12 }}><Text style={styles.body}>{exercise.name}</Text>{exercise.sets.map((set, j) => <Text key={j} style={styles.small}>{set.order}　{set.side ?? ''} {formatWeight(set.weightKg, state.weightUnit)} × {set.reps}回</Text>)}</View>)}
   </Card>;
 }

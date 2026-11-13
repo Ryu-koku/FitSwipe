@@ -30,7 +30,7 @@ export function CompletionCelebration({ sessionId, onDone }: { sessionId: number
   if (reduced === undefined) return <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.bg, zIndex: 100 }]} />;
   const interpolate = (inputRange: number[], outputRange: number[]) => clock.interpolate({ inputRange, outputRange, extrapolate: 'clamp' });
   return <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: colors.bg, opacity: interpolate([1500, 1750], [1, 0]), zIndex: 100 }]}>
-    <Pressable accessibilityRole="button" accessibilityLabel="完了演出をスキップ" onPress={() => { clock.stopAnimation(); finish.current(); }} style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+    <Pressable accessibilityRole="button" accessibilityLabel="完了演出をスキップ" onPress={() => { feedback(); clock.stopAnimation(); finish.current(); }} style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
       <View style={{ width: 64, height: 64, alignItems: 'center', justifyContent: 'center' }}>
         {Array.from({ length: 14 }, (_, index) => {
           const angle = index * Math.PI * 2 / 14;

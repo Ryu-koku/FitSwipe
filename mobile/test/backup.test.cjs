@@ -79,10 +79,22 @@ test('restoring onto a fresh install reuses equal exercises instead of duplicati
   const old = seedState();
   old.sessions = [{ id: 900, status: 'COMPLETED', startedAt: '2026-10-01T00:00:00.000Z', endedAt: '2026-10-01T01:00:00.000Z' }];
   old.sets = [{ id: 901, sessionId: 900, exerciseId: old.exercises[0].id, setOrder: 1, normalWeightKg: 50, normalReps: 5, isCompleted: true, leftCompleted: false, rightCompleted: false }];
-  old.restTimerDisabledExerciseIds = [old.exercises[0].id];
-  const fresh = { ...seedState(), restTimerDisabledExerciseIds: [old.exercises[0].id] };
+  old.restTimerDisabled = true;
+  const fresh = { ...seedState(), restTimerDisabled: false };
   const restored = restoreBackup(fresh, exportBackup(old), randomUUID);
   assert.equal(restored.exercises.length, fresh.exercises.length);
   assert.equal(restored.sets[0].exerciseId, fresh.exercises.find((e) => e.name === old.exercises[0].name).id);
-  assert.equal(new Set(restored.restTimerDisabledExerciseIds).size, restored.restTimerDisabledExerciseIds.length);
+  assert.equal(restored.restTimerDisabled, true);
+});
+
+test('legacy rest opt-outs are ignored, including malformed values', () => {
+  for (const value of [[1], null, 'obsolete']) {
+    const old = { ...fixture(), restTimerDisabledExerciseIds: value };
+    delete old.restTimerDisabled;
+    const parsed = parseBackup(JSON.stringify(old));
+    assert.equal(parsed.restTimerDisabled, false);
+    assert.equal(Object.hasOwn(parsed, 'restTimerDisabledExerciseIds'), false);
+    assert.ok(!exportBackup(parsed).includes('restTimerDisabledExerciseIds'));
+    assert.equal(restoreBackup({ ...seedState(), restTimerDisabled: true }, JSON.stringify(old), randomUUID).restTimerDisabled, false);
+  }
 });

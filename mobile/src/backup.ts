@@ -108,10 +108,11 @@ export function parseBackup(raw: string): AppState {
   const nextId = [...exercises, ...sessions, ...sets].reduce((id, r) => Math.max(id, r.id + 1), 1);
   const result: AppState = { ...seedState(), exercises, sessions, sets, presets, nextId,
     themeMode: p.themeMode as AppState['themeMode'], weekStartsMonday: bool(p.weekStartsMonday),
+    weightUnit: p.weightUnit === undefined ? 'kg' : p.weightUnit === 'kg' || p.weightUnit === 'lb' ? p.weightUnit : fail(),
     weightStepKg: number(p.weightStepKg, 0.01, 1000), restDurationSeconds: number(p.restDurationSeconds, 0, 86400),
     visibleAchievementMetrics: array(p.visibleAchievementMetrics).map(v => string(v)),
     exerciseWeightSteps: values(p.exerciseWeightSteps, 0.01, 1000), exerciseRestDurations: values(p.exerciseRestDurations, 0, 86400),
-    restTimerDisabledExerciseIds: ids(p.restTimerDisabledExerciseIds), sideSwitchRestExerciseIds: ids(p.sideSwitchRestExerciseIds), leftFirstExerciseIds: ids(p.leftFirstExerciseIds),
+    restTimerDisabled: p.restTimerDisabled === undefined ? false : bool(p.restTimerDisabled), sideSwitchRestExerciseIds: ids(p.sideSwitchRestExerciseIds), leftFirstExerciseIds: ids(p.leftFirstExerciseIds),
     selectedPresetId: selected && presetIds.has(selected) ? selected : presets[0]?.id,
     bodyMeasurements, heightCm: optionalNumber(legacyHeight(optionalNumber(p.heightCm, 0, 26000)), 50, 260),
     exerciseCatalogVersion: p.exerciseCatalogVersion === undefined ? 0 : integer(p.exerciseCatalogVersion),
@@ -133,11 +134,11 @@ export function exportBackup(state: AppState): string {
   // Parsing also whitelists fields inside exercises, presets and measurements.
   const clean = parseBackup(JSON.stringify(state));
   const { exercises, sessions, sets, presets, selectedPresetId, themeMode, weekStartsMonday,
-    weightStepKg, restDurationSeconds, visibleAchievementMetrics, exerciseWeightSteps, exerciseRestDurations,
-    restTimerDisabledExerciseIds, sideSwitchRestExerciseIds, leftFirstExerciseIds, bodyMeasurements, heightCm, exerciseCatalogVersion, homeGrowthExerciseId, homeProgress } = clean;
+    weightUnit, weightStepKg, restDurationSeconds, visibleAchievementMetrics, exerciseWeightSteps, exerciseRestDurations,
+    restTimerDisabled, sideSwitchRestExerciseIds, leftFirstExerciseIds, bodyMeasurements, heightCm, exerciseCatalogVersion, homeGrowthExerciseId, homeProgress } = clean;
   return JSON.stringify({ format: 'fitswipe', version: 1, data: { exercises, sessions, sets, presets, selectedPresetId,
-    themeMode, weekStartsMonday, weightStepKg, restDurationSeconds, visibleAchievementMetrics,
-    exerciseWeightSteps, exerciseRestDurations, restTimerDisabledExerciseIds, sideSwitchRestExerciseIds,
+    themeMode, weekStartsMonday, weightUnit, weightStepKg, restDurationSeconds, visibleAchievementMetrics,
+    exerciseWeightSteps, exerciseRestDurations, restTimerDisabled, sideSwitchRestExerciseIds,
     leftFirstExerciseIds, bodyMeasurements, heightCm, exerciseCatalogVersion, homeGrowthExerciseId, homeProgress } }, null, 2);
 }
 

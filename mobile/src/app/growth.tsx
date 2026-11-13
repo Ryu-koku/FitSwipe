@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useApp } from '../context';
-import { Button, Card, Chip, Screen, SectionTitle, Sheet, useTheme } from '../ui';
+import { feedback, Button, Card, Chip, Screen, SectionTitle, Sheet, useTheme } from '../ui';
 import {
   exerciseRecords,
   metricLabels,
@@ -51,7 +51,7 @@ export default function GrowthScreen() {
     (s) => s.status === 'COMPLETED' && localDay(s.startedAt) === selectedDate,
   );
   const summary = (record: ProgressRecord) =>
-    `${record.weight > 0 ? formatWeight(record.weight) : '重量なし'} × ${record.reps}回`;
+    `${record.weight > 0 ? formatWeight(record.weight, state.weightUnit) : '重量なし'} × ${record.reps}回`;
   const back = () => {
     if (router.canGoBack()) router.back();
     else router.replace('/');
@@ -94,7 +94,7 @@ export default function GrowthScreen() {
                     <Pressable
                       accessibilityRole="button"
                       accessibilityLabel={`${metricLabels[key]}を達成した${best.date}の記録を見る`}
-                      onPress={() => setSelectedDate(best.date)}
+                      onPress={() => { feedback(); return setSelectedDate(best.date); }}
                       style={{ minHeight: 48, justifyContent: 'center' }}
                     >
                       <Text style={[styles.body, { color: colors.primary, fontWeight: '700' }]}>
@@ -130,7 +130,7 @@ export default function GrowthScreen() {
                   key={date}
                   accessibilityRole="button"
                   accessibilityLabel={`${date}の全セットを見る`}
-                  onPress={() => setSelectedDate(date)}
+                  onPress={() => { feedback(); return setSelectedDate(date); }}
                   style={{
                     minHeight: 48,
                     paddingVertical: 12,

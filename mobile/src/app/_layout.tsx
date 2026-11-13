@@ -46,8 +46,11 @@ function AppLayout() {
           <RestNotifications />
           <View style={{ flex: 1 }}>
             <Stack
+              // Expo Router 58 ignores freezeOnBlur; hide the immediately covered route.
+              activityEnabled={1}
               screenOptions={{
                 headerShown: false,
+                freezeOnBlur: true,
                 contentStyle: { backgroundColor: colors.bg },
               }}
             />

@@ -25,7 +25,7 @@ function view(relative, exported, props = {}, state = {}) {
     if (name === 'react-native') return { Text: 'Text', View: 'View', Pressable: 'Pressable', ScrollView: 'ScrollView' };
     if (name === 'expo-router') return { router: { canGoBack: () => false }, useLocalSearchParams: () => ({ exerciseId: '1' }) };
     if (name === '../context') return { useApp: () => ({ state }) };
-    if (name === '../ui') return { useTheme: () => ({ styles: {}, colors: {} }), Card: 'Card', Chip: 'Chip', Button: 'Button', Screen: 'Screen', SectionTitle: 'SectionTitle', Sheet: 'Sheet' };
+    if (name === '../ui') return { feedback: () => {}, useTheme: () => ({ styles: {}, colors: {} }), Card: 'Card', Chip: 'Chip', Button: 'Button', Screen: 'Screen', SectionTitle: 'SectionTitle', Sheet: 'Sheet' };
     if (name.startsWith('../components/')) { const component = name.split('/').at(-1); return { [component]: component, ProgressTrend: 'ProgressTrend' }; }
     return original(name);
   };

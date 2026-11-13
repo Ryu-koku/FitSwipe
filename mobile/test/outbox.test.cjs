@@ -10,7 +10,10 @@ const {
 
 function shared() {
   let state = startWorkout(seedState());
-  while (state.workout) state = advanceWorkout(state);
+  while (state.workout) {
+    const next = advanceWorkout(state);
+    state = next === state ? require('../src/workout.ts').skipToNextExercise(state) : next;
+  }
   state.rooms = [
     {
       id: 'room-1',

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Alert, Animated, Image, Pressable, ScrollView, Text, View } from 'react-native';
 import type { RoomComparison } from '../types';
-import { useTheme } from '../ui';
+import { feedback, useTheme } from '../ui';
 import { isGoogleAvatar } from '../profile';
 import { useMotionPreference } from '../use-reduced-motion';
 
@@ -27,7 +27,7 @@ function Column({ member, index, max, own, onPress }: { member: RoomComparison['
     ]).start();
   }, [height, x, member.sets, max, index, reduced]);
   return <Animated.View style={{ position: 'absolute', left: 0, top: 0, width: 64, transform: [{ translateX: x }] }}>
-    <Pressable accessibilityRole="button" accessibilityLabel={`${member.name}${own ? '、あなた' : ''}、${member.rank}位、${member.sets}セット。詳細を見る`} onPress={onPress} style={{ alignItems: 'center' }}>
+    <Pressable accessibilityRole="button" accessibilityLabel={`${member.name}${own ? '、あなた' : ''}、${member.rank}位、${member.sets}セット。詳細を見る`} onPress={() => { feedback(); onPress(); }} style={{ alignItems: 'center' }}>
       <Text style={styles.small}>{member.rank}位</Text>
       <View style={{ height: 112, justifyContent: 'flex-end', alignItems: 'center', width: '100%', borderBottomWidth: 1, borderColor: colors.line }}>
         <Text style={[styles.body, { fontWeight: '800', color: own ? colors.primary : colors.ink }]}>{member.sets}</Text>
@@ -54,7 +54,7 @@ export function RoomComparisonChart({ comparison, ownId, onMember, enableMock = 
   })) : comparison.rankings;
   if (!competitive) return <>
     <Text style={[styles.body, { fontWeight: '800' }]}>{Number(comparison.month.slice(5))}月 · みんなの記録</Text>
-    {[...comparison.rankings].sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id)).map((member) => <Pressable key={member.id} accessibilityRole="button" accessibilityLabel={`${member.name}、${member.sets}セット。詳細を見る`} onPress={() => onMember(member.id)} style={{ paddingVertical: 12 }}>
+    {[...comparison.rankings].sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id)).map((member) => <Pressable key={member.id} accessibilityRole="button" accessibilityLabel={`${member.name}、${member.sets}セット。詳細を見る`} onPress={() => { feedback(); return onMember(member.id); }} style={{ paddingVertical: 12 }}>
       <MemberAvatar name={member.name} avatar={member.avatar} size={32} /><Text style={styles.body}>{member.id === ownId ? 'あなた' : member.name} · {member.sets}セット</Text>
     </Pressable>)}
     {!comparison.rankings.length && <Text style={styles.small}>共有しているメンバーはいません。</Text>}
@@ -63,7 +63,7 @@ export function RoomComparisonChart({ comparison, ownId, onMember, enableMock = 
   return <>
     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
       <Text style={[styles.body, { fontWeight: '800' }]}>{Number(comparison.month.slice(5))}月 · セット数</Text>
-      {__DEV__ && enableMock && <Pressable accessibilityRole="button" accessibilityLabel="モック表示を切り替え" onPress={() => setMockMembers((value) => !value)} hitSlop={10}>
+      {__DEV__ && enableMock && <Pressable accessibilityRole="button" accessibilityLabel="モック表示を切り替え" onPress={() => { feedback(); return setMockMembers((value) => !value); }} hitSlop={10}>
         <Text style={styles.small}>{showingMock ? 'モック' : '実データ'}</Text>
       </Pressable>}
     </View>

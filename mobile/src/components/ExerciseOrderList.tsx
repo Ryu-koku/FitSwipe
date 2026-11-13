@@ -104,11 +104,11 @@ export function ExerciseOrderList({ items, onMove, onEdit, onDelete, header, foo
             onDelete={onDelete ? () => { closeSwipe(); setPendingOrder(undefined); onDelete(item.id); } : undefined}>
           {(closeOnTap) => <Pressable accessibilityRole="button" accessibilityLabel={`${item.name}、${item.detail}。タップで編集`}
             accessibilityActions={[{ name: 'activate', label: '編集' }, ...(onDelete ? [{ name: 'delete', label: '削除' }] : [])]}
-            onAccessibilityAction={(event) => {
+            onAccessibilityAction={(event) => { feedback();
               if (event.nativeEvent.actionName === 'delete' && onDelete) { closeSwipe(); setPendingOrder(undefined); onDelete(item.id); }
               else if (event.nativeEvent.actionName === 'activate') onEdit(item.id);
             }}
-            onPress={() => { if (!closeOnTap()) { if (swipedId !== undefined) closeSwipe(); else onEdit(item.id); } }}>
+            onPress={() => { feedback(); if (!closeOnTap()) { if (swipedId !== undefined) closeSwipe(); else onEdit(item.id); } }}>
             <Card style={{ height: ROW - 8, marginBottom: 0, ...(onDelete ? { borderTopRightRadius: 0, borderBottomRightRadius: 0 } : {}), paddingHorizontal: 14, paddingVertical: 8, borderColor: dragging === item.id ? colors.primary : colors.line }}>
               <View style={styles.row}>
                 <ExercisePictogram name={item.name} size={48} animate={false} />
@@ -187,7 +187,7 @@ function DragGrip({ draggable = true, label, onStart, onMove, onEnd, onTap, onSt
     onPanResponderRelease: (_, gesture) => {
       if (axis === 'vertical') callbacks.current.onEnd();
       else if (axis === 'horizontal') callbacks.current.onSwipeEnd(gesture.dx);
-      else if (Math.abs(gesture.dx) < 6 && Math.abs(gesture.dy) < 6) callbacks.current.onTap();
+      else if (Math.abs(gesture.dx) < 6 && Math.abs(gesture.dy) < 6) { feedback(); callbacks.current.onTap(); }
     },
     onPanResponderTerminate: () => { if (axis === 'vertical') callbacks.current.onEnd(true); else if (axis === 'horizontal') callbacks.current.onSwipeEnd(0); },
     onPanResponderTerminationRequest: () => axis === 'none',
@@ -198,6 +198,6 @@ function DragGrip({ draggable = true, label, onStart, onMove, onEnd, onTap, onSt
   }, [draggable]);
   return <View collapsable={false} accessible accessibilityRole={draggable ? 'adjustable' : 'button'} accessibilityLabel={label}
     accessibilityActions={draggable ? [{ name: 'increment', label: '下へ' }, { name: 'decrement', label: '上へ' }] : [{ name: 'activate', label: '編集' }]}
-    onAccessibilityAction={(event) => { if (event.nativeEvent.actionName === 'activate') onTap(); else onStep(event.nativeEvent.actionName === 'increment' ? 1 : -1); }}
+    onAccessibilityAction={(event) => { feedback(); if (event.nativeEvent.actionName === 'activate') onTap(); else onStep(event.nativeEvent.actionName === 'increment' ? 1 : -1); }}
     style={style} {...responder?.panHandlers}>{children}</View>;
 }

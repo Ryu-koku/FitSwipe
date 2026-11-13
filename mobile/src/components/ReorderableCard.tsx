@@ -122,9 +122,9 @@ export function ReorderableCard({
         { name: 'increment', label: '下へ' },
         { name: 'decrement', label: '上へ' },
       ]}
-      onAccessibilityAction={(event) =>
-        onMove(event.nativeEvent.actionName === 'increment' ? 1 : -1)
-      }
+      onAccessibilityAction={(event) => {
+        feedback(); onMove(event.nativeEvent.actionName === 'increment' ? 1 : -1);
+      }}
       style={{
         minHeight: 44,
         minWidth: 44,

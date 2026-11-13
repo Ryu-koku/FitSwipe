@@ -13,7 +13,7 @@ function render(state = {}, reason, dark = true) {
   const original = mod.require.bind(mod);
   mod.require = name => {
     if (name === 'react-native') return { Text: 'Text', View: 'View', Pressable: 'Pressable', StyleSheet: { create: x => x } };
-    if (name === '../ui') return { Button: 'Button', Sheet: 'Sheet', feedback: () => {}, useTheme: () => ({ styles: { buttonText: { color: dark ? '#003731' : '#fff' } }, colors: { primary: dark ? '#72d6c9' : '#007f78', red: '#ffb4ab', bg: '#101a1c' } }) };
+    if (name === '../ui') return { feedback: () => {}, Button: 'Button', Sheet: 'Sheet', feedback: () => {}, useTheme: () => ({ styles: { buttonText: { color: dark ? '#003731' : '#fff' } }, colors: { primary: dark ? '#72d6c9' : '#007f78', red: '#ffb4ab', bg: '#101a1c' } }) };
     if (name === '../premium-context') return { usePremium: () => ({ plan: 'monthly', plans: ['monthly'], monthlyPrice: '¥300', lifetimePrice: '¥3,000', setPlan: value => calls.push(['plan', value]), price: '¥300', busy: false, premium: false, purchase: () => calls.push('purchase'), restore: () => calls.push('restore'), ...state }) };
     if (name === './AppIcon') return { AppIcon: 'AppIcon' };
     if (name === './LegalLinks') return { LegalLinks: 'LegalLinks' };
@@ -104,7 +104,7 @@ test('compact legal links share the restore row and open the existing legal URLs
   const opened = [];
   mod.require = name => {
     if (name === 'react-native') return { View: 'View', Text: 'Text', Pressable: 'Pressable' };
-    if (name === '../ui') return { Button: 'Button', useTheme: () => ({ colors: { primary: '#72d6c9' }, styles: { small: {} } }) };
+    if (name === '../ui') return { feedback: () => {}, Button: 'Button', useTheme: () => ({ colors: { primary: '#72d6c9' }, styles: { small: {} } }) };
     if (name === '../community-consent') return { openLegalUrl: url => opened.push(url) };
     if (name === '../legal') return { legalUrls: { terms: 'terms-url', privacy: 'privacy-url' } };
     return original(name);

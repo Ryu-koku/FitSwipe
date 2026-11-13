@@ -1,8 +1,8 @@
-import React, { useMemo, useState } from 'react';
+import React, { useLayoutEffect, useMemo, useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
-import { router } from 'expo-router';
+import { router, useNavigation } from 'expo-router';
 import { useApp } from '../context';
-import { Button, Card, Chip, IconButton, Sheet, useTheme } from '../ui';
+import { feedback, Button, Card, Chip, IconButton, Sheet, useTheme } from '../ui';
 import {
   dailyProgress,
   exerciseRecords,
@@ -31,10 +31,12 @@ export function ProgressTrend({
   onMetric: (metric: ProgressMetric) => void;
   compact?: boolean;
 }) {
+  const { state } = useApp();
   const { styles } = useTheme();
   const bodyweight = isBodyweight(records);
   const effectiveMetric = bodyweight ? 'reps' : metric;
-  const points = dailyProgress(records, effectiveMetric);
+  const today = new Date().toDateString();
+  const points = useMemo(() => dailyProgress(records, effectiveMetric, new Date(today)), [records, effectiveMetric, today]);
   return (
     <>
       {!bodyweight && (
@@ -70,7 +72,7 @@ export function ProgressTrend({
                   ? '直近90日に重量ありの完了記録がありません。'
                   : '直近90日に回数の完了記録がありません。'}
           </Text>
-          <Button label="トレーニングへ" onPress={() => router.push('/prepare')} />
+          <Button label="トレーニングへ" onPress={() => router.push(state.sessions.some((s) => s.status === 'IN_PROGRESS') ? '/workout' : '/prepare')} />
         </View>
       )}
       {effectiveMetric === 'estimated' && (
@@ -94,9 +96,24 @@ export function openProgress(exerciseId: number, side: ProgressSide, metric: Pro
   });
 }
 
-export function HomeProgress({ availableHeight = 0 }: { availableHeight?: number }) {
-  const [headerHeight, setHeaderHeight] = useState(44);
-  const [metricHeight, setMetricHeight] = useState(18);
+export function HomeProgress({ availableHeight = 0, layoutReady = true }: { availableHeight?: number; layoutReady?: boolean }) {
+  const [interactionsReady, setInteractionsReady] = useState(false);
+  const navigation = useNavigation<{
+    addListener(event: 'transitionStart' | 'transitionEnd', listener: () => void): () => void;
+  }>();
+  useLayoutEffect(() => {
+    // Initial routes and web may not emit transition events. A quiet period
+    // covers that case; an active native transition always waits for its end.
+    const timer = setTimeout(() => setInteractionsReady(true), 500);
+    const removeStart = navigation.addListener('transitionStart', () => clearTimeout(timer));
+    const removeEnd = navigation.addListener('transitionEnd', () => {
+      clearTimeout(timer);
+      setInteractionsReady(true);
+    });
+    return () => { clearTimeout(timer); removeStart(); removeEnd(); };
+  }, [navigation]);
+  const [headerHeight, setHeaderHeight] = useState(0);
+  const [metricHeight, setMetricHeight] = useState(0);
   const { state, update } = useApp();
   const { colors, styles } = useTheme();
   const [choosing, setChoosing] = useState(false);
@@ -105,19 +122,23 @@ export function HomeProgress({ availableHeight = 0 }: { availableHeight?: number
   const today = new Date().toDateString();
   const index = useMemo(
     () =>
-      progressIndex(
+      interactionsReady ? progressIndex(
         { exercises: state.exercises, sessions: state.sessions, sets: state.sets },
         new Date(today),
-      ),
-    [state.exercises, state.sessions, state.sets, today],
+      ) : null,
+    [interactionsReady, state.exercises, state.sessions, state.sets, today],
   );
-  const exercises = state.exercises.filter((e) => !e.archived);
+  const exercises = useMemo(() => state.exercises.filter((e) => !e.archived), [state.exercises]);
   const exercise = exercises.find((e) => e.id === state.homeGrowthExerciseId) ?? exercises[0];
   const side: ProgressSide = exercise?.mode === 'BILATERAL' ? preferences.side : 0;
-  const records = exercise ? exerciseRecords(index, exercise.id, side) : [];
-  const metric = isBodyweight(records) ? 'reps' : preferences.metric;
-  const rows =
-    preferences.view === 'ranking' ? progressRanking(state, index, preferences.ranking) : [];
+  const records = useMemo(() => index && exercise ? exerciseRecords(index, exercise.id, side) : [], [index, exercise, side]);
+  const bodyweight = useMemo(() => isBodyweight(records), [records]);
+  const metric = bodyweight ? 'reps' : preferences.metric;
+  const rows = useMemo(() =>
+    index && preferences.view === 'ranking' ? progressRanking(state, index, preferences.ranking, new Date(today)) : [],
+    // Ranking reads only exercises from state; history is captured by index.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [index, state.exercises, preferences.view, preferences.ranking, today]);
   const change = (patch: Partial<ProgressPreferences>) =>
     update((s) => ({
       ...s,
@@ -126,13 +147,13 @@ export function HomeProgress({ availableHeight = 0 }: { availableHeight?: number
   const matching = exercises.filter((e) =>
     e.name.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()),
   );
-  const points = dailyProgress(records, metric);
-  const open = () => preferences.view === 'ranking' ? router.push('/growth') : exercise ? openProgress(exercise.id, side, metric) : router.push('/prepare');
+  const points = useMemo(() => dailyProgress(records, metric, new Date(today)), [records, metric, today]);
+  const open = () => preferences.view === 'ranking' ? router.push('/growth') : exercise ? openProgress(exercise.id, side, metric) : router.push(state.sessions.some((s) => s.status === 'IN_PROGRESS') ? '/workout' : '/prepare');
   return (
     <>
-      <Pressable accessibilityRole="button" accessibilityLabel="記録の詳細を見る" onPress={open} style={{ marginTop: 12 }}>
+      <Pressable accessibilityRole="button" accessibilityLabel="記録の詳細を見る" onPress={() => { feedback(); open(); }} style={{ marginTop: 12 }}>
       <Card style={{ minHeight: availableHeight, marginBottom: 0, padding: 16 }}>
-        <View onLayout={(event) => setHeaderHeight(event.nativeEvent.layout.height)} style={styles.row}>
+        <View onLayout={(event) => { const next = event.nativeEvent.layout.height; if (Math.abs(next - headerHeight) >= 1) setHeaderHeight(next); }} style={styles.row}>
           <Text numberOfLines={1} style={[styles.body, { flex: 1, fontWeight: '800', fontSize: 17 }]}>
             {preferences.view === 'ranking' ? preferences.ranking === 'change' ? '伸び率' : '自己ベスト更新' : `${exercise?.name ?? '筋力'}${exercise?.mode === 'BILATERAL' ? side === 1 ? '（左）' : '（右）' : ''}`}
           </Text>
@@ -140,7 +161,7 @@ export function HomeProgress({ availableHeight = 0 }: { availableHeight?: number
         </View>
         {preferences.view === 'ranking' ? rows.map((row, position) => (
           <Pressable key={`${row.exerciseId}:${row.side}`} accessibilityRole="button" accessibilityLabel={`${row.name}の詳細を見る`}
-            onPress={() => openProgress(row.exerciseId, row.side, row.metric)}
+            onPress={() => { feedback(); return openProgress(row.exerciseId, row.side, row.metric); }}
             style={[styles.row, { minHeight: 44, borderBottomWidth: 1, borderColor: colors.line }]}>
             <Text style={[styles.body, { color: colors.primary }]}>{position + 1}</Text>
             <Text numberOfLines={1} style={[styles.body, { flex: 1, fontWeight: '700' }]}>{row.name}</Text>
@@ -149,10 +170,10 @@ export function HomeProgress({ availableHeight = 0 }: { availableHeight?: number
             </Text>
           </Pressable>
         )) : <>
-          <Text onLayout={(event) => setMetricHeight(event.nativeEvent.layout.height)} style={styles.small}>{metricLabels[metric]}</Text>
-          {points.length ? <ProgressChart compact availableHeight={Math.max(0, availableHeight - 34 - headerHeight - metricHeight)} points={points} unit={metric === 'reps' ? '回' : 'kg'} /> : null}
+          <Text onLayout={(event) => { const next = event.nativeEvent.layout.height; if (Math.abs(next - metricHeight) >= 1) setMetricHeight(next); }} style={styles.small}>{metricLabels[metric]}</Text>
+          {points.length ? <ProgressChart compact layoutReady={layoutReady && headerHeight > 0 && metricHeight > 0} availableHeight={Math.max(0, availableHeight - 34 - headerHeight - metricHeight)} points={points} unit={metric === 'reps' ? '回' : 'kg'} /> : null}
         </>}
-        {(preferences.view === 'ranking' ? !rows.length : !points.length) && <Text style={[styles.small, { paddingVertical: 16 }]}>記録なし</Text>}
+        {interactionsReady && (preferences.view === 'ranking' ? !rows.length : !points.length) && <Text style={[styles.small, { paddingVertical: 16 }]}>記録なし</Text>}
       </Card>
       </Pressable>
       {choosing && (
@@ -163,7 +184,7 @@ export function HomeProgress({ availableHeight = 0 }: { availableHeight?: number
             <Chip label="自己ベスト更新" active={preferences.view === 'ranking' && preferences.ranking === 'updates'} onPress={() => change({ view: 'ranking', ranking: 'updates' })} />
           </View>
           {preferences.view === 'trend' && <>
-          {!isBodyweight(records) && <View style={[styles.wrap, { marginTop: 8 }]}>
+          {!bodyweight && <View style={[styles.wrap, { marginTop: 8 }]}>
             {(['estimated', 'weight', 'reps'] as const).map((key) => <Chip key={key} label={metricLabels[key]} active={metric === key} onPress={() => change({ metric: key })} />)}
           </View>}
           {exercise?.mode === 'BILATERAL' && <View style={[styles.wrap, { marginTop: 8 }]}>

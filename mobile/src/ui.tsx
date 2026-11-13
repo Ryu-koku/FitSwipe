@@ -513,10 +513,12 @@ export function Sheet({
     },
     onPanResponderRelease: (_, gesture) => {
       if (gesture.dy > 100 || (gesture.dy > 40 && gesture.vy > 0.8)) {
+        feedback();
         dismiss();
       } else {
         const height = gesture.dy < -40 ? availableSheetHeight
           : gesture.dy > 40 ? availableSheetHeight * 0.75 : settledHeight;
+        if (height !== settledHeight) feedback();
         setSettledHeight(height);
         Animated.timing(sheetHeight, { toValue: height, duration: 180, useNativeDriver: false }).start();
         Animated.spring(sheetOffset, { toValue: 0, useNativeDriver: false, overshootClamping: true }).start();
@@ -542,7 +544,7 @@ export function Sheet({
         {!fullScreen && <><Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: '#0007', opacity: backdropOpacity }]} />
         <Pressable
           accessibilityLabel="閉じる"
-          onPress={dismiss}
+          onPress={() => { feedback(); dismiss(); }}
           style={popup ? StyleSheet.absoluteFill : { flex: 1, minHeight: 20 }}
         /></>}
         <Animated.View

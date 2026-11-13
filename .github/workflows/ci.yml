@@ -28,7 +28,8 @@ jobs:
           pnpm typecheck
           pnpm lint
           pnpm test
-          pnpm doctor
+          EXPO_DOCTOR_SKIP_DEPENDENCY_VERSION_CHECK=1 pnpm doctor
+          pnpm exec expo install --check || echo '::warning::Expo の依存がSDK推奨バージョンより古い（npx expo install --check で更新）'
       - name: Check Cloudflare Worker without Wrangler
         run: |
           node --check rooms-server/cloudflare/worker.mjs

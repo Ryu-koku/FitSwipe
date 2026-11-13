@@ -218,6 +218,9 @@ async function encode(state: AppState) {
 }
 
 async function hydrate(state: AppState) {
+  state.restTimerDisabled = state.restTimerDisabled === true;
+  delete (state as AppState & { restTimerDisabledExerciseIds?: unknown }).restTimerDisabledExerciseIds;
+  state.weightUnit = state.weightUnit === 'lb' ? 'lb' : 'kg';
   // Keep row objects when nothing changes: saves skip unchanged rows by identity.
   state.exercises = state.exercises.map((exercise) => {
     const muscleGroup = exerciseGroup(exercise);

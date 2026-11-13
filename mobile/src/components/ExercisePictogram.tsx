@@ -1,14 +1,17 @@
-import React, { useEffect, useId, useRef, useState } from 'react';
+import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 
 import { AppIcon } from './AppIcon';
-import { Sheet, useTheme } from '../ui';
+import { feedback, Sheet, useTheme } from '../ui';
 import { exerciseVisual, playExerciseIllustration } from '../exercise-visuals';
 import { exerciseVisualAssets } from '../exercise-visual-assets';
 import { useExerciseMotion, useExerciseVisibility } from '../exercise-motion';
 
-export function ExercisePictogram({ name, large = false, animate = true, preview = false, inPreview = false, size }: {
+// Only remember animations actually displayed, not merely requested or loaded.
+const displayedAnimations = new Set<string>();
+
+export const ExercisePictogram = React.memo(function ExercisePictogram({ name, large = false, animate = true, preview = false, inPreview = false, size }: {
   name: string;
   large?: boolean;
   animate?: boolean;
@@ -19,8 +22,11 @@ export function ExercisePictogram({ name, large = false, animate = true, preview
   const { colors, styles } = useTheme();
   const visual = exerciseVisual(name);
   const assets = visual && exerciseVisualAssets[visual.key];
+  const warmed = !!visual && displayedAnimations.has(visual.key);
+  const [, setDisplayedAnimation] = useState<string>();
   const motion = useExerciseMotion();
   const host = useRef<React.ElementRef<typeof View>>(null);
+  const image = useRef<Image>(null);
   const visible = useExerciseVisibility(host);
   const [open, setOpen] = useState(false);
   const [failed, setFailed] = useState<number>();
@@ -28,7 +34,20 @@ export function ExercisePictogram({ name, large = false, animate = true, preview
   const overlay = motion?.overlay;
   useEffect(() => () => overlay?.(id, false), [overlay, id]);
   const show = (value: boolean) => { overlay?.(id, value); setOpen(value); };
-  const playing = playExerciseIllustration({
+  // A new asset must display its own poster, even when this component is reused.
+  const poster = useMemo(() => ({ source: assets?.poster }), [assets?.poster]);
+  const [displayedPoster, setDisplayedPoster] = useState<typeof poster>();
+  const [readyPoster, setReadyPoster] = useState<typeof poster>();
+  useEffect(() => {
+    if (warmed || displayedPoster !== poster) return;
+    let active = true;
+    // RN 0.88 removed InteractionManager; defer until the JS thread is idle.
+    const handle = requestIdleCallback(() => {
+      if (active) setReadyPoster(poster);
+    });
+    return () => { active = false; cancelIdleCallback(handle); };
+  }, [displayedPoster, poster, warmed]);
+  const eligible = (warmed || readyPoster === poster) && playExerciseIllustration({
     enabled: animate && !open,
     animated: !!visual?.animated,
     visible,
@@ -37,14 +56,45 @@ export function ExercisePictogram({ name, large = false, animate = true, preview
     reducedMotion: motion?.reducedMotion,
     covered: !!motion?.covered && !inPreview,
   });
-  const candidate = assets && (playing ? assets.animation : assets.poster);
+  const enqueue = motion?.enqueue;
+  const request = useMemo(() => ({ poster, eligible, enqueue }), [poster, eligible, enqueue]);
+  const [released, setReleased] = useState<typeof request>();
+  useEffect(() => {
+    if (warmed || !request.eligible) return;
+    let active = true;
+    const release = () => { if (active) setReleased(request); };
+    const cancel = enqueue ? enqueue(release) : (release(), undefined);
+    return () => { active = false; cancel?.(); };
+  }, [request, enqueue, warmed]);
+  const playing = eligible && (warmed || released === request);
+  useEffect(() => {
+    if (playing) void image.current?.startAnimating();
+    else void image.current?.stopAnimating();
+  }, [playing]);
+  // Keep the decoded animation source while paused, including before measurement.
+  const candidate = assets && ((warmed || playing) ? assets.animation : assets.poster);
   const source = assets && failed === candidate ? assets.poster : candidate;
   const content = source !== undefined && failed !== assets?.poster ? <Image
+    ref={image}
     source={source}
+    placeholder={source}
+    placeholderContentFit="contain"
     contentFit="contain"
+    cachePolicy="memory-disk"
+    onLoad={() => {
+      if (playing) void image.current?.startAnimating();
+    }}
+    onDisplay={() => {
+      if (playing) void image.current?.startAnimating();
+      if (source === poster.source) setDisplayedPoster(poster);
+      if (playing && visual && source === assets?.animation) {
+        displayedAnimations.add(visual.key);
+        setDisplayedAnimation(visual.key);
+      }
+    }}
     autoplay={playing}
     transition={0}
-    recyclingKey={`${visual!.key}:${playing ? 'motion' : 'still'}`}
+    recyclingKey={visual!.key}
     accessible={large}
     accessibilityLabel={`${name}の動作の見本`}
     onError={() => setFailed(source)}
@@ -59,7 +109,7 @@ export function ExercisePictogram({ name, large = false, animate = true, preview
   if (!preview || large) return picture;
   return <>
     <Pressable accessibilityRole="button" accessibilityLabel={`${name}の動きを拡大する`}
-      onPress={(event) => { event.stopPropagation(); show(true); }}
+      onPress={(event) => { feedback(); event.stopPropagation(); show(true); }}
       style={{ borderWidth: 1, borderColor: colors.line, backgroundColor: colors.surface, borderRadius: 10, overflow: 'hidden', flexShrink: 0 }}>
       {picture}
     </Pressable>
@@ -68,4 +118,4 @@ export function ExercisePictogram({ name, large = false, animate = true, preview
       {!visual?.animated && visual && <Text style={[styles.small, { textAlign: 'center' }]}>姿勢を保つ種目です</Text>}
     </Sheet>}
   </>;
-}
+});
