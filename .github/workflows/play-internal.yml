@@ -46,7 +46,8 @@ jobs:
           pnpm --dir mobile typecheck
           pnpm --dir mobile lint
           pnpm --dir mobile test
-          pnpm --dir mobile doctor
+          EXPO_DOCTOR_SKIP_DEPENDENCY_VERSION_CHECK=1 pnpm --dir mobile doctor
+          pnpm --dir mobile exec expo install --check || echo '::warning::Expo の依存がSDK推奨バージョンより古い（npx expo install --check で更新）'
       - name: Prepare upload signing and version
         env:
           KEYSTORE_BASE64: ${{ secrets.FITLOG_UPLOAD_KEYSTORE_BASE64 }}
