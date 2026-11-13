@@ -7,6 +7,7 @@ import {
   WorkoutPreset,
 } from './types';
 import { exerciseGroup } from './exercise-groups';
+import { defaultHomeDisplay } from './home-display';
 import { ensureExerciseCatalog } from './exercise-catalog';
 
 export const now = () => new Date().toISOString();
@@ -86,6 +87,7 @@ export function seedState(): AppState {
       },
     ],
     selectedPresetId: 'gym',
+    homeDisplay: defaultHomeDisplay(),
     themeMode: 'system',
     weekStartsMonday: false,
     weightUnit: 'kg',
@@ -126,9 +128,9 @@ export const presetColor = (preset: Pick<WorkoutPreset, 'color'> | undefined, fa
 export const selectedPreset = (state: AppState) =>
   state.presets.find((p) => p.id === state.selectedPresetId) ??
   state.presets[0];
-export const completedSessions = (state: AppState) =>
+export const completedSessions = (state: Pick<AppState, 'sessions'>) =>
   state.sessions.filter((s) => s.status === 'COMPLETED');
-export const completedSets = (state: AppState) =>
+export const completedSets = (state: Pick<AppState, 'sets'>) =>
   state.sets.filter((set) => set.isCompleted);
 
 // Shared volume definition: bilateral work counts both sides.
@@ -416,11 +418,10 @@ export function indexSessionSets(sets: AppState['sets']) {
   return index;
 }
 
-export function previousSet(
+export function previousSessionSets(
   state: Pick<AppState, 'sessions' | 'sets'>,
   exerciseId: number,
   sessionId: number,
-  setOrder?: number,
   side: 'normal' | 'left' | 'right' = 'normal',
   setsBySession = indexSessionSets(state.sets),
 ) {
@@ -436,9 +437,20 @@ export function previousSet(
       (side === 'normal' ? set.isCompleted : set[`${side}Completed`]),
     );
     if (sets.length) {
-      return sets.find((set) => set.setOrder === setOrder) ??
-        sets.reduce((last, set) => set.setOrder > last.setOrder ? set : last);
+      return sets.sort((a, b) => a.setOrder - b.setOrder);
     }
   }
-  return undefined;
+  return [];
+}
+
+export function previousSet(
+  state: Pick<AppState, 'sessions' | 'sets'>,
+  exerciseId: number,
+  sessionId: number,
+  setOrder?: number,
+  side: 'normal' | 'left' | 'right' = 'normal',
+  setsBySession = indexSessionSets(state.sets),
+) {
+  const sets = previousSessionSets(state, exerciseId, sessionId, side, setsBySession);
+  return sets.find((set) => set.setOrder === setOrder) ?? sets.at(-1);
 }

@@ -18,7 +18,7 @@ export type ProgressRecord = {
 };
 export type ProgressPoint = { date: string; value: number };
 export const metricLabels: Record<ProgressMetric, string> = {
-  estimated: '推定最大重量',
+  estimated: '1RM',
   weight: '最大重量',
   reps: '最多回数',
 };

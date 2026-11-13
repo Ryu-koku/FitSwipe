@@ -1,6 +1,6 @@
 import type { AppState, Exercise } from './types';
 import { exerciseKey } from './exercise-catalog';
-import { exerciseDefaults, resizeSets } from './workout';
+import { presetExerciseDefaults, resizeSets } from './workout';
 
 // Old imports or sync data can contain equal exercises with different IDs.
 // Keep their records intact while offering each name/mode only once.
@@ -41,7 +41,7 @@ export function addPresetExercises(state: AppState, presetId: string, ids: numbe
       exercises: [...preset.exercises, ...[...new Set(ids)].flatMap((id) => {
         const exercise = state.exercises.find((item) => item.id === id && !item.archived);
         return exercise && !preset.exercises.some((config) => config.exerciseId === id)
-          ? [exerciseDefaults(exercise)] : [];
+          ? [presetExerciseDefaults(id)] : [];
       })],
     }),
   };

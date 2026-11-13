@@ -16,6 +16,7 @@ function fixture(component, pathname, active) {
   mod.filename = filename; mod.paths = Module._nodeModulePaths(path.dirname(filename));
   const original = mod.require.bind(mod);
   mod.require = name => {
+    if (name === '../tour') return { TourProvider: 'TourProvider', useTour: () => ({ active: false, step: null, start: () => {}, notify: () => {} }), useTourTarget: () => ({}) };
     if (name === 'react') return {
       useState: initial => { const i = cursor++; if (!(i in slots)) slots[i] = initial; return [slots[i], value => { slots[i] = value; }]; },
       useRef: initial => { const i = cursor++; return slots[i] ??= { current: initial }; },

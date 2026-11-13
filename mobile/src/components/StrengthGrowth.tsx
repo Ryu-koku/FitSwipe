@@ -29,14 +29,14 @@ export function StrengthGrowth({ compact = false, height = 180 }: { compact?: bo
   return (
     <>
       {!compact && <SectionTitle>筋力の成長</SectionTitle>}
-      {!compact && <Card><Text style={styles.body}>RM計算（推定1RM）</Text><View style={styles.row}><TextInput value={weight} onChangeText={setWeight} keyboardType="decimal-pad" placeholder={`重量 ${state.weightUnit}`} style={{ flex: 1, color: colors.ink, borderWidth: 1, borderColor: colors.line, padding: 10, borderRadius: 10 }} /><TextInput value={reps} onChangeText={setReps} keyboardType="number-pad" placeholder="回数 1〜12" style={{ flex: 1, color: colors.ink, borderWidth: 1, borderColor: colors.line, padding: 10, borderRadius: 10 }} /></View><Text style={styles.metric}>{formatWeight(estimate, state.weightUnit)}</Text><Text style={styles.small}>Epley式による推定値です。実際の最大重量ではありません。</Text></Card>}
+      {!compact && <Card><Text style={styles.body}>RM計算（1RM）</Text><View style={styles.row}><TextInput value={weight} onChangeText={setWeight} keyboardType="decimal-pad" placeholder={`重量 ${state.weightUnit}`} style={{ flex: 1, color: colors.ink, borderWidth: 1, borderColor: colors.line, padding: 10, borderRadius: 10 }} /><TextInput value={reps} onChangeText={setReps} keyboardType="number-pad" placeholder="回数 1〜12" style={{ flex: 1, color: colors.ink, borderWidth: 1, borderColor: colors.line, padding: 10, borderRadius: 10 }} /></View><Text style={styles.metric}>{formatWeight(estimate, state.weightUnit)}</Text></Card>}
       <Card style={compact ? { padding: 12, marginBottom: 0 } : undefined}>
         {compact && <View style={styles.row}><Text style={[styles.body, { fontWeight: '700' }]}>筋力の成長</Text><Text accessibilityRole="button" onPress={() => { feedback(); router.push('/growth'); }} style={[styles.tab, { paddingVertical: 4 }]}>詳しく見る ›</Text></View>}
         <View style={styles.row}>
           <Text style={[styles.body, { flex: 1 }]}>{exercise?.name ?? '種目がありません'}</Text>
           {!compact && <Button label="種目を選ぶ" secondary onPress={() => setChoosing(true)} />}
         </View>
-        <Text style={styles.small}>推定最大重量（{state.weightUnit}）・直近90日</Text>
+        <Text style={styles.small}>1RM（{state.weightUnit}）・直近90日</Text>
         {bilateral && !compact && <View style={styles.wrap}>
           <Chip label="左" active={side === 1} onPress={() => setSide(1)} />
           <Chip label="右" active={side === 2} onPress={() => setSide(2)} />
@@ -57,7 +57,6 @@ export function StrengthGrowth({ compact = false, height = 180 }: { compact?: bo
           </View>
           {!compact && <View style={styles.row}><Text style={styles.small}>{points[0].date}</Text><Text style={styles.small}>{points.length > 1 ? points[points.length - 1].date : '記録が増えると線で表示'}</Text></View>}
         </>}
-        {!compact && <Text style={[styles.small, { marginTop: 12 }]}>1回だけ持ち上げられる最大重量の推定値。同日の最大値を表示します。実測値ではありません。</Text>}
       </Card>
       {choosing && <Sheet title="成長を見る種目" onClose={() => setChoosing(false)}>
         {exercises.map((e) => <Button key={e.id} label={e.name} secondary={e.id !== exercise?.id} onPress={() => {

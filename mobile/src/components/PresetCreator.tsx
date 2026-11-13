@@ -1,5 +1,3 @@
-import { formatWeight } from '../logic';
-import { WeightField } from './WeightField';
 import { canAddPreset } from '../premium';
 import { usePremium } from '../premium-context';
 import React, { useRef, useState } from 'react';
@@ -7,7 +5,7 @@ import { Alert, Keyboard, Text, View } from 'react-native';
 import { randomUUID } from 'expo-crypto';
 import { useApp } from '../context';
 import type { PresetExerciseConfig } from '../types';
-import { exerciseDefaults } from '../workout';
+import { presetExerciseDefaults } from '../workout';
 import { moveItem } from '../reorder';
 import { Button, Field, NumberField, Sheet, useTheme } from '../ui';
 import { ExerciseEditor } from './ExerciseEditor';
@@ -83,14 +81,14 @@ export function PresetCreator({ onClose }: { onClose: () => void }) {
       </View>
       <ExerciseOrderList items={configs.map((item) => ({ id: item.exerciseId,
         name: state.exercises.find((e) => e.id === item.exerciseId)?.name ?? '削除された種目',
-        detail: `${item.sets}セット × ${item.reps ?? '—'}回 · ${state.exercises.find((e) => e.id === item.exerciseId)?.mode === 'BILATERAL' ? `左${formatWeight(item.leftWeightKg ?? 0, state.weightUnit)} / 右${formatWeight(item.rightWeightKg ?? 0, state.weightUnit)}` : formatWeight(item.weightKg ?? 0, state.weightUnit)}`,
+        detail: `${item.sets}セット`,
       }))}
         onEdit={(exerciseId) => { Keyboard.dismiss(); setEditing(exerciseId); }}
         onMove={(from, to) => setConfigs((items) => moveItem(items, from, to))}
         onDelete={(exerciseId) => setConfigs((items) => items.filter((item) => item.exerciseId !== exerciseId))}
         header={<View style={{ paddingBottom: 12 }}>
           <Text style={styles.sectionTitle}>種目{configs.length ? ` · ${configs.length}種目` : ''}</Text>
-          <Text style={styles.small}>{configs.length ? 'タップで重量・回数・セット数を変更。ドラッグで並べ替え、左スワイプで削除。' : 'まずは種目を選びましょう。複数まとめて追加できます。'}</Text>
+          <Text style={styles.small}>{configs.length ? 'タップでセット数を変更。ドラッグで並べ替え、左スワイプで削除。' : 'まずは種目を選びましょう。複数まとめて追加できます。'}</Text>
         </View>}
         footer={<Button label={configs.length ? '＋ 種目を追加' : '種目を選ぶ'} secondary={configs.length > 0}
           onPress={() => { Keyboard.dismiss(); setAdding(true); }} />} />
@@ -103,15 +101,10 @@ export function PresetCreator({ onClose }: { onClose: () => void }) {
     {adding && <ExerciseEditor onClose={() => setAdding(false)} excludedIds={configs.map((item) => item.exerciseId)}
       onAdded={(ids) => setConfigs((items) => [...items, ...[...new Set(ids)].flatMap((exerciseId) => {
         const item = getState().exercises.find((e) => e.id === exerciseId && !e.archived);
-        return item && !items.some((c) => c.exerciseId === exerciseId) ? [exerciseDefaults(item)] : [];
+        return item && !items.some((c) => c.exerciseId === exerciseId) ? [presetExerciseDefaults(exerciseId)] : [];
       })])} />}
     {config && exercise && <Sheet title={exercise.name} onClose={() => setEditing(undefined)}>
-      {exercise.mode === 'BILATERAL' ? <View style={styles.row}>
-        <WeightField label="左kg" value={config.leftWeightKg} onChange={(leftWeightKg) => patch({ leftWeightKg })} />
-        <WeightField label="右kg" value={config.rightWeightKg} onChange={(rightWeightKg) => patch({ rightWeightKg })} />
-      </View> : <WeightField label="重量（kg）" value={config.weightKg} onChange={(weightKg) => patch({ weightKg })} />}
       <View style={styles.row}>
-        <NumberField label="回数" value={config.reps} integer onChange={(reps) => patch({ reps })} />
         <NumberField label="セット数" value={config.sets} integer onChange={(sets) => patch({ sets: Math.max(1, Math.min(30, sets ?? 1)) })} />
       </View>
       <Button label="完了" onPress={() => setEditing(undefined)} />

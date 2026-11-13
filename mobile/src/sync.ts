@@ -272,6 +272,7 @@ export function mergeGuest(account: AppState, guest: AppState, uuid: () => strin
     heightCm: guest.heightCm ?? account.heightCm,
     homeGrowthExerciseId: guest.homeGrowthExerciseId ? exercises.get(guest.homeGrowthExerciseId) : account.homeGrowthExerciseId,
     homeProgress: guest.homeProgress ?? account.homeProgress,
+    homeDisplay: guest.homeDisplay ?? account.homeDisplay,
     selectedPresetId: guest.selectedPresetId ? presets.get(guest.selectedPresetId) : account.selectedPresetId,
     themeMode: guest.themeMode, weekStartsMonday: guest.weekStartsMonday,
     weightUnit: guest.weightUnit ?? 'kg',

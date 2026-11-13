@@ -13,11 +13,12 @@ function layout(state) {
   module.filename = filename; module.paths = Module._nodeModulePaths(path.dirname(filename));
   const original = module.require.bind(module);
   module.require = name => {
+    if (name === '../tour') return { TourProvider: 'TourProvider', useTour: () => ({ active: false, step: null, start: () => {}, notify: () => {} }), useTourTarget: () => ({}) };
     if (name === '../premium-context') return { PremiumProvider: 'PremiumProvider' };
     if (name === 'expo-router') return { Stack: 'Stack', usePathname: () => '/' };
     if (name === '../context') return { AppProvider: 'Provider', useApp: () => ({ state, ready: true }) };
     if (name === '../ui') return { ThemeProvider: 'Theme', useTheme: () => ({ colors: {}, styles: {} }) };
-    if (name === 'react-native') return { ActivityIndicator: 'ActivityIndicator', ScrollView: 'ScrollView', Text: 'Text', View: 'View' };
+    if (name === 'react-native') return { ActivityIndicator: 'ActivityIndicator', LogBox: { ignoreLogs: () => {} }, ScrollView: 'ScrollView', Text: 'Text', View: 'View' };
     if (name === 'react-native-safe-area-context') return { SafeAreaProvider: 'SafeAreaProvider', SafeAreaView: 'SafeAreaView' };
     if (name === 'expo-status-bar') return { StatusBar: 'StatusBar' };
     if (name === '../components/AccountPanel') return { AccountPanel: 'AccountPanel' };

@@ -3,6 +3,7 @@ import { PRESET_COLORS, seedState } from './logic';
 import { mergeGuest } from './sync';
 import { nextId } from './workout';
 import { legacyHeight, migrateLegacyData } from './legacy-data';
+import { defaultHomeDisplay } from './home-display';
 
 function fail(): never { throw new Error('バックアップの形式・値・参照先を確認してください。記録は変更していません。'); }
 function object(v: unknown): Record<string, unknown> {
@@ -125,6 +126,17 @@ export function parseBackup(raw: string): AppState {
     result.homeProgress = { view: preferences.view as 'trend' | 'ranking', metric: preferences.metric as 'estimated' | 'weight' | 'reps',
       ranking: preferences.ranking as 'change' | 'updates', side: preferences.side as 1 | 2 };
   }
+  if (p.homeDisplay !== undefined) {
+    const display = object(p.homeDisplay);
+    const cards = array(display.cards).map(value => {
+      const card = object(value);
+      if (card.id !== 'progress' && card.id !== 'muscleSets') fail();
+      return { id: card.id as 'progress' | 'muscleSets', visible: bool(card.visible) };
+    });
+    if (cards.length !== 2 || new Set(cards.map(card => card.id)).size !== 2 ||
+        !['small', 'medium', 'large'].includes(String(display.progressSize))) fail();
+    result.homeDisplay = { cards, progressSize: display.progressSize as 'small' | 'medium' | 'large' };
+  } else result.homeDisplay = defaultHomeDisplay();
   const repaired = migrateLegacyData(result);
   if (repaired.sets.some(s => s.setOrder < 1 || s.setOrder > 100)) fail();
   return repaired;
@@ -135,11 +147,11 @@ export function exportBackup(state: AppState): string {
   const clean = parseBackup(JSON.stringify(state));
   const { exercises, sessions, sets, presets, selectedPresetId, themeMode, weekStartsMonday,
     weightUnit, weightStepKg, restDurationSeconds, visibleAchievementMetrics, exerciseWeightSteps, exerciseRestDurations,
-    restTimerDisabled, sideSwitchRestExerciseIds, leftFirstExerciseIds, bodyMeasurements, heightCm, exerciseCatalogVersion, homeGrowthExerciseId, homeProgress } = clean;
+    restTimerDisabled, sideSwitchRestExerciseIds, leftFirstExerciseIds, bodyMeasurements, heightCm, exerciseCatalogVersion, homeGrowthExerciseId, homeProgress, homeDisplay } = clean;
   return JSON.stringify({ format: 'fitswipe', version: 1, data: { exercises, sessions, sets, presets, selectedPresetId,
     themeMode, weekStartsMonday, weightUnit, weightStepKg, restDurationSeconds, visibleAchievementMetrics,
     exerciseWeightSteps, exerciseRestDurations, restTimerDisabled, sideSwitchRestExerciseIds,
-    leftFirstExerciseIds, bodyMeasurements, heightCm, exerciseCatalogVersion, homeGrowthExerciseId, homeProgress } }, null, 2);
+    leftFirstExerciseIds, bodyMeasurements, heightCm, exerciseCatalogVersion, homeGrowthExerciseId, homeProgress, homeDisplay } }, null, 2);
 }
 
 export function restoreBackup(current: AppState, raw: string, uuid: () => string): AppState {

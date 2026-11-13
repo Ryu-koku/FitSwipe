@@ -1,15 +1,13 @@
 import React from 'react';
 import { Pressable, Text, View } from 'react-native';
-import type { AppState, Exercise, PresetExerciseConfig } from '../types';
-import { formatWeight } from '../logic';
+import type { Exercise, PresetExerciseConfig } from '../types';
 import { feedback, Card, useTheme } from '../ui';
 import { AppIcon } from './AppIcon';
 import { ExercisePictogram } from './ExercisePictogram';
 
-export const PrepareExerciseCard = React.memo(function PrepareExerciseCard({ exercise, config, weightUnit, animate, onEdit }: {
+export const PrepareExerciseCard = React.memo(function PrepareExerciseCard({ exercise, config, animate, onEdit }: {
   exercise: Exercise;
   config: PresetExerciseConfig;
-  weightUnit: AppState['weightUnit'];
   animate: boolean;
   onEdit: (exerciseId: number) => void;
 }) {
@@ -21,11 +19,7 @@ export const PrepareExerciseCard = React.memo(function PrepareExerciseCard({ exe
         onPress={() => { feedback(); return onEdit(exercise.id); }} style={({ pressed }) => [{ flex: 1, minHeight: 60, flexDirection: 'row', alignItems: 'center', gap: 8 }, pressed && styles.pressed]}>
       <View style={{ flex: 1 }}>
         <Text style={[styles.body, { fontWeight: '700', fontSize: 17 }]}>{exercise.name}</Text>
-        <Text style={[styles.small, { marginTop: 4 }]}>
-          {exercise.mode === 'BILATERAL'
-            ? `左 ${formatWeight(config.leftWeightKg, weightUnit)} / 右 ${formatWeight(config.rightWeightKg, weightUnit)}`
-            : formatWeight(config.weightKg, weightUnit)} × {config.reps ?? '—'}回 · {config.sets}セット
-        </Text>
+        <Text style={[styles.small, { marginTop: 4 }]}>{config.sets}セット</Text>
       </View>
       <AppIcon name="next" color={colors.muted} size={18} />
       </Pressable>

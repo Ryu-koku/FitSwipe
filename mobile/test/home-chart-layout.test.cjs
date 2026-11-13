@@ -68,7 +68,7 @@ test('adaptive chart redraws within measured dimensions, preserving label size a
     assert(circle.props.cx >= 52 && circle.props.cx <= 254);
   }
   assert(nodes.filter(n => n.type === 'SvgText').every(n => n.props.fontSize === 11));
-  assert.equal(render({ ...props, availableHeight: 500 }).find(n => n.type === 'Svg').props.height, 220);
+  assert.equal(render({ ...props, availableHeight: 500 }).find(n => n.type === 'Svg').props.height, 320);
   const small = render({ ...props, availableHeight: 0 });
   assert.equal(small.find(n => n.type === 'Svg').props.height, 100);
   const ticks = small.filter(n => n.type === 'SvgText' && typeof n.props.children === 'string' && /^\d+$/.test(n.props.children));
@@ -139,6 +139,83 @@ test('subpixel layout noise does not change the measured chart dimensions', () =
   nodes.find(n => n.type === 'Text').props.onLayout(layout(24.5));
   const next = render.raw(props).find(n => n.type === 'Svg');
   assert.equal(next.props.viewBox, '0 0 280 148');
+});
+
+test('home uses 1RM for saved weighted metrics without metric chips, while bodyweight stays reps', () => {
+  const filename = path.resolve(__dirname, '../src/components/HomeProgress.tsx');
+  const mod = new Module(filename, module);
+  mod.filename = filename;
+  mod.paths = Module._nodeModulePaths(path.dirname(filename));
+  const original = mod.require.bind(mod);
+  const slots = [];
+  const metrics = [];
+  const routes = [];
+  let cursor = 0;
+  let bodyweight = false;
+  const state = {
+    exercises: [{ id: 1, name: 'スクワット', mode: 'NORMAL', archived: false }],
+    sessions: [], sets: [], homeGrowthExerciseId: 1,
+    homeProgress: { view: 'trend', metric: 'reps', ranking: 'change', side: 1 },
+  };
+  mod.require = name => {
+    if (name === 'react') return {
+      useState: initial => {
+        const i = cursor++;
+        if (!(i in slots)) slots[i] = initial;
+        return [slots[i], value => { slots[i] = value; }];
+      },
+      useMemo: factory => factory(),
+      useLayoutEffect: () => {},
+    };
+    if (name === 'react-native') return { View: 'View', Text: 'Text', Pressable: 'Pressable', TextInput: 'TextInput' };
+    if (name === 'expo-router') return { router: { push: route => routes.push(route) }, useNavigation: () => ({ addListener: () => () => {} }) };
+    if (name === '../context') return { useApp: () => ({ state, update: () => {} }) };
+    if (name === '../ui') return {
+      useTheme: () => ({ colors: {}, styles: {} }),
+      feedback: () => {}, Card: 'Card', Chip: 'Chip', IconButton: 'IconButton', Sheet: 'Sheet', Button: 'Button',
+    };
+    if (name === './ProgressChart') return { ProgressChart: 'ProgressChart' };
+    if (name === '../home-progress') return {
+      ...original(name),
+      progressIndex: () => ({}), exerciseRecords: () => [], isBodyweight: () => bodyweight,
+      dailyProgress: (_records, metric) => { metrics.push(metric); return []; },
+    };
+    return original(name);
+  };
+  mod._compile(ts.transpileModule(fs.readFileSync(filename, 'utf8'), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true },
+  }).outputText, filename);
+  const render = () => {
+    cursor = 0;
+    const nodes = [];
+    const visit = node => {
+      if (!node || typeof node !== 'object') return;
+      if (Array.isArray(node)) return node.forEach(visit);
+      nodes.push(node);
+      visit(node.props?.children);
+    };
+    visit(mod.exports.HomeProgress({}));
+    return nodes;
+  };
+  let nodes;
+  for (const savedMetric of ['estimated', 'weight', 'reps']) {
+    state.homeProgress.metric = savedMetric;
+    nodes = render();
+    assert.equal(metrics.at(-1), 'estimated');
+    assert(nodes.some(n => n.type === 'Text' && n.props.children === '1RM'));
+    nodes.find(n => n.type === 'Pressable').props.onPress();
+    assert.equal(routes.at(-1).params.metric, 'estimated');
+    nodes.find(n => n.type === 'IconButton').props.onPress();
+    nodes = render();
+    assert.equal(nodes.some(n => n.type === 'Chip' && ['1RM', '最大重量', '最多回数'].includes(n.props.label)), false);
+  }
+  bodyweight = true;
+  nodes = render();
+  assert.equal(metrics.at(-1), 'reps');
+  assert(nodes.some(n => n.type === 'Text' && n.props.children === '最多回数'));
+  nodes.find(n => n.type === 'Pressable').props.onPress();
+  assert.equal(routes.at(-1).params.metric, 'reps');
+  assert.equal(nodes.some(n => n.type === 'Chip' && ['1RM', '最大重量', '最多回数'].includes(n.props.label)), false);
 });
 
 test('home defers history until transition end, caches layout renders, and refreshes changed history', () => {

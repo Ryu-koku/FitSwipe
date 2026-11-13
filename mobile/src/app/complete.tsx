@@ -5,7 +5,6 @@ import * as ImagePicker from 'expo-image-picker';
 import { useApp } from '../context';
 import { feedback, Button, Card, Screen, useTheme } from '../ui';
 import { captureRef } from 'react-native-view-shot';
-import { reopenSkippedCard } from '../workout';
 import { SessionDetails } from '../components/SessionDetails';
 import { completedSessions, estimatedOneRepMax, formatWeight } from '../logic';
 
@@ -16,12 +15,11 @@ import { sessionVolumes } from '../session-volume';
 type ShareKind = 'activity' | 'overlay' | 'story';
 
 export default function CompleteScreen() {
-  const { state, update } = useApp();
+  const { state } = useApp();
   const { colors, styles } = useTheme();
   const { sessionId } = useLocalSearchParams<{ sessionId: string }>();
   const session = state.sessions.find((s) => s.id === Number(sessionId));
   const [celebrationDone, setCelebrationDone] = useState<number>();
-  const finalSkip = state.sets.find((set) => set.sessionId === session?.id && set.finalSkippedSide && set.skippedInputs?.[set.finalSkippedSide]);
   const sets = state.sets.filter((s) => s.sessionId === session?.id && s.isCompleted);
   const starts = sets.map((s) => new Date(s.createdAt ?? session?.startedAt ?? '1970-01-01').getTime());
   const ends = sets.map((s) => new Date(s.updatedAt ?? session?.endedAt ?? session?.startedAt ?? '1970-01-01').getTime());
@@ -92,7 +90,7 @@ export default function CompleteScreen() {
         <Text style={[styles.sectionTitle, { marginBottom: 8 }]}>{exerciseName(highlight.id)}{highlight.side === 'left' ? ' · 左' : highlight.side === 'right' ? ' · 右' : ''}</Text>
         <Text style={[styles.metric, { color: colors.primary }]}>+{(highlight.gain * 100).toFixed(1)}%</Text>
         <Text style={[styles.body, { fontWeight: '700', marginTop: 8 }]}>{formatWeight(highlight.before, state.weightUnit)} → {formatWeight(highlight.after, state.weightUnit)}</Text>
-        <Text style={[styles.small, { marginTop: 6 }]}>前回比 · 推定1RM（重量と回数から算出）</Text>
+        <Text style={[styles.small, { marginTop: 6 }]}>前回比 · 1RM</Text>
       </Card>}
       <View style={[styles.row, { marginBottom: 16 }]}>{[[exerciseCount, '種目'], [sets.length, 'セット'], [minutes, '分']].map(([value, label]) => <Card key={label} style={{ flex: 1, alignItems: 'center' }}><Text style={styles.metric}>{value}</Text><Text style={styles.small}>{label}</Text></Card>)}</View>
       <SessionVolumeChart key={session?.id} rows={sessionVolumes(state, session?.id ?? -1)} ready={!session || celebrationDone === session.id} />
@@ -100,11 +98,6 @@ export default function CompleteScreen() {
       <SessionDetails sessionIds={session ? [session.id] : []} />
       <Button label="共有" secondary disabled={!session} onPress={() => setSheet(true)} />
       <Button label="ルームの比較を見る" secondary disabled={!session} onPress={() => router.push('/rooms')} />
-      {finalSkip && !state.sessions.some((item) => item.status === 'IN_PROGRESS') &&
-        <Button label="最後のスキップを取り消す" secondary onPress={() => {
-          update((s) => reopenSkippedCard(s, { setId: finalSkip.id, side: finalSkip.finalSkippedSide === 'normal' ? undefined : finalSkip.finalSkippedSide }));
-          router.replace('/workout');
-        }} />}
       <Modal visible={sheet} transparent animationType="slide" onRequestClose={() => setSheet(false)}>
         <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: '#0008' }}><Pressable style={{ flex: 1 }} onPress={() => { feedback(); return setSheet(false); }} /><View style={{ backgroundColor: colors.surface, padding: 20, paddingBottom: 32, borderTopLeftRadius: 24, borderTopRightRadius: 24 }}>
           <Text style={styles.sectionTitle}>共有方法を選択</Text>

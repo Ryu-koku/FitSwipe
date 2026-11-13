@@ -42,7 +42,7 @@ export function RestCard({
   const { seconds: remaining, fraction } = restRemaining(startedAt ?? fallbackStart, endsAt, clock);
   const accent = isDark ? '#f0a58b' : '#ba5038';
   return (
-    <SwipeCard rest onAdvance={onSkip} onSkip={onSkip}>
+    <SwipeCard rest onAdvance={onSkip}>
       <Card style={{ flex: 1, marginBottom: 0, padding: 16,
         backgroundColor: isDark ? '#202a2b' : '#fcf8f2', borderColor: colors.line }}>
         <View style={{ alignItems: 'center' }}>

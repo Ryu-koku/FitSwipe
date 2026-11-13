@@ -1,6 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { seedState, previousSet } = require('../src/logic.ts');
+const { seedState, previousSessionSets, previousSet } = require('../src/logic.ts');
 
 function fixture() {
   const state = seedState();
@@ -58,4 +58,31 @@ test('previous set supports bodyweight and returns undefined without matching hi
   assert.equal(previousSet(state, 99, 3, 2), undefined);
   state.sets = state.sets.filter(s => s.sessionId === 3);
   assert.equal(previousSet(state, 1, 3, 2), undefined);
+});
+
+test('previous session sets returns all completed sets in set order without mutation', () => {
+  const state = fixture();
+  const before = structuredClone(state);
+  assert.deepEqual(previousSessionSets(state, 1, 3).map(row => row.id), [21, 22, 23]);
+  assert.deepEqual(state, before);
+});
+
+test('previous session sets uses the latest session with records for the requested side', () => {
+  const state = fixture();
+  state.sets.find(row => row.id === 21).leftCompleted = false;
+  state.sets.find(row => row.id === 22).skippedInputs = { left: { weightKg: 20, reps: 8 } };
+  state.sets.find(row => row.id === 23).leftCompleted = false;
+  assert.deepEqual(previousSessionSets(state, 1, 3, 'left').map(row => row.id), [11, 12, 13]);
+  assert.deepEqual(previousSessionSets(state, 1, 3, 'right').map(row => row.id), [21, 22, 23]);
+  state.sets.find(row => row.id === 22).isCompleted = false;
+  assert.deepEqual(previousSessionSets(state, 1, 3).map(row => row.id), [21, 23]);
+});
+
+test('previous session sets excludes current, later and unfinished sessions and unrelated exercises', () => {
+  const state = fixture();
+  state.sessions.find(row => row.id === 2).status = 'IN_PROGRESS';
+  assert.deepEqual(previousSessionSets(state, 1, 3).map(row => row.id), [11, 12, 13]);
+  assert.deepEqual(previousSessionSets(state, 99, 3), []);
+  state.sets = state.sets.filter(row => row.sessionId === 3 || row.sessionId === 4);
+  assert.deepEqual(previousSessionSets(state, 1, 3), []);
 });

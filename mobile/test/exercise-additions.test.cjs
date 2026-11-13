@@ -1,7 +1,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { seedState } = require('../src/logic.ts');
-const { startWorkout, nextId, exerciseDefaults } = require('../src/workout.ts');
+const { startWorkout, nextId } = require('../src/workout.ts');
 const { addWorkoutExercises, addPresetExercises, availableExerciseChoices } = require('../src/exercise-additions.ts');
 
 test('exercise choices collapse duplicate names and modes without changing stored exercises', () => {
@@ -71,7 +71,7 @@ test('newly created exercise and previous selections are added together to both 
   assert.ok(workout.sets.every((row) => row.id !== id));
   const preset = addPresetExercises(state, 'gym', [5, id, id, 1]);
   assert.deepEqual(preset.presets[0].exercises.slice(-2).map((config) => config.exerciseId), [5, id]);
-  assert.deepEqual(preset.presets[0].exercises.at(-1), exerciseDefaults(created));
+  assert.deepEqual(preset.presets[0].exercises.at(-1), { exerciseId: id, sets: 3 });
   assert.deepEqual(preset.presets[0].exercises.slice(0, 3), state.presets[0].exercises);
   assert.deepEqual(preset.presets[1], state.presets[1]);
 });

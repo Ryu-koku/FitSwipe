@@ -73,19 +73,33 @@ test('exercise sub-sheet keeps its Done button and only closes that sheet', () =
   assert.equal(nodes.filter(n => n.type === 'Sheet').length, 2);
   assert.equal(nodes.filter(n => n.type === 'Sheet')[1].props.popup, true);
   const fields = nodes.filter(n => n.type === 'WorkoutNumberWheel');
-  assert.ok(fields.length >= 3);
+  assert.equal(fields.length, 1);
   assert.equal(nodes.filter(n => n.type === 'Switch').length, 0);
-  const reps = fields.find(n => n.props.label === '回数');
-  assert.equal(reps.props.step, 1);
+  assert.equal(nodes.find(n => n.type === 'ExerciseOrderList').props.items[0].detail, `${app.preset.exercises[0].sets}セット`);
   const sets = fields.find(n => n.props.label === 'セット数');
   assert.equal(sets.props.min, 1);
   assert.equal(sets.props.max, 30);
-  assert.equal(fields.find(n => n.props.label.includes('kg')).props.step, seedState().exerciseWeightSteps[app.preset.exercises[0].exerciseId] ?? seedState().weightStepKg);
   const buttons = nodes.filter(n => n.type === 'Button' && n.props.label === '完了');
   assert.equal(buttons.length, 1);
   buttons[0].props.onPress();
   assert.equal(app.render().filter(n => n.type === 'Sheet').length, 1);
   assert.deepEqual(app.events, []);
+});
+
+test('preset list stepper changes only the chosen exercise and keeps the popup wheel', () => {
+  const app = editor();
+  const items = app.render().find(n => n.type === 'ExerciseOrderList').props.items;
+  const chosen = items[0];
+  assert.equal(chosen.stepper.sets, app.preset.exercises[0].sets);
+  assert.equal(chosen.stepper.min, 1);
+  assert.equal(chosen.stepper.max, 30);
+  const before = app.preset.exercises.slice(1);
+  chosen.stepper.onChange(chosen.stepper.sets + 1);
+  assert.equal(app.preset.exercises[0].sets, chosen.stepper.sets + 1);
+  assert.deepEqual(app.preset.exercises.slice(1), before);
+  assert.deepEqual(app.events, ['save']);
+  app.render().find(n => n.type === 'ExerciseOrderList').props.onEdit(chosen.id);
+  assert.ok(app.render().some(n => n.type === 'WorkoutNumberWheel' && n.props.label === 'セット数'));
 });
 
 for (const source of ['swipe', 'button']) {

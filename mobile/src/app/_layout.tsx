@@ -1,15 +1,19 @@
+import { TourProvider } from '../tour';
 import { PremiumProvider } from '../premium-context';
 import { Stack, usePathname } from 'expo-router';
 import React from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { AppProvider, useApp } from '../context';
 import { Button, ThemeProvider, useTheme } from '../ui';
-import { ActivityIndicator, Alert, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, LogBox, ScrollView, Text, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { TrainingDock } from '../components/TrainingDock';
 import { RestNotifications } from '../rest-notifications';
 import { AccountPanel } from '../components/AccountPanel';
 import { shareTextFile } from '../data-transfer';
+
+// The fixed-height number wheel intentionally nests a FlatList in the workout ScrollView.
+LogBox.ignoreLogs(['VirtualizedLists should never be nested']);
 
 export default function Layout() {
   return (
@@ -30,6 +34,7 @@ function AppLayout() {
   const { colors, styles, isDark } = useTheme();
   return (
       <SafeAreaView style={{ flex: 1, backgroundColor: hasDock ? colors.surface : colors.bg }}>
+      <TourProvider>
       <StatusBar style={isDark ? 'light' : 'dark'} />
       {error && (
         <Text
@@ -67,6 +72,7 @@ function AppLayout() {
           <Text style={styles.small}>読み込み中…</Text>
         </View>
       )}
+      </TourProvider>
     </SafeAreaView>
   );
 }

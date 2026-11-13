@@ -22,6 +22,8 @@ import type { Exercise, ThemeMode } from '../types';
 import { AccountPanel } from '../components/AccountPanel';
 import { BeginnerGuide } from '../components/BeginnerGuide';
 import { ProfileEditor } from '../components/ProfileEditor';
+import { ReorderableCard } from '../components/ReorderableCard';
+import { homeDisplay, moveHomeCard, type HomeProgressSize } from '../home-display';
 import { formatWeight, weightStep, weightToKg, lastExerciseTrainingDays } from '../logic';
 import * as Health from '@appeeky/expo-healthkit';
 import { randomUUID } from 'expo-crypto';
@@ -34,7 +36,7 @@ export default function SettingsScreen() {
   const { state, update, importData } = useApp();
   const { styles } = useTheme();
   const plan = usePremium();
-  const [page, setPage] = useState<'menu' | 'basic' | 'exercises' | 'body'>('menu');
+  const [page, setPage] = useState<'menu' | 'basic' | 'exercises' | 'body' | 'home'>('menu');
   const [weight, setWeight] = useState(String(weightStep(state.weightStepKg, state.weightUnit)));
   const [editor, setEditor] = useState<Exercise | 'new'>();
   const [transferBusy, setTransferBusy] = useState(false);
@@ -61,7 +63,7 @@ export default function SettingsScreen() {
   return (
     <Screen
       title={
-        page === 'menu' ? '設定' : page === 'basic' ? '基本設定' : page === 'body' ? '体組成' : '種目管理'
+        page === 'menu' ? '設定' : page === 'basic' ? '基本設定' : page === 'body' ? '体組成' : page === 'home' ? 'ホームの表示' : '種目管理'
       }
       onBack={back}
     >
@@ -72,6 +74,7 @@ export default function SettingsScreen() {
         </SettingsSection>
         <SettingsSection title="トレーニング・表示">
           <SettingsRow label="基本設定" onPress={() => setPage('basic')} />
+          <SettingsRow label="ホームの表示" onPress={() => setPage('home')} />
           <SettingsRow label="種目管理" onPress={() => setPage('exercises')} />
           <SettingsRow label="体重・体脂肪率" onPress={() => setPage('body')} />
         </SettingsSection>
@@ -172,6 +175,28 @@ export default function SettingsScreen() {
           </Card>
         </>
       )}
+      {page === 'home' && <>
+        <Text style={[styles.small, { marginBottom: 12 }]}>カレンダーは常に先頭に表示されます。≡ を長押しして並べ替えます。</Text>
+        {homeDisplay(state.homeDisplay).cards.map(card => {
+          const label = card.id === 'progress' ? '成長グラフ' : '部位別セット';
+          return <ReorderableCard key={card.id} label={label} rowHeight={card.id === 'progress' ? 144 : 64}
+            onMove={(offset) => update(s => ({ ...s, homeDisplay: moveHomeCard(homeDisplay(s.homeDisplay), card.id, offset) }))}>
+            {handle => <Card style={{ padding: 12 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                {handle}
+                <Text style={[styles.body, { flex: 1, fontWeight: '700' }]}>{label}</Text>
+                <Chip label={card.visible ? '表示中' : '非表示'} active={card.visible}
+                  onPress={() => update(s => ({ ...s, homeDisplay: { ...homeDisplay(s.homeDisplay), cards: homeDisplay(s.homeDisplay).cards.map(item => item.id === card.id ? { ...item, visible: !item.visible } : item) } }))} />
+              </View>
+              {card.id === 'progress' && <View style={[styles.wrap, { marginLeft: 52, marginTop: 8 }]}>
+                {([['small', '小'], ['medium', '中'], ['large', '大']] as [HomeProgressSize, string][]).map(([value, name]) =>
+                  <Chip key={value} label={name} active={homeDisplay(state.homeDisplay).progressSize === value}
+                    onPress={() => update(s => ({ ...s, homeDisplay: { ...homeDisplay(s.homeDisplay), progressSize: value } }))} />)}
+              </View>}
+            </Card>}
+          </ReorderableCard>;
+        })}
+      </>}
       {page === 'exercises' && (
         <>
           <Button label="＋ 種目を追加" onPress={() => canAddCustomExercise(state, plan.premium) ? setEditor('new') : plan.openPaywall('無料プランの自作種目は3つまでです。')} />

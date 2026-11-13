@@ -2,7 +2,7 @@ import { useApp } from '../context';
 import React, { useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import type { ProgressRecord } from '../home-progress';
-import { formatWeight } from '../logic';
+import { formatWeight, oneRepMax } from '../logic';
 import { compareRecords, comparisonChoices } from '../record-comparison';
 import type { ComparisonMode } from '../record-comparison';
 import { feedback, Card, Chip, useTheme } from '../ui';
@@ -24,10 +24,12 @@ export function RecordComparison({ records, initialWeight, initialReps, onOpenRe
   const value = selection !== undefined && choices.includes(selection) ? selection
     : initial !== undefined && choices.includes(initial) ? initial
       : fallback !== undefined && choices.includes(fallback) ? fallback : choices.at(-1);
-  const comparison = value !== undefined ? compareRecords(records, mode, value) : undefined;
+  const comparison = mode === '1rm' ? compareRecords(records, mode)
+    : value !== undefined ? compareRecords(records, mode, value) : undefined;
   const condition = mode === 'weight'
     ? value === 0 ? '重量なし' : formatWeight(value, state.weightUnit) : `${value}回`;
-  const result = (record: ProgressRecord) => mode === 'weight' ? `${record.reps}回` : formatWeight(record.weight, state.weightUnit);
+  const result = (record: ProgressRecord) => mode === 'weight' ? `${record.reps}回`
+    : formatWeight(mode === '1rm' ? oneRepMax(record.weight, record.reps) : record.weight, state.weightUnit);
   const open = (label: string, record: ProgressRecord) => (
     <Pressable accessibilityRole="button" accessibilityLabel={`${label}・${record.date}の記録を見る`}
       onPress={() => { feedback(); return onOpenRecord(record); }} style={{ minHeight: 44, justifyContent: 'center', paddingVertical: 6 }}>
@@ -40,11 +42,24 @@ export function RecordComparison({ records, initialWeight, initialReps, onOpenRe
     <Card>
       <Text style={styles.sectionTitle}>条件をそろえて比較</Text>
       <View style={styles.wrap}>
-        {(['weight', 'reps'] as const).map((key) => <Chip key={key}
-          label={key === 'weight' ? '同じ重量' : '同じ回数'} active={mode === key}
+        {(['weight', 'reps', '1rm'] as const).map((key) => <Chip key={key}
+          label={key === 'weight' ? '同じ重量' : key === 'reps' ? '同じ回数' : '1RM'} active={mode === key}
           onPress={() => { setMode(key); setSelection(undefined); }} />)}
       </View>
-      {choices.length ? <>
+      {mode === '1rm' ? comparison?.latest ? <>
+        <Text style={[styles.body, { fontWeight: '700', marginTop: 10 }]}>1RMの比較</Text>
+        {comparison.previous && open('前回', comparison.previous)}
+        {open('最新', comparison.latest)}
+        {difference !== undefined && comparison.previous ? <Text style={[styles.body, { fontWeight: '700' }]}>
+          {difference > 0 ? '+' : difference < 0 ? '−' : ''}{formatWeight(Math.abs(difference), state.weightUnit)}
+          {' · '}{difference > 0 ? '+' : difference < 0 ? '−' : ''}{Math.abs(difference / oneRepMax(comparison.previous.weight, comparison.previous.reps)! * 100).toFixed(1)}%
+        </Text> : <Text style={styles.small}>比較できる記録はまだ1回です。次の完了記録から差分を表示します。</Text>}
+        {comparison.best && <View style={{ marginTop: 12 }}>
+          <Text style={styles.small}>参考 · 全期間ベスト · 1RM</Text>
+          {open('過去の実績', comparison.best)}
+        </View>}
+      </> : <Text style={[styles.small, { marginVertical: 12 }]}>1RMの比較に使える、重量あり・1〜10回の完了記録がありません。</Text>
+      : choices.length ? <>
         <ScrollView horizontal showsHorizontalScrollIndicator contentContainerStyle={{ gap: 8, paddingVertical: 10 }}>
           {choices.map((choice) => <Chip key={choice} label={mode === 'weight'
             ? choice === 0 ? '重量なし' : formatWeight(choice, state.weightUnit) : `${choice}回`}
