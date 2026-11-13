@@ -47,32 +47,9 @@ import { WorkoutProgressBar } from '../components/WorkoutProgressBar';
 import { WorkoutNumberWheel } from '../components/WorkoutNumberWheel';
 import { dailyProgress, exerciseRecords, isBodyweight, progressIndex } from '../home-progress';
 
-let perfAdvanceStarted: number | undefined; // PERF-TEMP
-let perfLayoutStarted: number | undefined; // PERF-TEMP
-let perfFrameStarted: number | undefined; // PERF-TEMP
 export default function WorkoutScreen() {
-  return <React.Profiler id="WorkoutScreen" onRender={(id, phase, actualDuration) => { if (actualDuration > 2) console.log('[PERF] profiler', id, phase, `${actualDuration.toFixed(1)}ms`); }}><PerfWorkoutScreen /></React.Profiler>; // PERF-TEMP
-} // PERF-TEMP
-function PerfWorkoutScreen() { // PERF-TEMP
   const { fontScale } = useWindowDimensions();
   const wheelHeight = Math.max(44, Math.ceil(24 * fontScale)) * 2 + Math.max(56, Math.ceil(48 * fontScale));
-  const perfRenderStarted = performance.now(); // PERF-TEMP
-  React.useLayoutEffect(() => { // PERF-TEMP
-    const started = perfAdvanceStarted; // PERF-TEMP
-    if (started === undefined || started === perfLayoutStarted) return; // PERF-TEMP
-    perfLayoutStarted = started; // PERF-TEMP
-    console.log('[PERF] advance開始→commit(layout)', `${(performance.now() - started).toFixed(1)}ms`); // PERF-TEMP
-  }); // PERF-TEMP
-  useEffect(() => { // PERF-TEMP
-    const started = perfAdvanceStarted; // PERF-TEMP
-    if (started === undefined || started === perfFrameStarted) return; // PERF-TEMP
-    perfFrameStarted = started; // PERF-TEMP
-    let second: number | undefined; // PERF-TEMP
-    const first = requestAnimationFrame(() => { // PERF-TEMP
-      second = requestAnimationFrame(() => console.log('[PERF] advance開始→次フレーム描画 (double rAF)', `${(performance.now() - started).toFixed(1)}ms`)); // PERF-TEMP
-    }); // PERF-TEMP
-    return () => { cancelAnimationFrame(first); if (second !== undefined) cancelAnimationFrame(second); if (perfFrameStarted === started) perfFrameStarted = undefined; }; // PERF-TEMP
-  }); // PERF-TEMP
   const { state, update, getState } = useApp();
   const { colors, styles } = useTheme();
   const [orderEditor, setOrderEditor] = useState(false);
@@ -144,7 +121,6 @@ function PerfWorkoutScreen() { // PERF-TEMP
     update((s) => finishWorkout(s, session.id));
     router.replace({ pathname: '/complete', params: { sessionId: session.id } });
   };
-  if (!session || !set || !exercise || !card) console.log('[PERF] WorkoutScreen render (empty)', `${(performance.now() - perfRenderStarted).toFixed(1)}ms`); // PERF-TEMP
   if (!session || !set || !exercise || !card)
     return (
       <Screen title={title} onBack={() => router.replace('/')}>
@@ -163,10 +139,7 @@ function PerfWorkoutScreen() { // PERF-TEMP
       </Screen>
     );
   const rows = state.sets.filter((s) => s.sessionId === session.id);
-  const perfCardsStarted = performance.now(); // PERF-TEMP
   const cards = workoutCards(state, session.id);
-  console.log('[PERF] workoutCards', `${(performance.now() - perfCardsStarted).toFixed(1)}ms`); // PERF-TEMP
-  const perfSegmentsStarted = performance.now(); // PERF-TEMP
   const exerciseIds = [...new Set(cards.map((item) => rows.find((row) => row.id === item.setId)!.exerciseId))];
   const segments = exerciseIds.map((id) => {
     const exerciseCards = cards.filter((item) => rows.find((row) => row.id === item.setId)?.exerciseId === id);
@@ -176,7 +149,6 @@ function PerfWorkoutScreen() { // PERF-TEMP
         return !row.skippedInputs?.[item.side ?? 'normal'] && (item.side ? row[`${item.side}Completed`] : row.isCompleted);
       }).length };
   });
-  console.log('[PERF] segments', `${(performance.now() - perfSegmentsStarted).toFixed(1)}ms`); // PERF-TEMP
   const completedExercises = segments.filter((item) => item.completed === item.total).length;
   const weightKey = `${side}WeightKg` as const;
   const repsKey = `${side}Reps` as const;
@@ -188,9 +160,6 @@ function PerfWorkoutScreen() { // PERF-TEMP
         : undefined,
     }));
   const advance = (skip = false) => {
-    perfAdvanceStarted = performance.now(); // PERF-TEMP
-    const perfSizeState = getState(); // PERF-TEMP
-    console.log('[PERF] state size', { sets: perfSizeState.sets.length, sessions: perfSizeState.sessions.length, exercises: perfSizeState.exercises.length, 'cloud.pending': perfSizeState.cloud?.pending.length ?? 0 }); // PERF-TEMP
     if (validBrowsing) {
       const next = cards[position + 1];
       if (next && state.sets.find((row) => row.id === next.setId)?.exerciseId === exercise.id) {
@@ -205,9 +174,7 @@ function PerfWorkoutScreen() { // PERF-TEMP
     if (locked.current) return;
     locked.current = true;
     const latest = getState();
-    const perfAdvanceWorkoutStarted = performance.now(); // PERF-TEMP
     const changed = advanceWorkout(latest, skip);
-    console.log('[PERF] advanceWorkout(latest)', `${(performance.now() - perfAdvanceWorkoutStarted).toFixed(1)}ms`); // PERF-TEMP
     if (changed === latest) { locked.current = false; return; }
 
     // A wheel edit may still be waiting for disk. Advance from the state after
@@ -380,7 +347,6 @@ function PerfWorkoutScreen() { // PERF-TEMP
           </SwipeCard>
     );
   };
-  console.log('[PERF] WorkoutScreen render', `${(performance.now() - perfRenderStarted).toFixed(1)}ms`); // PERF-TEMP
   return (
     <Screen
       scroll={false}

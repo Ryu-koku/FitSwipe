@@ -82,7 +82,6 @@ class BusyError extends Error {
   constructor() { super('アカウント処理中です。しばらくお待ちください。'); }
 }
 
-const perfTrackChanges = trackChanges; // PERF-TEMP
 const Context = createContext<AppContextValue | null>(null);
 
 export function AppProvider({ children }: PropsWithChildren) {
@@ -106,14 +105,10 @@ export function AppProvider({ children }: PropsWithChildren) {
   if (writer.current === null) writer.current = createCoalescingWriter(saveState);
   const flush = useCallback(() => writer.current!.flush(), []);
   const rawPersist = useCallback((updater: (s: AppState) => AppState) => {
-    const perfPersistStarted = performance.now(); // PERF-TEMP
     try {
       // Synchronous evaluation preserves call order without waiting for disk.
-      const perfUpdaterStarted = performance.now(); // PERF-TEMP
       const next = updater(current.current);
-      const perfUpdaterMs = performance.now() - perfUpdaterStarted; // PERF-TEMP
       current.current = next;
-      console.log('[PERF] rawPersist updater / before setState', `${perfUpdaterMs.toFixed(1)}ms`, `${(performance.now() - perfPersistStarted).toFixed(1)}ms`); // PERF-TEMP
       setState(next);
       return writer.current!.write(next);
     } catch (error) { return Promise.reject(error); }
@@ -154,9 +149,6 @@ export function AppProvider({ children }: PropsWithChildren) {
   const getState = useCallback(() => current.current, []);
   const persist = useCallback((updater: (state: AppState) => AppState) => {
     if (transition.current) return Promise.reject(new BusyError());
-    const perfOriginalUpdater = updater; // PERF-TEMP
-    updater = (s) => { const start = performance.now(); try { return perfOriginalUpdater(s); } finally { console.log('[PERF] persist updater', `${(performance.now() - start).toFixed(1)}ms`); } }; // PERF-TEMP
-    const trackChanges: typeof perfTrackChanges = (...args) => { const start = performance.now(); try { return perfTrackChanges(...args); } finally { console.log('[PERF] persist trackChanges', `${(performance.now() - start).toFixed(1)}ms`); } }; // PERF-TEMP
     return rawPersist(s => trackChanges(s, updater(s), randomUUID));
   }, [rawPersist]);
   const syncNow = useCallback((): Promise<void> => {
